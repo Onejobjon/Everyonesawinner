@@ -84,7 +84,7 @@ function Footer() {
 
 export default function Home() {
   return (
-    <div className="min-h-dvh bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-['Inter',system-ui,sans-serif]">
+    <div className="min-h-dvh page-bg text-gray-900 dark:text-gray-100 font-['Inter',system-ui,sans-serif]">
       <Nav />
       
       {/* Hero */}

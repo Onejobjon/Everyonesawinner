@@ -35,7 +35,7 @@ export default function WorldCup() {
   const display = showAll ? matches : matches.slice(0, 12);
 
   return (
-    <div className="min-h-dvh bg-gray-50 dark:bg-gray-950 font-['Inter',system-ui,sans-serif]">
+    <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
       <nav className="border-b border-gray-200 bg-white/90 dark:border-gray-800 dark:bg-gray-950/90">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link to="/" className="flex items-center gap-2">

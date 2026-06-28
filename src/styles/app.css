@@ -5,3 +5,38 @@
     @apply bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
   }
 }
+
+/*
+ * Subtle sports background — applied to page wrappers.
+ * Uses an Unsplash stadium photo with heavy blur + overlay.
+ * Text elements inside need position:relative;z-index:1 to sit above the overlay.
+ */
+.page-bg {
+  position: relative;
+  background-image: url('https://images.unsplash.com/photo-1577223625816-7546f13df25d?w=1920&q=80');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+/* Blur + light overlay for readability */
+.page-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.88);
+  z-index: 0;
+}
+
+/* Dark mode: darker overlay */
+.dark .page-bg::before {
+  background: rgba(0, 0, 0, 0.88);
+}
+
+/* All direct content children sit above the overlay */
+.page-bg > * {
+  position: relative;
+  z-index: 1;
+}
