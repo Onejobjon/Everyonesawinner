@@ -3,15 +3,17 @@ import { Link } from "react-router-dom";
 import { formatOdds } from "../lib/odds";
 import { getWorldCupMatches, type Match } from "../lib/odds-api";
 
-const BACK_STAKE = 20;
+const STAKE = 20;
 
-function calcBet(backOdds: number, layOdds: number) {
-  const backReturn = BACK_STAKE * backOdds;
-  const backProfit = backReturn - BACK_STAKE;
-  const layStake = (BACK_STAKE * backOdds) / layOdds;
-  const layReturn = layStake * layOdds;
-  const guaranteedProfit = backReturn - BACK_STAKE - layStake;
-  return { backReturn, backProfit, layStake, layReturn, guaranteedProfit };
+function extractTeam(outcome: string): string {
+  return outcome.replace(/\s+to\s+win$/i, "").trim();
+}
+
+function vsTeam(outcome: string, home: string, away: string): string {
+  const team = extractTeam(outcome);
+  if (team.toLowerCase() === home.toLowerCase()) return away;
+  if (team.toLowerCase() === away.toLowerCase()) return home;
+  return team;
 }
 
 export default function WorldCup() {
@@ -24,24 +26,10 @@ export default function WorldCup() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-
     getWorldCupMatches()
-      .then((data) => {
-        if (!cancelled) {
-          setMatches(data);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load odds");
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      .then((data) => { if (!cancelled) { setMatches(data); setLoading(false); } })
+      .catch((err) => { if (!cancelled) { setError(err instanceof Error ? err.message : "Failed"); setLoading(false); } });
+    return () => { cancelled = true; };
   }, []);
 
   const display = showAll ? matches : matches.slice(0, 12);
@@ -84,22 +72,22 @@ export default function WorldCup() {
         )}
 
         {!loading && !error && matches.length === 0 && (
-          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-gray-500 dark:border-gray-800 dark:bg-gray-950">
-            No World Cup matches available right now. Check back closer to kick-off.
-          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-gray-500 dark:border-gray-800 dark:bg-gray-950">No World Cup matches available right now. Check back closer to kick-off.</div>
         )}
 
         {!loading && !error && matches.length > 0 && (
           <>
             <div className="grid grid-cols-1 gap-4">
               {display.map((m) => {
-                const { backReturn, backProfit, layStake, guaranteedProfit } = calcBet(m.best.backOdds, m.best.layOdds);
-                const isPositive = guaranteedProfit > 0;
+                const team = extractTeam(m.best.outcome);
+                const vs = vsTeam(m.best.outcome, m.home, m.away);
+                const backReturn = STAKE * m.best.backOdds;
+                const layReturn = STAKE * m.best.layOdds;
+                const profit = (m.best.backOdds / m.best.layOdds) * STAKE - STAKE;
+                const isPositive = profit > 0;
                 return (
                   <div key={m.matchId}
-                    className={`rounded-xl border-2 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md ${
-                      isPositive ? "border-green-500" : "border-gray-200 dark:border-gray-800"
-                    }`}
+                    className={`rounded-xl border-2 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md ${isPositive ? "border-green-500" : "border-gray-200 dark:border-gray-800"}`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -109,44 +97,28 @@ export default function WorldCup() {
                       <span className="text-xs text-gray-400">{m.time}</span>
                     </div>
 
-                    {/* Back bet */}
-                    <div className="mt-4">
+                    <div className="mt-4 space-y-2">
                       <div className="flex items-center gap-2 text-sm">
                         <span className="text-lg">⬆️</span>
-                        <span className="font-medium">
-                          Back <strong>{m.best.outcome}</strong> at <strong>{m.best.bookmaker}</strong>
-                        </span>
-                        <span className="font-mono font-bold text-base">({formatOdds(m.best.backOdds)})</span>
+                        <span><strong>{team}</strong> to win at <strong>{m.best.bookmaker}</strong> ({formatOdds(m.best.backOdds)})</span>
+                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} bet returns <strong>£{backReturn.toFixed(2)}</strong></span>
                       </div>
-                      <div className="mt-1 ml-8 text-sm text-gray-600 dark:text-gray-400">
-                        Bet <strong>£{BACK_STAKE}</strong> → you get <strong>£{backReturn.toFixed(2)}</strong> <span className="text-green-600 dark:text-green-400">(£{backProfit.toFixed(2)} profit)</span>
-                      </div>
-                    </div>
-
-                    {/* Lay bet */}
-                    <div className="mt-3">
                       <div className="flex items-center gap-2 text-sm">
                         <span className="text-lg">⬇️</span>
-                        <span className="font-medium">
-                          VS — Lay this outcome at <strong>{m.best.exchange}</strong>
-                        </span>
-                        <span className="font-mono font-bold text-base">({formatOdds(m.best.layOdds)})</span>
-                      </div>
-                      <div className="mt-1 ml-8 text-sm text-gray-600 dark:text-gray-400">
-                        Bet <strong>£{layStake.toFixed(2)}</strong> → covers your back bet
+                        <span>VS <strong>{vs}</strong> at <strong>{m.best.exchange}</strong> ({formatOdds(m.best.layOdds)})</span>
+                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} bet returns <strong>£{layReturn.toFixed(2)}</strong></span>
                       </div>
                     </div>
 
-                    {/* Profit line */}
                     <div className="mt-4 flex items-center gap-2">
                       <span className="text-lg">{isPositive ? "💰" : "⚖️"}</span>
                       {isPositive ? (
                         <span className="text-green-700 dark:text-green-400 font-bold text-sm">
-                          Guaranteed profit: <span className="text-base">£{guaranteedProfit.toFixed(2)}</span>
+                          Guaranteed profit: <span className="text-base">£{profit.toFixed(2)}</span>
                         </span>
                       ) : (
                         <span className="text-sm text-gray-400">
-                          Near match — £{Math.abs(guaranteedProfit).toFixed(2)} difference (use free bets here)
+                          {profit > -1 ? "Near match — use free bets here" : "Standard odds — no immediate opportunity"}
                         </span>
                       )}
                     </div>
