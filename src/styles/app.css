@@ -19,18 +19,18 @@
   background-attachment: fixed;
 }
 
-/* Blur + light overlay for readability */
+/* Blur + smokey overlay for readability */
 .page-bg::before {
   content: '';
   position: absolute;
   inset: 0;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(0, 0, 0, 0.30);
   z-index: 0;
 }
 
-/* Dark mode: darker overlay */
+/* Dark mode: deeper overlay */
 .dark .page-bg::before {
   background: rgba(0, 0, 0, 0.88);
 }
