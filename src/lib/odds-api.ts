@@ -11,11 +11,12 @@ const BOOKMAKERS = "bet365,skybet,paddypower,williamhill,betfred";
 const REGIONS = "uk";
 const MARKETS = "h2h";
 
-// Free tier: 500 requests/month. Be conservative.
+// Free tier: 500 requests/month. Cache aggressively to stay well under.
 // Cache in memory (per session) + localStorage (across page loads).
-const CACHE_TTL_MS = 600_000; // 10 minute in-memory cache
+// Update frequency: once per 24h per browser. More frequent updates waste quota.
+const CACHE_TTL_MS = 600_000; // 10 minute in-memory cache (for page refreshes in same session)
 const LS_KEY = "eaw_odds_cache";
-const LS_TTL_MS = 600_000; // 10 minutes in localStorage too
+const LS_TTL_MS = 86_400_000; // 24 hours in localStorage (across sessions)
 
 let cachedResponse: ApiMatch[] | null = null;
 let cacheTimestamp = 0;
@@ -301,4 +302,14 @@ export async function getWorldCupMatches(): Promise<Match[]> {
       m.leagueKey === "World Cup" ||
       m.league.toLowerCase().includes("world cup")
   );
+}
+
+/**
+ * Clear all caches (memory + localStorage) so the next fetch hits the API.
+ * Call this when the user taps "Refresh" to get fresh odds.
+ */
+export function clearCache(): void {
+  cachedResponse = null;
+  cacheTimestamp = 0;
+  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
 }
