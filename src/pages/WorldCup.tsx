@@ -83,11 +83,10 @@ export default function WorldCup() {
                 const team = extractTeam(m.best.outcome);
                 const vs = vsTeam(m.best.outcome, m.home, m.away);
                 const backReturn = STAKE * m.best.backOdds;
-                const profit = (m.best.backOdds / m.best.layOdds) * STAKE - STAKE;
-                const isPositive = profit > 0;
+                const layReturn = STAKE * m.best.layOdds;
                 return (
                   <div key={m.matchId}
-                    className={`rounded-xl border-2 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md ${isPositive ? "border-green-500" : "border-gray-200 dark:border-gray-800"}`}
+                    className="rounded-xl border-2 border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -100,27 +99,19 @@ export default function WorldCup() {
                     <div className="mt-4 space-y-2">
                       <div className="flex items-center gap-2 text-sm">
                         <span className="text-lg">⬆️</span>
-                        <span><strong>{team}</strong> to win at <strong>{m.best.bookmaker}</strong> ({formatOdds(m.best.backOdds)})</span>
-                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} bet returns <strong>£{backReturn.toFixed(2)}</strong></span>
+                        <span><strong>{team}</strong> at <strong>{m.best.bookmaker}</strong> ({formatOdds(m.best.backOdds)})</span>
+                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} returns <strong>£{backReturn.toFixed(2)}</strong></span>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <span className="text-lg">⬇️</span>
-                        <span>VS <strong>{vs}</strong> at <strong>{m.best.exchange}</strong> ({formatOdds(m.best.layOdds)})</span>
-                        <span className="font-medium text-gray-500 dark:text-gray-400">— covers your bet</span>
+                        <span><strong>{vs}</strong> at <strong>{m.best.exchange}</strong> ({formatOdds(m.best.layOdds)})</span>
+                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} returns <strong>£{layReturn.toFixed(2)}</strong></span>
                       </div>
                     </div>
 
                     <div className="mt-4 flex items-center gap-2">
-                      <span className="text-lg">{isPositive ? "💰" : "⚖️"}</span>
-                      {isPositive ? (
-                        <span className="text-green-700 dark:text-green-400 font-bold text-sm">
-                          Guaranteed profit: <span className="text-base">£{profit.toFixed(2)}</span>
-                        </span>
-                      ) : (
-                        <span className="text-sm text-gray-400">
-                          {profit > -1 ? "Near match — use free bets here" : "Standard odds — no immediate opportunity"}
-                        </span>
-                      )}
+                      <span className="text-lg">💰</span>
+                      <span className="font-medium text-green-700 dark:text-green-400 text-sm">Pick the best return — your choice!</span>
                     </div>
                   </div>
                 );
