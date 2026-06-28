@@ -46,7 +46,7 @@ function Footer() {
               <span className="rounded-lg bg-indigo-600 p-1.5 text-white font-bold text-sm">EAW</span>
               <span className="text-lg font-bold tracking-tight">Everyone's A Winner</span>
             </Link>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 max-w-xs">Turn free bets into guaranteed, tax-free profit. Matched betting made simple.</p>
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 max-w-xs">Turn free bets into guaranteed, tax-free profit. Made simple for everyone.</p>
           </div>
           <div>
             <h4 className="text-sm font-semibold">Product</h4>
@@ -62,7 +62,7 @@ function Footer() {
               <li><a href="#how-it-works" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">How it works</a></li>
               <li><a href="#faq" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">FAQ</a></li>
               <li><Link to="/world-cup" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">World Cup</Link></li>
-              <li><Link to="/oddsmatcher" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Oddsmatcher</Link></li>
+              <li><Link to="/oddsmatcher" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Best Odds Finder</Link></li>
             </ul>
           </div>
           <div>
@@ -99,7 +99,7 @@ export default function Home() {
             Turn <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Free Bets</span> Into Guaranteed Profit
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 dark:text-gray-400 sm:text-xl">
-            Everyone's A Winner finds and executes matched betting opportunities automatically. No gambling, no risk — just consistent, tax-free income from promotional offers.
+            Everyone's A Winner finds free bet offers and shows you exactly how to turn them into cash. No gambling, no risk — just consistent, tax-free earnings from promotions that bookmakers give away.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/calculator" className="rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">Try the Profit Calculator</Link>
@@ -116,15 +116,15 @@ export default function Home() {
       {/* Features */}
       <section id="features" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Everything you need to profit</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Our platform handles the complex maths so you can focus on collecting your earnings.</p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Everything you need to profit</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">We handle the maths so you can focus on collecting your earnings.</p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { icon: "📊", title: "Oddsmatcher", desc: "Instantly compare back and lay odds across bookmakers and exchanges to find the best arbitrage opportunities." },
-              { icon: "💰", title: "Profit Calculator", desc: "Enter stake, odds and commission to instantly calculate guaranteed profit, lay stake and total return." },
+              { icon: "📊", title: "Best Odds Finder", desc: "See the best prices across bookmakers and exchanges at a glance. Find profitable opportunities in seconds." },
+              { icon: "💰", title: "Profit Calculator", desc: "Enter your stake and odds to instantly work out your guaranteed profit, exchange stake and total return." },
               { icon: "🔔", title: "Offer Alerts", desc: "Get notified the moment new profitable offers go live. Never miss a sign-up bonus or free bet." },
-              { icon: "🧮", title: "Auto Calculation", desc: "Enter your odds once and our tool calculates the exact lay stake — optimised for maximum profit." },
+              { icon: "🧮", title: "Auto Calculation", desc: "Enter your odds once and our tool calculates exactly how much to stake for maximum profit." },
               { icon: "⚡", title: "Sign-Up Journey", desc: "Guided walkthroughs for every bookmaker offer. Know which accounts to open and in what order." },
-              { icon: "📈", title: "Profit Tracking", desc: "Dashboard showing your total earnings, active bets, and monthly profit trends at a glance." },
+              { icon: "📈", title: "Profit Tracking", desc: "Dashboard showing your total earnings, active offers, and monthly profit trends at a glance." },
             ].map((f, i) => (
               <div key={i} className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm hover:shadow-md transition-shadow dark:border-gray-800 dark:bg-gray-950">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-2xl dark:bg-indigo-950">{f.icon}</div>
@@ -139,9 +139,9 @@ export default function Home() {
       {/* How it works */}
       <section id="how-it-works" className="py-20 md:py-28">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">How matched betting works</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">It's simpler than you think. Here's the formula to risk-free profits.</p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">How it works</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">It's simpler than you think. Here's how to turn free bets into profit.</p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 md:grid-cols-4">
-            {[{n:"01",t:"Sign up",d:"Create accounts at bookmakers through our curated links. Many offer free bets just for joining."},{n:"02",t:"Place your back bet",d:"Use the free bet or qualifying offer at the bookmaker on a selection with good odds."},{n:"03",t:"Place your lay bet",d:"Bet against the same outcome on a betting exchange. Our calculator tells you exactly how much."},{n:"04",t:"Collect your profit",d:"One outcome wins, the other loses — but you've hedged so perfectly that you profit either way."}].map((s,i) => (
+            {[{n:"01",t:"Sign up",d:"Create an account with a bookmaker through our easy links. Many give you a free bet just for joining."},{n:"02",t:"Place your bet",d:"Use your stake (or free bet) at the bookmaker on a team or outcome with good odds."},{n:"03",t:"Cover your bet",d:"Place a second bet on a betting exchange that balances the first one. Our calculator tells you the exact amount."},{n:"04",t:"Collect your profit",d:"One bet wins, the other loses — but they're balanced so perfectly that you make money either way."}].map((s,i) => (
               <div key={i} className="relative text-center">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-xl font-bold text-white shadow-lg shadow-indigo-500/25">{s.n}</div>
                 <h3 className="mt-6 text-lg font-semibold">{s.t}</h3>
@@ -158,8 +158,8 @@ export default function Home() {
           <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Start making money today. All plans include a 7-day free trial.</p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
-              {n:"Starter",p:"£9.99",pr:"/month",d:"Perfect for beginners.",f:["Profit calculator","10 offer alerts/month","Basic oddsmatcher","Email support","Guides & tutorials"],pop:false},
-              {n:"Pro",p:"£19.99",pr:"/month",d:"For regular users maximising earnings.",f:["Everything in Starter","Unlimited offer alerts","Advanced oddsmatcher","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true},
+              {n:"Starter",p:"£9.99",pr:"/month",d:"Perfect for beginners.",f:["Profit calculator","10 offer alerts/month","Best odds finder","Email support","Guides & tutorials"],pop:false},
+              {n:"Pro",p:"£19.99",pr:"/month",d:"For regular users maximising earnings.",f:["Everything in Starter","Unlimited offer alerts","Advanced odds finder","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true},
               {n:"Annual",p:"£199",pr:"/year",d:"Best value. Save £40.",f:["Everything in Pro","2 months free","Early access","Priority support"],pop:false},
             ].map((plan,i) => (
               <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.popular ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>
@@ -178,12 +178,12 @@ export default function Home() {
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
         <div className="mx-auto max-w-3xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Frequently asked questions</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400">Everything you need to know about matched betting.</p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Frequently asked questions</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400">Everything you need to know about earning from free bets.</p></div>
           <div className="mt-12 space-y-4">
-            {["Is matched betting legal?","How much money can I make?","Do I need any experience?","Is the profit really tax-free?","How much money do I need to start?"].map((q,i) => (
+            {["Is earning from free bets legal?","How much money can I make?","Do I need any experience?","Is the profit really tax-free?","How much money do I need to start?"].map((q,i) => (
               <details key={i} className="rounded-xl border border-gray-200 dark:border-gray-800">
                 <summary className="flex cursor-pointer items-center justify-between px-6 py-4 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">{q}<svg className="h-5 w-5 flex-shrink-0 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></summary>
-                <div className="px-6 pb-4 text-sm text-gray-600 dark:text-gray-400">{["Yes, matched betting is completely legal in the UK and Ireland. You're taking advantage of promotional offers that bookmakers provide.","Active users average £300-£500/month from welcome offers and £100-£300/month ongoing from reload offers.","None! Matched betting doesn't require sports knowledge. Our calculator does all the work.","Yes! Gambling winnings in the UK and Ireland are tax-free — no income tax or capital gains tax.","As little as £100-£200. Most sign-up offers require only £5-£10 stakes."][i]}</div>
+                <div className="px-6 pb-4 text-sm text-gray-600 dark:text-gray-400">{["Yes, it's completely legal in the UK and Ireland. You're simply using promotional offers that bookmakers willingly provide.","Active users average £300-£500/month from welcome offers and £100-£300/month ongoing from daily promotions.","None! You don't need to know anything about sports. Our calculator does all the work for you.","Yes! Gambling winnings in the UK and Ireland are tax-free — no income tax or capital gains tax.","As little as £100-£200. Most offers require only £5-£10 to get started."][i]}</div>
               </details>
             ))}
           </div>
