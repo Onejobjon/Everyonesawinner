@@ -83,7 +83,6 @@ export default function WorldCup() {
                 const team = extractTeam(m.best.outcome);
                 const vs = vsTeam(m.best.outcome, m.home, m.away);
                 const backReturn = STAKE * m.best.backOdds;
-                const layReturn = STAKE * m.best.layOdds;
                 const profit = (m.best.backOdds / m.best.layOdds) * STAKE - STAKE;
                 const isPositive = profit > 0;
                 return (
@@ -107,7 +106,7 @@ export default function WorldCup() {
                       <div className="flex items-center gap-2 text-sm">
                         <span className="text-lg">⬇️</span>
                         <span>VS <strong>{vs}</strong> at <strong>{m.best.exchange}</strong> ({formatOdds(m.best.layOdds)})</span>
-                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} bet returns <strong>£{layReturn.toFixed(2)}</strong></span>
+                        <span className="font-medium text-gray-500 dark:text-gray-400">— covers your bet</span>
                       </div>
                     </div>
 

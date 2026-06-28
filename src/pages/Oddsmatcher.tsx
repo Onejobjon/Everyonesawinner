@@ -89,7 +89,7 @@ export default function Oddsmatcher() {
               const team = extractTeam(best.outcome);
               const vs = vsTeam(best.outcome, m.home, m.away);
               const backReturn = STAKE * best.backOdds;
-              const layReturn = STAKE * best.layOdds;
+              const layStake = (STAKE * best.backOdds) / best.layOdds;
               const profit = (best.backOdds / best.layOdds) * STAKE - STAKE;
               const isPositive = profit > 0;
               return (
@@ -114,7 +114,7 @@ export default function Oddsmatcher() {
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-lg">⬇️</span>
                       <span>VS <strong>{vs}</strong> at <strong>{best.exchange}</strong> ({formatOdds(best.layOdds)})</span>
-                      <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} bet returns <strong>£{layReturn.toFixed(2)}</strong></span>
+                      <span className="font-medium text-gray-500 dark:text-gray-400">— covers your bet</span>
                     </div>
                   </div>
 
