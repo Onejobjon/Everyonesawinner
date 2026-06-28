@@ -52,7 +52,8 @@ export default function Oddsmatcher() {
 
       <div className="mx-auto max-w-5xl px-6 py-8">
         <h1 className="text-3xl font-bold tracking-tight">Best Odds Finder</h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">Live odds from top UK bookmakers.</p>
+                    <p className="mt-2 text-gray-600 dark:text-gray-400">Live odds from top UK bookmakers.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Odds updated every 30–60 seconds.</p>
 
         <div className="mt-6 flex flex-wrap gap-2">
           {filterOptions.map((f) => (

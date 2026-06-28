@@ -52,6 +52,7 @@ export default function WorldCup() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">World Cup 2026</h1>
             <p className="text-gray-600 dark:text-gray-400">Live odds for every World Cup match.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Odds updated every 30–60 seconds from top UK bookmakers.</p>
           </div>
         </div>
 

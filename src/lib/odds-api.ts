@@ -11,10 +11,14 @@ const BOOKMAKERS = "bet365,skybet,paddypower,williamhill,betfred";
 const REGIONS = "uk";
 const MARKETS = "h2h";
 
-// Cache the API response in memory for reuse across components
+// Free tier: 500 requests/month. Be conservative.
+// Cache in memory (per session) + localStorage (across page loads).
+const CACHE_TTL_MS = 600_000; // 10 minute in-memory cache
+const LS_KEY = "eaw_odds_cache";
+const LS_TTL_MS = 600_000; // 10 minutes in localStorage too
+
 let cachedResponse: ApiMatch[] | null = null;
 let cacheTimestamp = 0;
-const CACHE_TTL_MS = 60_000; // 1 minute
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -71,12 +75,44 @@ export interface Match {
  * Fetch upcoming odds from the API. Returns raw API JSON.
  * Uses a simple in-memory cache to avoid hammering the API on re-render.
  */
+function loadFromLS(): ApiMatch[] | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.ts > LS_TTL_MS) {
+      localStorage.removeItem(LS_KEY);
+      return null;
+    }
+    return parsed.data as ApiMatch[];
+  } catch {
+    return null;
+  }
+}
+
+function saveToLS(data: ApiMatch[]): void {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ ts: Date.now(), data }));
+  } catch { /* localStorage full or unavailable — ignore */ }
+}
+
 async function fetchOdds(): Promise<ApiMatch[]> {
   const now = Date.now();
+
+  // 1. Check in-memory cache first (fastest)
   if (cachedResponse && now - cacheTimestamp < CACHE_TTL_MS) {
     return cachedResponse;
   }
 
+  // 2. Check localStorage cache (survives page navigations)
+  const lsData = loadFromLS();
+  if (lsData) {
+    cachedResponse = lsData;
+    cacheTimestamp = now;
+    return lsData;
+  }
+
+  // 3. Fetch from API (expensive — uses quota)
   const url = `${BASE}/sports/upcoming/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&bookmakers=${BOOKMAKERS}&oddsFormat=decimal`;
 
   const res = await fetch(url);
@@ -87,6 +123,7 @@ async function fetchOdds(): Promise<ApiMatch[]> {
   const data: ApiMatch[] = await res.json();
   cachedResponse = data;
   cacheTimestamp = now;
+  saveToLS(data);
   return data;
 }
 
