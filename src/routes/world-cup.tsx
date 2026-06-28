@@ -93,7 +93,7 @@ function WorldCup() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="rounded-lg bg-green-600 p-2 text-white font-bold text-lg">WC</span>
-            <span className="text-xl font-bold tracking-tight">MatchProfit</span>
+            <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
           </Link>
           <div className="hidden md:flex items-center gap-6">
             <a href="#matches" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Matches</a>
@@ -125,7 +125,7 @@ function WorldCup() {
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-green-100 sm:text-xl">
             Bookmakers are giving away millions in World Cup promotions. Bet insurance, enhanced odds,
-            acca boosts — MatchProfit finds them all and shows you exactly how to cash in.
+            acca boosts — Everyone's A Winner finds them all and shows you exactly how to cash in.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
@@ -324,10 +324,10 @@ function WorldCup() {
         </div>
       </section>
 
-      {/* Why MatchProfit */}
+      {/* Why Everyone's A Winner */}
       <section className="py-16 bg-gradient-to-br from-green-700 to-emerald-700 text-white">
         <div className="mx-auto max-w-7xl px-6">
-          <h2 className="text-2xl font-bold text-center">Why MatchProfit for the World Cup?</h2>
+          <h2 className="text-2xl font-bold text-center">Why Everyone's A Winner for the World Cup?</h2>
           <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { title: "Real-Time Offer Alerts", desc: "Get notified the moment a profitable World Cup offer goes live." },
@@ -400,7 +400,7 @@ function WorldCup() {
       {/* Footer */}
       <footer className="border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6 py-8 text-center text-sm text-gray-500">
-          <p>&copy; {new Date().getFullYear()} MatchProfit. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Everyone's A Winner. All rights reserved.</p>
         </div>
       </footer>
     </div>

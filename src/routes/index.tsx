@@ -25,7 +25,7 @@ function Home() {
               MP
             </span>
             <span className="text-xl font-bold tracking-tight">
-              EveryoneMatchProfit#39;s A Winner
+              Everyone's A Winner
             </span>
           </a>
 
@@ -159,7 +159,7 @@ function Home() {
             Into Guaranteed Profit
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 dark:text-gray-400 sm:text-xl">
-            EveryoneMatchProfit#39;s A Winner finds and executes matched betting opportunities
+            Everyone's A Winner finds and executes matched betting opportunities
             automatically. No gambling, no risk — just consistent, tax-free income
             from promotional offers.
           </p>
@@ -362,7 +362,8 @@ function Home() {
                   "Email support",
                   "Guides & tutorials",
                 ],
-                cta: "Start free trial",
+                cta: "Subscribe - £9.99/mo",
+                url: "https://buy.stripe.com/5kQ7sLf0OdNV7GTenydQQ00",
                 popular: false,
               },
               {
@@ -379,7 +380,8 @@ function Home() {
                   "Priority email support",
                   "Sign-up journey guides",
                 ],
-                cta: "Start free trial",
+                cta: "Subscribe - £19.99/mo",
+                url: "https://buy.stripe.com/fZu4gz5qe4dlaT56V6dQQ01",
                 popular: true,
               },
               {
@@ -393,7 +395,8 @@ function Home() {
                   "Early access to new features",
                   "Priority support",
                 ],
-                cta: "Start free trial",
+                cta: "Subscribe - £199/yr",
+                url: "https://buy.stripe.com/fZufZh05U7pxd1dcfqdQQ02",
                 popular: false,
               },
             ].map((plan) => (
@@ -438,15 +441,18 @@ function Home() {
                     </li>
                   ))}
                 </ul>
-                <button
-                  className={`mt-8 w-full rounded-xl py-3 text-sm font-semibold transition-all ${
+                <a
+                  href={plan.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`mt-8 w-full rounded-xl py-3 text-sm font-semibold transition-all block text-center ${
                     plan.popular
                       ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 hover:shadow-xl hover:shadow-indigo-600/30"
                       : "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
                   }`}
                 >
                   {plan.cta}
-                </button>
+                </a>
               </div>
             ))}
           </div>
@@ -535,7 +541,7 @@ function Home() {
           </h2>
           <p className="mt-4 text-lg text-indigo-100">
             Join thousands of users who make consistent, tax-free income with
-            EveryoneMatchProfit#39;s A Winner. Your first 7 days are on us.
+            Everyone's A Winner. Your first 7 days are on us.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
@@ -564,7 +570,7 @@ function Home() {
                   MP
                 </span>
                 <span className="text-lg font-bold tracking-tight">
-                  EveryoneMatchProfit#39;s A Winner
+                  Everyone's A Winner
                 </span>
               </div>
               <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 max-w-xs">
@@ -634,7 +640,7 @@ function Home() {
             </div>
           </div>
           <div className="mt-12 border-t border-gray-200 pt-8 text-center text-sm text-gray-500 dark:border-gray-800 dark:text-gray-500">
-            <p>&copy; {new Date().getFullYear()} EveryoneMatchProfit#39;s A Winner. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} Everyone's A Winner. All rights reserved.</p>
           </div>
         </div>
       </footer>

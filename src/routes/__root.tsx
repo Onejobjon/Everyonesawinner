@@ -13,11 +13,11 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "EveryoneMatchProfit#39;s A Winner — Risk-Free Matched Betting Profits" },
+      { title: "Everyone's A Winner — Risk-Free Matched Betting Profits" },
       {
         name: "description",
         content:
-          "Turn free bets into guaranteed, tax-free profit. EveryoneMatchProfit#39;s A Winner identifies and executes matched betting opportunities for you.",
+          "Turn free bets into guaranteed, tax-free profit. Everyone's A Winner identifies and executes matched betting opportunities for you.",
       },
     ],
     links: [

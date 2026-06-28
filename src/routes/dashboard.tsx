@@ -111,7 +111,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">MP</span>
-            <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100">MatchProfit</span>
+            <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Everyone's A Winner</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link href="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Oddsmatcher</Link>

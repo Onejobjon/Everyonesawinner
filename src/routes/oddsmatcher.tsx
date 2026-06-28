@@ -53,7 +53,7 @@ function Oddsmatcher() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">MP</span>
-            <span className="text-xl font-bold tracking-tight">MatchProfit</span>
+            <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
           </Link>
           <div className="flex items-center gap-6">
             <Link href="/world-cup" className="text-sm font-medium text-green-600 hover:text-green-700 font-semibold">World Cup</Link>

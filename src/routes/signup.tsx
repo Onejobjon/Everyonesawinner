@@ -44,7 +44,7 @@ function Signup() {
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2">
             <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">MP</span>
-            <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100">MatchProfit</span>
+            <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Everyone's A Winner</span>
           </Link>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-950">

@@ -86,7 +86,7 @@ function Calculator() {
             <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">
               MP
             </span>
-            <span className="text-xl font-bold tracking-tight">MatchProfit</span>
+            <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
           </Link>
           <Link
             href="/"
@@ -413,7 +413,7 @@ function Calculator() {
       {/* Footer */}
       <footer className="border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-500">
-          <p>&copy; {new Date().getFullYear()} MatchProfit. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Everyone's A Winner. All rights reserved.</p>
         </div>
       </footer>
     </div>
