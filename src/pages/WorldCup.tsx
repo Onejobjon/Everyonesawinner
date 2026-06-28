@@ -84,6 +84,8 @@ export default function WorldCup() {
                 const vs = vsTeam(m.best.outcome, m.home, m.away);
                 const backReturn = STAKE * m.best.backOdds;
                 const layReturn = STAKE * m.best.layOdds;
+                const minReturn = Math.min(backReturn, layReturn);
+                const totalStake = STAKE * 2;
                 return (
                   <div key={m.matchId}
                     className="rounded-xl border-2 border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md"
@@ -111,7 +113,9 @@ export default function WorldCup() {
 
                     <div className="mt-4 flex items-center gap-2">
                       <span className="text-lg">💰</span>
-                      <span className="font-medium text-green-700 dark:text-green-400 text-sm">Pick the best return — your choice!</span>
+                      <span className="font-medium text-green-700 dark:text-green-400 text-sm">
+                        Bet on both: <strong>minimum return £{minReturn.toFixed(2)}</strong> from £{totalStake.toFixed(2)} stake
+                      </span>
                     </div>
                   </div>
                 );
