@@ -1,5 +1,118 @@
 import { Link } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getMatches, type Match } from "../lib/odds-api";
+import { formatOdds } from "../lib/odds";
+
+function FeaturedPicks() {
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMatches()
+      .then((data) => {
+        if (!cancelled) {
+          // Sort by min return descending and take top 4
+          const sorted = [...data].sort((a, b) => {
+            const minA = Math.min(...a.outcomes.map((o) => o.return20));
+            const minB = Math.min(...b.outcomes.map((o) => o.return20));
+            return minB - minA;
+          });
+          setMatches(sorted.slice(0, 4));
+          setLoading(false);
+        }
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading || matches.length === 0) return null;
+
+  return (
+    <section className="py-20 md:py-28">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Today's Best Picks</h2>
+          <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">The highest returning matches right now.</p>
+        </div>
+        <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {matches.map((m) => {
+            const minReturn = Math.min(...m.outcomes.map((o) => o.return20));
+            return (
+              <Link key={m.matchId} to="/oddsmatcher"
+                className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-all hover:border-indigo-300 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-indigo-700"
+              >
+                <div className="flex items-center gap-2">
+                  {m.leagueKey === "World Cup" && <span className="text-base">🏆</span>}
+                  <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{m.league}</span>
+                </div>
+                <p className="mt-3 font-bold">{m.home} vs {m.away}</p>
+                <div className="mt-3 space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                  {m.outcomes.slice(0, 2).map((o, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span>{o.name}</span>
+                      <span className="font-mono text-indigo-600 dark:text-indigo-400">{formatOdds(o.odds)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                    Min return: £{minReturn.toFixed(2)}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+        <div className="mt-8 text-center">
+          <Link to="/oddsmatcher"
+            className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-all">
+            View all matches →
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SportSections() {
+  const sports = [
+    { key: "World Cup", icon: "🏆", desc: "Live odds for every World Cup 2026 match", link: "/world-cup", color: "green" },
+    { key: "Premier League", icon: "⚽", desc: "Best prices across all EPL matches", link: "/oddsmatcher", color: "indigo" },
+    { key: "La Liga", icon: "🇪🇸", desc: "Spanish football odds compared", link: "/oddsmatcher", color: "red" },
+    { key: "Bundesliga", icon: "🇩🇪", desc: "German Bundesliga best odds", link: "/oddsmatcher", color: "amber" },
+  ];
+
+  const colorClasses: Record<string, string> = {
+    green: "border-green-200 hover:border-green-400 dark:border-green-900 dark:hover:border-green-700 text-green-700 dark:text-green-400",
+    indigo: "border-indigo-200 hover:border-indigo-400 dark:border-indigo-900 dark:hover:border-indigo-700 text-indigo-700 dark:text-indigo-400",
+    red: "border-red-200 hover:border-red-400 dark:border-red-900 dark:hover:border-red-700 text-red-700 dark:text-red-400",
+    amber: "border-amber-200 hover:border-amber-400 dark:border-amber-900 dark:hover:border-amber-700 text-amber-700 dark:text-amber-400",
+  };
+
+  return (
+    <section className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Browse by League</h2>
+          <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Pick a league and start finding profitable opportunities.</p>
+        </div>
+        <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {sports.map((s) => (
+            <Link key={s.key} to={s.link}
+              className={`rounded-xl border-2 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:bg-gray-950 ${colorClasses[s.color]}`}
+            >
+              <span className="text-3xl">{s.icon}</span>
+              <h3 className="mt-4 text-lg font-bold">{s.key}</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{s.desc}</p>
+              <span className="mt-4 inline-block text-sm font-semibold">View odds →</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function Nav() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -112,6 +225,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <FeaturedPicks />
+      <SportSections />
 
       {/* Features */}
       <section id="features" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">

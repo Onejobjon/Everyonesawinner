@@ -13,13 +13,11 @@ const MARKETS = "h2h";
 
 // Free tier: 500 requests/month. Cache aggressively to stay well under.
 // Cache in memory (per session) + localStorage (across page loads).
-// Update frequency: once per 24h per browser. More frequent updates waste quota.
 const CACHE_TTL_MS = 600_000; // 10 minute in-memory cache (for page refreshes in same session)
-const LS_KEY = "eaw_odds_cache";
-const LS_TTL_MS = 86_400_000; // 24 hours in localStorage (across sessions)
+const LS_TTL_MS = 7_200_000; // 2 hours in localStorage (across sessions)
 
-let cachedResponse: ApiMatch[] | null = null;
-let cacheTimestamp = 0;
+// Separate caches per sport endpoint
+const caches: Record<string, { data: ApiMatch[]; ts: number }> = {};
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -75,17 +73,18 @@ export interface Match {
 
 // ── Fetch ──────────────────────────────────────────────────────────────────
 
-/**
- * Fetch upcoming odds from the API. Returns raw API JSON.
- * Uses a simple in-memory cache to avoid hammering the API on re-render.
- */
-function loadFromLS(): ApiMatch[] | null {
+function lsKey(sport: string): string {
+  return `eaw_odds_cache_${sport}`;
+}
+
+function loadFromLS(sport: string): ApiMatch[] | null {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const key = lsKey(sport);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Date.now() - parsed.ts > LS_TTL_MS) {
-      localStorage.removeItem(LS_KEY);
+      localStorage.removeItem(key);
       return null;
     }
     return parsed.data as ApiMatch[];
@@ -94,40 +93,41 @@ function loadFromLS(): ApiMatch[] | null {
   }
 }
 
-function saveToLS(data: ApiMatch[]): void {
+function saveToLS(sport: string, data: ApiMatch[]): void {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify({ ts: Date.now(), data }));
-  } catch { /* localStorage full or unavailable — ignore */ }
+    localStorage.setItem(lsKey(sport), JSON.stringify({ ts: Date.now(), data }));
+  } catch { /* ignore */ }
 }
 
-async function fetchOdds(): Promise<ApiMatch[]> {
+async function fetchOdds(sportKey = "upcoming"): Promise<ApiMatch[]> {
   const now = Date.now();
+  const cache = caches[sportKey];
 
-  // 1. Check in-memory cache first (fastest)
-  if (cachedResponse && now - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedResponse;
+  // 1. Check in-memory cache
+  if (cache && now - cache.ts < CACHE_TTL_MS) {
+    return cache.data;
   }
 
-  // 2. Check localStorage cache (survives page navigations)
-  const lsData = loadFromLS();
+  // 2. Check localStorage
+  const lsData = loadFromLS(sportKey);
   if (lsData) {
-    cachedResponse = lsData;
-    cacheTimestamp = now;
+    caches[sportKey] = { data: lsData, ts: now };
     return lsData;
   }
 
-  // 3. Fetch from API (expensive — uses quota)
-  const url = `${BASE}/sports/upcoming/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&bookmakers=${BOOKMAKERS}&oddsFormat=decimal`;
+  // 3. Fetch from API
+  const url = sportKey === "upcoming"
+    ? `${BASE}/sports/upcoming/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&bookmakers=${BOOKMAKERS}&oddsFormat=decimal`
+    : `${BASE}/sports/${sportKey}/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&bookmakers=${BOOKMAKERS}&oddsFormat=decimal`;
 
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Odds API error: ${res.status} ${res.statusText}`);
+    throw new Error(`Odds API error (${sportKey}): ${res.status} ${res.statusText}`);
   }
 
   const data: ApiMatch[] = await res.json();
-  cachedResponse = data;
-  cacheTimestamp = now;
-  saveToLS(data);
+  caches[sportKey] = { data, ts: now };
+  saveToLS(sportKey, data);
   return data;
 }
 
@@ -232,19 +232,22 @@ export const EXCHANGE_MULTIPLIER = 1.02;
 export const EXCHANGE_NAME = "Betfair"; // placeholder name for the exchange side
 
 /**
- * Get all matches with live odds from the API.
- * Returns transformed Match[] ready for the UI.
+ * Get only World Cup matches from the dedicated sport endpoint.
  */
-export async function getMatches(): Promise<Match[]> {
-  const data = await fetchOdds();
+export async function getWorldCupMatches(): Promise<Match[]> {
+  const data = await fetchOdds("soccer_fifa_world_cup");
+  return transformMatches(data, "soccer_fifa_world_cup");
+}
 
+/**
+ * Transform raw API matches into our Match format.
+ */
+function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
   const results: Match[] = [];
 
   for (const apiMatch of data) {
-    // Skip matches with no bookmaker data
     if (!apiMatch.bookmakers || apiMatch.bookmakers.length === 0) continue;
 
-    // Collect distinct outcomes across all bookmakers' h2h markets
     const allOutcomes: ApiOutcome[] = [];
     for (const bm of apiMatch.bookmakers) {
       const market = bm.markets.find((m) => m.key === "h2h");
@@ -259,11 +262,9 @@ export async function getMatches(): Promise<Match[]> {
 
     if (allOutcomes.length === 0) continue;
 
-    // For each outcome, find the best (highest) bookmaker odds
     const perOutcome = bestOddsPerOutcome(allOutcomes, apiMatch.bookmakers);
     if (perOutcome.length === 0) continue;
 
-    // Sort: home first, then draw (if exists), then away
     const sorted = perOutcome.sort((a, b) => {
       const aIsHome = a.outcome.toLowerCase() === apiMatch.home_team.toLowerCase();
       const bIsHome = b.outcome.toLowerCase() === apiMatch.home_team.toLowerCase();
@@ -296,23 +297,30 @@ export async function getMatches(): Promise<Match[]> {
 }
 
 /**
- * Get only World Cup matches.
+ * Get all matches with live odds from the API (upcoming sports).
  */
-export async function getWorldCupMatches(): Promise<Match[]> {
-  const all = await getMatches();
-  return all.filter(
-    (m) =>
-      m.leagueKey === "World Cup" ||
-      m.league.toLowerCase().includes("world cup")
-  );
+export async function getMatches(): Promise<Match[]> {
+  const data = await fetchOdds("upcoming");
+  return transformMatches(data);
 }
 
 /**
  * Clear all caches (memory + localStorage) so the next fetch hits the API.
  * Call this when the user taps "Refresh" to get fresh odds.
  */
-export function clearCache(): void {
-  cachedResponse = null;
-  cacheTimestamp = 0;
-  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+export function clearCache(sportKey?: string): void {
+  if (sportKey) {
+    delete caches[sportKey];
+    try { localStorage.removeItem(lsKey(sportKey)); } catch { /* ignore */ }
+  } else {
+    // Clear all caches
+    Object.keys(caches).forEach((k) => delete caches[k]);
+    // Clear localStorage entries
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("eaw_odds_cache_")) {
+        try { localStorage.removeItem(key); } catch { /* ignore */ }
+      }
+    }
+  }
 }
