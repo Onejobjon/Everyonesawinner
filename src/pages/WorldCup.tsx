@@ -5,15 +5,11 @@ import { getWorldCupMatches, type Match } from "../lib/odds-api";
 
 const STAKE = 20;
 
-function extractTeam(outcome: string): string {
-  return outcome.replace(/\s+to\s+win$/i, "").trim();
-}
-
-function vsTeam(outcome: string, home: string, away: string): string {
-  const team = extractTeam(outcome);
-  if (team.toLowerCase() === home.toLowerCase()) return away;
-  if (team.toLowerCase() === away.toLowerCase()) return home;
-  return team;
+function getIcon(name: string, home: string, away: string): string {
+  const lower = name.toLowerCase();
+  if (lower === home.toLowerCase()) return "⬆️";
+  if (lower === away.toLowerCase()) return "⬇️";
+  return "➡️";
 }
 
 export default function WorldCup() {
@@ -51,8 +47,7 @@ export default function WorldCup() {
           <span className="text-3xl">🏆</span>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">World Cup 2026</h1>
-            <p className="text-gray-600 dark:text-gray-400">Live odds for every World Cup match.</p>
-            <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Live odds refreshed daily. Tap refresh to update.</p>
+            <p className="text-gray-600 dark:text-gray-400">Odds updated daily.</p>
           </div>
         </div>
 
@@ -80,12 +75,9 @@ export default function WorldCup() {
           <>
             <div className="grid grid-cols-1 gap-4">
               {display.map((m) => {
-                const team = extractTeam(m.best.outcome);
-                const vs = vsTeam(m.best.outcome, m.home, m.away);
-                const backReturn = STAKE * m.best.backOdds;
-                const layReturn = STAKE * m.best.layOdds;
-                const minReturn = Math.min(backReturn, layReturn);
-                const totalStake = STAKE * 2;
+                const totalStake = m.outcomes.length * STAKE;
+                const returns = m.outcomes.map((o) => o.return20);
+                const minReturn = Math.min(...returns);
                 return (
                   <div key={m.matchId}
                     className="rounded-xl border-2 border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md"
@@ -99,22 +91,19 @@ export default function WorldCup() {
                     </div>
 
                     <div className="mt-4 space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-lg">⬆️</span>
-                        <span><strong>{team}</strong> at <strong>{m.best.bookmaker}</strong> ({formatOdds(m.best.backOdds)})</span>
-                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} returns <strong>£{backReturn.toFixed(2)}</strong></span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-lg">⬇️</span>
-                        <span><strong>{vs}</strong> at <strong>{m.best.exchange}</strong> ({formatOdds(m.best.layOdds)})</span>
-                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} returns <strong>£{layReturn.toFixed(2)}</strong></span>
-                      </div>
+                      {m.outcomes.map((o, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          <span className="text-lg">{getIcon(o.name, m.home, m.away)}</span>
+                          <span className="font-medium"><strong>{o.name}</strong> at <strong>{o.bookmaker}</strong> ({formatOdds(o.odds)})</span>
+                          <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} returns <strong>£{o.return20.toFixed(2)}</strong></span>
+                        </div>
+                      ))}
                     </div>
 
                     <div className="mt-4 flex items-center gap-2">
                       <span className="text-lg">💰</span>
-                      <span className="font-medium text-green-700 dark:text-green-400 text-sm">
-                        Bet on both: <strong>minimum return £{minReturn.toFixed(2)}</strong> from £{totalStake.toFixed(2)} stake
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Bet <strong>£{totalStake}</strong> across all outcomes — minimum return <strong>£{minReturn.toFixed(2)}</strong>
                       </span>
                     </div>
                   </div>

@@ -51,13 +51,15 @@ interface ApiMatch {
   bookmakers: ApiBookmaker[];
 }
 
-export interface MatchBest {
-  outcome: string;
+export interface MatchOutcome {
+  /** Display name (team name or "Draw") */
+  name: string;
+  /** Best bookmaker offering these odds */
   bookmaker: string;
-  backOdds: number;
-  exchange: string;
-  layOdds: number;
-  profitPct: number | null;
+  /** Best decimal odds found */
+  odds: number;
+  /** What £20 returns (£20 × odds) */
+  return20: number;
 }
 
 export interface Match {
@@ -67,7 +69,8 @@ export interface Match {
   league: string;
   leagueKey: string;
   time: string;
-  best: MatchBest;
+  /** All available outcomes (2 for most sports, 3 for soccer) */
+  outcomes: MatchOutcome[];
 }
 
 // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -241,13 +244,12 @@ export async function getMatches(): Promise<Match[]> {
     // Skip matches with no bookmaker data
     if (!apiMatch.bookmakers || apiMatch.bookmakers.length === 0) continue;
 
-    // Collect all outcomes across all bookmakers' h2h markets
+    // Collect distinct outcomes across all bookmakers' h2h markets
     const allOutcomes: ApiOutcome[] = [];
     for (const bm of apiMatch.bookmakers) {
       const market = bm.markets.find((m) => m.key === "h2h");
       if (market) {
         for (const outcome of market.outcomes) {
-          // Avoid duplicates
           if (!allOutcomes.some((o) => o.name === outcome.name)) {
             allOutcomes.push(outcome);
           }
@@ -257,19 +259,22 @@ export async function getMatches(): Promise<Match[]> {
 
     if (allOutcomes.length === 0) continue;
 
-    // For each outcome, find the best bookmaker odds
+    // For each outcome, find the best (highest) bookmaker odds
     const perOutcome = bestOddsPerOutcome(allOutcomes, apiMatch.bookmakers);
     if (perOutcome.length === 0) continue;
 
-    // Pick the featured outcome (highest odds team outcome)
-    const featured = pickFeaturedOutcome(
-      perOutcome,
-      apiMatch.home_team,
-      apiMatch.away_team
-    );
-    if (!featured) continue;
-
-    const layOdds = Math.round(featured.backOdds * EXCHANGE_MULTIPLIER * 100) / 100;
+    // Sort: home first, then draw (if exists), then away
+    const sorted = perOutcome.sort((a, b) => {
+      const aIsHome = a.outcome.toLowerCase() === apiMatch.home_team.toLowerCase();
+      const bIsHome = b.outcome.toLowerCase() === apiMatch.home_team.toLowerCase();
+      const aIsDraw = a.outcome.toLowerCase() === "draw";
+      const bIsDraw = b.outcome.toLowerCase() === "draw";
+      if (aIsHome) return -1;
+      if (bIsHome) return 1;
+      if (aIsDraw) return -1;
+      if (bIsDraw) return 1;
+      return 0;
+    });
 
     results.push({
       matchId: apiMatch.id,
@@ -278,14 +283,12 @@ export async function getMatches(): Promise<Match[]> {
       league: apiMatch.sport_title,
       leagueKey: getLeagueKey(apiMatch.sport_key),
       time: formatTime(apiMatch.commence_time),
-      best: {
-        outcome: `${featured.outcome} to win`,
-        bookmaker: featured.bookmaker,
-        backOdds: featured.backOdds,
-        exchange: EXCHANGE_NAME,
-        layOdds,
-        profitPct: calcProfitPct(featured.backOdds, layOdds),
-      },
+      outcomes: sorted.map((o) => ({
+        name: o.outcome,
+        bookmaker: o.bookmaker,
+        odds: o.backOdds,
+        return20: Math.round(20 * o.backOdds * 100) / 100,
+      })),
     });
   }
 
