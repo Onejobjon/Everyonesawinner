@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { formatOdds } from "../lib/odds";
+import { formatOdds, calcDutch } from "../lib/odds";
 import { getWorldCupMatches, type Match } from "../lib/odds-api";
 
 const STAKE = 20;
@@ -75,12 +75,13 @@ export default function WorldCup() {
           <>
             <div className="grid grid-cols-1 gap-4">
               {display.map((m) => {
-                const totalStake = m.outcomes.length * STAKE;
-                const returns = m.outcomes.map((o) => o.return20);
-                const minReturn = Math.min(...returns);
+                const oddsArr = m.outcomes.map((o) => o.odds);
+                const dutch = calcDutch(oddsArr);
                 return (
                   <div key={m.matchId}
-                    className="rounded-xl border-2 border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md"
+                    className={`rounded-xl border-2 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md ${
+                      dutch.isArbitrage ? "border-green-500" : "border-gray-200 dark:border-gray-800"
+                    }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -94,16 +95,25 @@ export default function WorldCup() {
                       {m.outcomes.map((o, i) => (
                         <div key={i} className="flex items-center gap-2 text-sm">
                           <span className="text-lg">{getIcon(o.name, m.home, m.away)}</span>
-                          <span className="font-medium"><strong>{o.name}</strong> at <strong>{o.bookmaker}</strong> ({formatOdds(o.odds)})</span>
-                          <span className="font-medium text-indigo-700 dark:text-indigo-400">— £{STAKE} returns <strong>£{o.return20.toFixed(2)}</strong></span>
+                          <span className="font-medium">
+                            {i === dutch.favIndex && <span className="text-amber-500 mr-1">⭐</span>}
+                            <strong>{o.name}</strong> at <strong>{o.bookmaker}</strong> ({formatOdds(o.odds)})
+                          </span>
+                          <span className="font-medium text-indigo-700 dark:text-indigo-400">— stake <strong>£{dutch.stakes[i].toFixed(2)}</strong></span>
                         </div>
                       ))}
                     </div>
 
                     <div className="mt-4 flex items-center gap-2">
-                      <span className="text-lg">💰</span>
+                      <span className="text-lg">{dutch.isArbitrage ? "💰" : "⚠️"}</span>
                       <span className="text-sm text-gray-700 dark:text-gray-300">
-                        Bet <strong>£{totalStake}</strong> across all outcomes — minimum return <strong>£{minReturn.toFixed(2)}</strong>
+                        Total stake: <strong>£{dutch.totalStake.toFixed(2)}</strong> — guaranteed return: <strong>£{dutch.guaranteedReturn.toFixed(2)}</strong> —
+                        {dutch.isArbitrage ? (
+                          <span className="text-green-600 dark:text-green-400 font-semibold"> profit <strong>£{dutch.netProfit.toFixed(2)}</strong></span>
+                        ) : (
+                          <span className="text-red-600 dark:text-red-400 font-semibold"> loss <strong>£{Math.abs(dutch.netProfit).toFixed(2)}</strong></span>
+                        )}
+                        <span className="text-gray-400 dark:text-gray-500"> (overround: {dutch.overroundPct.toFixed(1)}%)</span>
                       </span>
                     </div>
                   </div>

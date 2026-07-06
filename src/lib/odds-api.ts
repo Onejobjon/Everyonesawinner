@@ -305,6 +305,18 @@ export async function getMatches(): Promise<Match[]> {
 }
 
 /**
+ * Get matches for a specific sport from its dedicated endpoint.
+ * Use this for sport-specific pages. Cache is per-sport to avoid quota waste.
+ * Supported sport keys: soccer_epl, soccer_fifa_world_cup, soccer_spain_la_liga,
+ * soccer_germany_bundesliga, soccer_italy_serie_a, soccer_france_ligue_one,
+ * baseball_mlb, basketball_nba, cricket_international_t20, etc.
+ */
+export async function getSportMatches(sportKey: string): Promise<Match[]> {
+  const data = await fetchOdds(sportKey);
+  return transformMatches(data, sportKey);
+}
+
+/**
  * Clear all caches (memory + localStorage) so the next fetch hits the API.
  * Call this when the user taps "Refresh" to get fresh odds.
  */

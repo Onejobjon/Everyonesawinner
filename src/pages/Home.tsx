@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getMatches, type Match } from "../lib/odds-api";
-import { formatOdds } from "../lib/odds";
+import { formatOdds, calcDutch } from "../lib/odds";
+import FreeBetsOffers from "../components/FreeBetsOffers";
 
 function FeaturedPicks() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -12,13 +13,13 @@ function FeaturedPicks() {
     getMatches()
       .then((data) => {
         if (!cancelled) {
-          // Sort by min return descending and take top 4
-          const sorted = [...data].sort((a, b) => {
-            const minA = Math.min(...a.outcomes.map((o) => o.return20));
-            const minB = Math.min(...b.outcomes.map((o) => o.return20));
-            return minB - minA;
+          // Sort by dutching net profit descending, take top 4
+          const withDutch = data.map((m) => {
+            const oddsArr = m.outcomes.map((o) => o.odds);
+            return { match: m, dutch: calcDutch(oddsArr) };
           });
-          setMatches(sorted.slice(0, 4));
+          const sorted = withDutch.sort((a, b) => b.dutch.netProfit - a.dutch.netProfit);
+          setMatches(sorted.slice(0, 4).map((x) => x.match));
           setLoading(false);
         }
       })
@@ -37,10 +38,15 @@ function FeaturedPicks() {
         </div>
         <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {matches.map((m) => {
-            const minReturn = Math.min(...m.outcomes.map((o) => o.return20));
+            const oddsArr = m.outcomes.map((o) => o.odds);
+            const dutch = calcDutch(oddsArr, 20);
             return (
               <Link key={m.matchId} to="/oddsmatcher"
-                className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-all hover:border-indigo-300 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-indigo-700"
+                className={`rounded-xl border-2 bg-white p-6 shadow-sm hover:shadow-md transition-all dark:bg-gray-950 ${
+                  dutch.isArbitrage
+                    ? "border-green-200 hover:border-green-400 dark:border-green-900 dark:hover:border-green-700"
+                    : "border-gray-200 hover:border-gray-400 dark:border-gray-800 dark:hover:border-gray-600"
+                }`}
               >
                 <div className="flex items-center gap-2">
                   {m.leagueKey === "World Cup" && <span className="text-base">🏆</span>}
@@ -56,9 +62,16 @@ function FeaturedPicks() {
                   ))}
                 </div>
                 <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
-                  <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-                    Min return: £{minReturn.toFixed(2)}
-                  </span>
+                  {dutch.isArbitrage ? (
+                    <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                      Net profit: <strong>£{dutch.netProfit.toFixed(2)}</strong>
+                    </span>
+                  ) : (
+                    <span className="text-sm font-semibold text-red-600 dark:text-red-400">
+                      Net loss: <strong>£{Math.abs(dutch.netProfit).toFixed(2)}</strong>
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-400 ml-2">({dutch.overroundPct.toFixed(1)}% overround)</span>
                 </div>
               </Link>
             );
@@ -79,8 +92,12 @@ function SportSections() {
   const sports = [
     { key: "World Cup", icon: "🏆", desc: "Live odds for every World Cup 2026 match", link: "/world-cup", color: "green" },
     { key: "Premier League", icon: "⚽", desc: "Best prices across all EPL matches", link: "/oddsmatcher", color: "indigo" },
-    { key: "La Liga", icon: "🇪🇸", desc: "Spanish football odds compared", link: "/oddsmatcher", color: "red" },
+    { key: "La Liga", icon: "🇪🇸", desc: "Spanish La Liga odds compared", link: "/oddsmatcher", color: "red" },
     { key: "Bundesliga", icon: "🇩🇪", desc: "German Bundesliga best odds", link: "/oddsmatcher", color: "amber" },
+    { key: "Serie A", icon: "🇮🇹", desc: "Italian Serie A football odds", link: "/oddsmatcher", color: "blue" },
+    { key: "Ligue 1", icon: "🇫🇷", desc: "French Ligue 1 best prices", link: "/oddsmatcher", color: "purple" },
+    { key: "MLB", icon: "⚾", desc: "Baseball — all MLB matchups", link: "/oddsmatcher", color: "sky" },
+    { key: "Boxing", icon: "🥊", desc: "Fight night odds from top bookmakers", link: "/oddsmatcher", color: "orange" },
   ];
 
   const colorClasses: Record<string, string> = {
@@ -88,14 +105,18 @@ function SportSections() {
     indigo: "border-indigo-200 hover:border-indigo-400 dark:border-indigo-900 dark:hover:border-indigo-700 text-indigo-700 dark:text-indigo-400",
     red: "border-red-200 hover:border-red-400 dark:border-red-900 dark:hover:border-red-700 text-red-700 dark:text-red-400",
     amber: "border-amber-200 hover:border-amber-400 dark:border-amber-900 dark:hover:border-amber-700 text-amber-700 dark:text-amber-400",
+    blue: "border-blue-200 hover:border-blue-400 dark:border-blue-900 dark:hover:border-blue-700 text-blue-700 dark:text-blue-400",
+    purple: "border-purple-200 hover:border-purple-400 dark:border-purple-900 dark:hover:border-purple-700 text-purple-700 dark:text-purple-400",
+    sky: "border-sky-200 hover:border-sky-400 dark:border-sky-900 dark:hover:border-sky-700 text-sky-700 dark:text-sky-400",
+    orange: "border-orange-200 hover:border-orange-400 dark:border-orange-900 dark:hover:border-orange-700 text-orange-700 dark:text-orange-400",
   };
 
   return (
     <section className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
       <div className="mx-auto max-w-7xl px-6">
         <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Browse by League</h2>
-          <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Pick a league and start finding profitable opportunities.</p>
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Browse by League & Sport</h2>
+          <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Pick a sport and start finding the best odds from top UK bookmakers.</p>
         </div>
         <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {sports.map((s) => (
@@ -108,6 +129,12 @@ function SportSections() {
               <span className="mt-4 inline-block text-sm font-semibold">View odds →</span>
             </Link>
           ))}
+        </div>
+        <div className="mt-8 text-center">
+          <Link to="/oddsmatcher"
+            className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900 transition-all">
+            View all sports →
+          </Link>
         </div>
       </div>
     </section>
@@ -125,9 +152,7 @@ function Nav() {
         </Link>
         <div className="hidden md:flex items-center gap-8">
           <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Features</a>
-          <a href="#how-it-works" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">How it works</a>
-          <a href="#pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Pricing</a>
-          <a href="#faq" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">FAQ</a>
+          <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Best Odds</Link>
           <Link to="/world-cup" className="text-sm font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 transition-colors">🏆 World Cup</Link>
           <Link to="/calculator" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">Try the Calculator</Link>
         </div>
@@ -138,9 +163,7 @@ function Nav() {
       {menuOpen && (
         <div className="md:hidden border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4 flex flex-col gap-4">
           <a href="#features" className="text-sm font-medium text-gray-600 dark:text-gray-400">Features</a>
-          <a href="#how-it-works" className="text-sm font-medium text-gray-600 dark:text-gray-400">How it works</a>
-          <a href="#pricing" className="text-sm font-medium text-gray-600 dark:text-gray-400">Pricing</a>
-          <a href="#faq" className="text-sm font-medium text-gray-600 dark:text-gray-400">FAQ</a>
+          <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 dark:text-gray-400">Best Odds</Link>
           <Link to="/world-cup" className="text-sm font-medium text-amber-600 dark:text-amber-400">🏆 World Cup</Link>
           <Link to="/calculator" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white text-center">Calculator</Link>
         </div>
@@ -228,6 +251,12 @@ export default function Home() {
 
       <FeaturedPicks />
       <SportSections />
+
+      <section className="py-20 md:py-28">
+        <div className="mx-auto max-w-5xl px-6">
+          <FreeBetsOffers />
+        </div>
+      </section>
 
       {/* Features */}
       <section id="features" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">

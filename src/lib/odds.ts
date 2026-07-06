@@ -65,3 +65,55 @@ export function decimalToFractional(odds: number): string {
 export function formatOdds(odds: number): string {
   return decimalToFractional(odds);
 }
+
+/**
+ * Dutching calculator — fixes £10 on the favourite (lowest odds),
+ * then calculates variable stakes on other outcomes to equalise the return.
+ *
+ * @param oddsArr - Array of decimal odds for each outcome
+ * @param favStake - Fixed stake on the favourite (default £10)
+ */
+export function calcDutch(
+  oddsArr: number[],
+  favStake = 10
+): {
+  stakes: number[];          // Stake per outcome (favStake for favourite, variable for others)
+  favIndex: number;          // Index of the favourite outcome
+  totalStake: number;        // Sum of all stakes
+  guaranteedReturn: number;  // Same return regardless of which outcome wins
+  netProfit: number;         // guaranteedReturn - totalStake (positive = arbitrage)
+  overroundPct: number;      // (S - 1) × 100 — bookmaker margin
+  isArbitrage: boolean;      // True when guaranteed profit exists
+} {
+  // Find the favourite — lowest decimal odds = highest implied probability
+  let favIndex = 0;
+  for (let i = 1; i < oddsArr.length; i++) {
+    if (oddsArr[i] < oddsArr[favIndex]) favIndex = i;
+  }
+
+  const favOdds = oddsArr[favIndex];
+  // Guaranteed return = favStake × favourite odds
+  const guaranteedReturn = favStake * favOdds;
+
+  // Calculate stakes for each outcome
+  const stakes = oddsArr.map((odds, i) =>
+    i === favIndex ? favStake : guaranteedReturn / odds
+  );
+
+  const totalStake = stakes.reduce((sum, s) => sum + s, 0);
+  const netProfit = guaranteedReturn - totalStake;
+
+  // Overround still uses the standard formula
+  const S = oddsArr.reduce((sum, o) => sum + 1 / o, 0);
+  const overroundPct = (S - 1) * 100;
+
+  return {
+    stakes,
+    favIndex,
+    totalStake,
+    guaranteedReturn,
+    netProfit,
+    overroundPct,
+    isArbitrage: netProfit > 0,
+  };
+}
