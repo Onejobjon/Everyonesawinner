@@ -117,3 +117,72 @@ export function calcDutch(
     isArbitrage: netProfit > 0,
   };
 }
+
+/**
+ * Free bet dutching calculator — places a £10 SNR free bet on the most
+ * profitable outcome, then calculates cash stakes on all other outcomes
+ * to equalise the return. SNR means the stake is NOT returned, so the
+ * free bet return = freeBetAmount × (odds - 1).
+ *
+ * Tries all outcomes and picks the one that maximises net profit.
+ *
+ * @param oddsArr - Array of decimal odds for each outcome
+ * @param freeBetAmount - Amount of the free bet (default £10)
+ */
+export function calcDutchFreeBet(
+  oddsArr: number[],
+  freeBetAmount = 10
+): {
+  stakes: number[];             // Cash stake per outcome (0 for the free bet outcome)
+  freeBetIndex: number;         // Index of the outcome the free bet is placed on
+  freeBetReturn: number;        // Return from the free bet (SNR: amount × (odds - 1))
+  totalCashStake: number;       // Total cash outlay (sum of cash stakes)
+  guaranteedReturn: number;     // Same return regardless of which outcome wins
+  netProfit: number;            // guaranteedReturn - totalCashStake
+  overroundPct: number;         // (S - 1) × 100 — bookmaker margin
+  isArbitrage: boolean;         // True when guaranteed profit exists
+} {
+  let bestResult: {
+    stakes: number[];
+    freeBetIndex: number;
+    freeBetReturn: number;
+    totalCashStake: number;
+    netProfit: number;
+  } | null = null;
+
+  // Try each outcome as the free bet target
+  for (let fbIdx = 0; fbIdx < oddsArr.length; fbIdx++) {
+    const fbOdds = oddsArr[fbIdx];
+    // SNR: free bet returns only the profit, not the stake
+    const freeBetReturn = freeBetAmount * (fbOdds - 1);
+
+    // Calculate cash stakes for all other outcomes
+    const stakes = oddsArr.map((odds, i) =>
+      i === fbIdx ? 0 : freeBetReturn / odds
+    );
+
+    const totalCashStake = stakes.reduce((sum, s) => sum + s, 0);
+    const netProfit = freeBetReturn - totalCashStake;
+
+    if (!bestResult || netProfit > bestResult.netProfit) {
+      bestResult = { stakes, freeBetIndex: fbIdx, freeBetReturn, totalCashStake, netProfit };
+    }
+  }
+
+  if (!bestResult) throw new Error("calcDutchFreeBet: no outcomes");
+
+  // Overround uses standard formula
+  const S = oddsArr.reduce((sum, o) => sum + 1 / o, 0);
+  const overroundPct = (S - 1) * 100;
+
+  return {
+    stakes: bestResult.stakes,
+    freeBetIndex: bestResult.freeBetIndex,
+    freeBetReturn: bestResult.freeBetReturn,
+    totalCashStake: bestResult.totalCashStake,
+    guaranteedReturn: bestResult.freeBetReturn,
+    netProfit: bestResult.netProfit,
+    overroundPct,
+    isArbitrage: bestResult.netProfit > 0,
+  };
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { formatOdds, calcDutch } from "../lib/odds";
+import { formatOdds, calcDutch, calcDutchFreeBet } from "../lib/odds";
 import { getMatches, type Match } from "../lib/odds-api";
 import FreeBetsOffers from "../components/FreeBetsOffers";
 
@@ -18,6 +18,7 @@ export default function Oddsmatcher() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("All");
+  const [freeBetMode, setFreeBetMode] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,13 +79,36 @@ export default function Oddsmatcher() {
 
         {!loading && !error && (
           <>
+            <div className="mt-6 flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Mode:</span>
+              <button
+                onClick={() => setFreeBetMode(true)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  freeBetMode
+                    ? "bg-purple-600 text-white"
+                    : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
+                }`}
+              >
+                🎟️ Free Bet
+              </button>
+              <button
+                onClick={() => setFreeBetMode(false)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  !freeBetMode
+                    ? "bg-indigo-600 text-white"
+                    : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-300"
+                }`}
+              >
+                💷 All Cash
+              </button>
+            </div>
             <div className="mt-6 mb-6">
               <FreeBetsOffers />
             </div>
             <div className="mt-6 grid grid-cols-1 gap-4">
             {filtered.map((m) => {
               const oddsArr = m.outcomes.map((o) => o.odds);
-              const dutch = calcDutch(oddsArr);
+              const dutch = freeBetMode ? calcDutchFreeBet(oddsArr) : calcDutch(oddsArr);
               return (
                 <div key={m.matchId}
                   className={`rounded-xl border-2 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md ${
@@ -105,10 +129,16 @@ export default function Oddsmatcher() {
                       <div key={i} className="flex items-center gap-2 text-sm">
                         <span className="text-lg">{getIcon(o.name, m.home, m.away)}</span>
                         <span className="font-medium">
-                          {i === dutch.favIndex && <span className="text-amber-500 mr-1">⭐</span>}
+                          {freeBetMode && i === (dutch as any).freeBetIndex && <span className="text-purple-500 mr-1">🎟️</span>}
+                          {!freeBetMode && i === (dutch as any).favIndex && <span className="text-amber-500 mr-1">⭐</span>}
                           <strong>{o.name}</strong> at <strong>{o.bookmaker}</strong> ({formatOdds(o.odds)})
                         </span>
-                        <span className="font-medium text-indigo-700 dark:text-indigo-400">— stake <strong>£{dutch.stakes[i].toFixed(2)}</strong></span>
+                        <span className="font-medium text-indigo-700 dark:text-indigo-400">
+                          {freeBetMode && i === (dutch as any).freeBetIndex
+                            ? <span className="text-purple-600 dark:text-purple-400">— FREE BET <strong>£10</strong></span>
+                            : `— stake £${dutch.stakes[i].toFixed(2)}`
+                          }
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -116,7 +146,11 @@ export default function Oddsmatcher() {
                   <div className="mt-4 flex items-center gap-2">
                     <span className="text-lg">{dutch.isArbitrage ? "💰" : "⚠️"}</span>
                     <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Total stake: <strong>£{dutch.totalStake.toFixed(2)}</strong> — guaranteed return: <strong>£{dutch.guaranteedReturn.toFixed(2)}</strong> —
+                      {freeBetMode ? (
+                        <>Total cash stake: <strong>£{dutch.totalCashStake.toFixed(2)}</strong> — guaranteed return: <strong>£{dutch.guaranteedReturn.toFixed(2)}</strong> —</>
+                      ) : (
+                        <>Total stake: <strong>£{dutch.totalStake.toFixed(2)}</strong> — guaranteed return: <strong>£{dutch.guaranteedReturn.toFixed(2)}</strong> —</>
+                      )}
                       {dutch.isArbitrage ? (
                         <span className="text-green-600 dark:text-green-400 font-semibold"> profit <strong>£{dutch.netProfit.toFixed(2)}</strong></span>
                       ) : (

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getMatches, type Match } from "../lib/odds-api";
-import { formatOdds, calcDutch } from "../lib/odds";
+import { formatOdds, calcDutch, calcDutchFreeBet } from "../lib/odds";
 import FreeBetsOffers from "../components/FreeBetsOffers";
 
 function FeaturedPicks() {
@@ -13,10 +13,10 @@ function FeaturedPicks() {
     getMatches()
       .then((data) => {
         if (!cancelled) {
-          // Sort by dutching net profit descending, take top 4
+          // Sort by free bet net profit descending, take top 4
           const withDutch = data.map((m) => {
             const oddsArr = m.outcomes.map((o) => o.odds);
-            return { match: m, dutch: calcDutch(oddsArr) };
+            return { match: m, dutch: calcDutchFreeBet(oddsArr) };
           });
           const sorted = withDutch.sort((a, b) => b.dutch.netProfit - a.dutch.netProfit);
           setMatches(sorted.slice(0, 4).map((x) => x.match));
@@ -39,7 +39,7 @@ function FeaturedPicks() {
         <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {matches.map((m) => {
             const oddsArr = m.outcomes.map((o) => o.odds);
-            const dutch = calcDutch(oddsArr, 20);
+            const dutch = calcDutchFreeBet(oddsArr);
             return (
               <Link key={m.matchId} to="/oddsmatcher"
                 className={`rounded-xl border-2 bg-white p-6 shadow-sm hover:shadow-md transition-all dark:bg-gray-950 ${
@@ -62,16 +62,17 @@ function FeaturedPicks() {
                   ))}
                 </div>
                 <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <span className="text-xs font-medium text-purple-600 dark:text-purple-400">🎟️ Free bet</span>
                   {dutch.isArbitrage ? (
-                    <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-                      Net profit: <strong>£{dutch.netProfit.toFixed(2)}</strong>
+                    <span className="text-sm font-semibold text-green-600 dark:text-green-400 block">
+                      Profit: <strong>£{dutch.netProfit.toFixed(2)}</strong>
                     </span>
                   ) : (
-                    <span className="text-sm font-semibold text-red-600 dark:text-red-400">
-                      Net loss: <strong>£{Math.abs(dutch.netProfit).toFixed(2)}</strong>
+                    <span className="text-sm font-semibold text-red-600 dark:text-red-400 block">
+                      Loss: <strong>£{Math.abs(dutch.netProfit).toFixed(2)}</strong>
                     </span>
                   )}
-                  <span className="text-xs text-gray-400 ml-2">({dutch.overroundPct.toFixed(1)}% overround)</span>
+                  <span className="text-xs text-gray-400">({dutch.overroundPct.toFixed(1)}% overround)</span>
                 </div>
               </Link>
             );
