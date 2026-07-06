@@ -9,73 +9,74 @@ interface Offer {
   estProfit: string;
   ukGbp: "✅" | "⚠️";
   section: "uk" | "global" | "exchange";
+  url: string;
 }
 
 const offers: Offer[] = [
   // ── UK/IE Licensed Bookmakers (1–41) ──
-  { bookmaker: "Bet365", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£25", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Sky Bet", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", estProfit: "£14–£17", ukGbp: "✅", section: "uk" },
-  { bookmaker: "William Hill", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£25", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Paddy Power", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£17", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Betfair Sportsbook", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£17", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Betfred", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£25", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Ladbrokes", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", estProfit: "£14–£17", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Coral", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", estProfit: "£14–£17", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Unibet", offer: "Bet £10, get £20 + £10 casino", minStake: "£10", freeBetValue: "£30 total", tokens: "2 × £10", estProfit: "£15–£18", ukGbp: "✅", section: "uk" },
-  { bookmaker: "BetVictor", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "SpreadEx", offer: "Bet £20, get £20 in free bets", minStake: "£20", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£13–£16", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Boylesports (IE)", offer: "Bet €10, get €20 in free bets", minStake: "€10", freeBetValue: "€20", tokens: "2 × €10", estProfit: "€14–€17", ukGbp: "✅", section: "uk" },
-  { bookmaker: "888sport", offer: "Bet £10, get £10 + £10 casino", minStake: "£10", freeBetValue: "£20 total", tokens: "1 × £10", estProfit: "£7–£9", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Betway", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "10Bet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "BetUK", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£24", ukGbp: "✅", section: "uk" },
-  { bookmaker: "BetZone", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Kwiff", offer: "Bet £10, get £10 boosted bet", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£5–£7", ukGbp: "✅", section: "uk" },
-  { bookmaker: "NetBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Luckster", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "CopyBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Hollywood Bets", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£24", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Vegas Land (WH)", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "MansionBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "BetBull", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Megapari", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "VBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "FansBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Mr Green", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Casumo", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "LeoVegas Sport", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "LiveScore Bet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "uk" },
-  { bookmaker: "SportNation", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "EnergyBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "RedZone", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "BetMGM", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Fitzdares", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Virgin Bet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Black Type", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "Cobbler", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
-  { bookmaker: "WeBringTheFun", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk" },
+  { bookmaker: "Bet365", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£25", ukGbp: "✅", section: "uk", url: "https://www.bet365.com" },
+  { bookmaker: "Sky Bet", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", estProfit: "£14–£17", ukGbp: "✅", section: "uk", url: "https://www.skybet.com" },
+  { bookmaker: "William Hill", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£25", ukGbp: "✅", section: "uk", url: "https://www.williamhill.com" },
+  { bookmaker: "Paddy Power", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£17", ukGbp: "✅", section: "uk", url: "https://www.paddypower.com" },
+  { bookmaker: "Betfair Sportsbook", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£17", ukGbp: "✅", section: "uk", url: "https://www.betfair.com/sport" },
+  { bookmaker: "Betfred", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£25", ukGbp: "✅", section: "uk", url: "https://www.betfred.com" },
+  { bookmaker: "Ladbrokes", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", estProfit: "£14–£17", ukGbp: "✅", section: "uk", url: "https://www.ladbrokes.com" },
+  { bookmaker: "Coral", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", estProfit: "£14–£17", ukGbp: "✅", section: "uk", url: "https://www.coral.co.uk" },
+  { bookmaker: "Unibet", offer: "Bet £10, get £20 + £10 casino", minStake: "£10", freeBetValue: "£30 total", tokens: "2 × £10", estProfit: "£15–£18", ukGbp: "✅", section: "uk", url: "https://www.unibet.co.uk" },
+  { bookmaker: "BetVictor", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.betvictor.com" },
+  { bookmaker: "SpreadEx", offer: "Bet £20, get £20 in free bets", minStake: "£20", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£13–£16", ukGbp: "✅", section: "uk", url: "https://www.spreadex.com" },
+  { bookmaker: "Boylesports (IE)", offer: "Bet €10, get €20 in free bets", minStake: "€10", freeBetValue: "€20", tokens: "2 × €10", estProfit: "€14–€17", ukGbp: "✅", section: "uk", url: "https://www.boylesports.com" },
+  { bookmaker: "888sport", offer: "Bet £10, get £10 + £10 casino", minStake: "£10", freeBetValue: "£20 total", tokens: "1 × £10", estProfit: "£7–£9", ukGbp: "✅", section: "uk", url: "https://www.888sport.com" },
+  { bookmaker: "Betway", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.betway.com" },
+  { bookmaker: "10Bet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.10bet.com" },
+  { bookmaker: "BetUK", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£24", ukGbp: "✅", section: "uk", url: "https://www.betuk.com" },
+  { bookmaker: "BetZone", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.betzone.co.uk" },
+  { bookmaker: "Kwiff", offer: "Bet £10, get £10 boosted bet", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£5–£7", ukGbp: "✅", section: "uk", url: "https://www.kwiff.com" },
+  { bookmaker: "NetBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.netbet.co.uk" },
+  { bookmaker: "Luckster", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.luckster.com" },
+  { bookmaker: "CopyBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.copybet.com" },
+  { bookmaker: "Hollywood Bets", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£24", ukGbp: "✅", section: "uk", url: "https://www.hollywoodbets.co.uk" },
+  { bookmaker: "Vegas Land (WH)", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.vegasland.com" },
+  { bookmaker: "MansionBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.mansionbet.com" },
+  { bookmaker: "BetBull", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.betbull.com" },
+  { bookmaker: "Megapari", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.megapari.com" },
+  { bookmaker: "VBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.vbet.co.uk" },
+  { bookmaker: "FansBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.fansbet.com" },
+  { bookmaker: "Mr Green", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.mrgreen.com" },
+  { bookmaker: "Casumo", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.casumo.com" },
+  { bookmaker: "LeoVegas Sport", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.leovegas.com" },
+  { bookmaker: "LiveScore Bet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "uk", url: "https://www.livescorebet.com" },
+  { bookmaker: "SportNation", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.sportnation.com" },
+  { bookmaker: "EnergyBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.energybet.com" },
+  { bookmaker: "RedZone", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.redzone.bet" },
+  { bookmaker: "BetMGM", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "uk", url: "https://www.betmgm.com" },
+  { bookmaker: "Fitzdares", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.fitzdares.com" },
+  { bookmaker: "Virgin Bet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "uk", url: "https://www.virginbet.com" },
+  { bookmaker: "Black Type", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.blacktype.com" },
+  { bookmaker: "Cobbler", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.cobbler.com" },
+  { bookmaker: "WeBringTheFun", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "uk", url: "https://www.webringthefun.com" },
 
   // ── Global/European Bookmakers (42–60) ──
-  { bookmaker: "Bwin", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "global" },
-  { bookmaker: "Sportingbet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global" },
-  { bookmaker: "Betsson", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "global" },
-  { bookmaker: "Betsafe", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global" },
-  { bookmaker: "Tipico", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "QuinnBet", offer: "Bet €10, get €20 in free bets", minStake: "€10", freeBetValue: "€20", tokens: "2 × €10", estProfit: "€14–€16", ukGbp: "✅", section: "global" },
-  { bookmaker: "Matchbook", offer: "£10 free bet on first deposit", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global" },
-  { bookmaker: "PokerStars Sports", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global" },
-  { bookmaker: "RaceBets", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global" },
-  { bookmaker: "Dafabet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "1xBet", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£24", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "22Bet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "SportPesa", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "Bet-at-home", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "Betwinner", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "ComeOn", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global" },
-  { bookmaker: "Mobilebet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global" },
-  { bookmaker: "Neo.bet", offer: "Bet £10, get £15 in free bets", minStake: "£10", freeBetValue: "£15", tokens: "1 × £15", estProfit: "£10–£12", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "CasinoDaddy", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global" },
-  { bookmaker: "Rabona", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global" },
+  { bookmaker: "Bwin", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "global", url: "https://www.bwin.com" },
+  { bookmaker: "Sportingbet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global", url: "https://www.sportingbet.com" },
+  { bookmaker: "Betsson", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "✅", section: "global", url: "https://www.betsson.com" },
+  { bookmaker: "Betsafe", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global", url: "https://www.betsafe.com" },
+  { bookmaker: "Tipico", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global", url: "https://www.tipico.com" },
+  { bookmaker: "QuinnBet", offer: "Bet €10, get €20 in free bets", minStake: "€10", freeBetValue: "€20", tokens: "2 × €10", estProfit: "€14–€16", ukGbp: "✅", section: "global", url: "https://www.quinnbet.com" },
+  { bookmaker: "Matchbook", offer: "£10 free bet on first deposit", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global", url: "https://www.matchbook.com" },
+  { bookmaker: "PokerStars Sports", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global", url: "https://www.pokerstars.com/sports" },
+  { bookmaker: "RaceBets", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global", url: "https://www.racebets.com" },
+  { bookmaker: "Dafabet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", estProfit: "£14–£16", ukGbp: "⚠️", section: "global", url: "https://www.dafabet.com" },
+  { bookmaker: "1xBet", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", estProfit: "£20–£24", ukGbp: "⚠️", section: "global", url: "https://www.1xbet.com" },
+  { bookmaker: "22Bet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global", url: "https://www.22bet.com" },
+  { bookmaker: "SportPesa", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global", url: "https://www.sportpesa.com" },
+  { bookmaker: "Bet-at-home", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global", url: "https://www.bet-at-home.com" },
+  { bookmaker: "Betwinner", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global", url: "https://www.betwinner.com" },
+  { bookmaker: "ComeOn", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global", url: "https://www.comeon.com" },
+  { bookmaker: "Mobilebet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "✅", section: "global", url: "https://www.mobilebet.com" },
+  { bookmaker: "Neo.bet", offer: "Bet £10, get £15 in free bets", minStake: "£10", freeBetValue: "£15", tokens: "1 × £15", estProfit: "£10–£12", ukGbp: "⚠️", section: "global", url: "https://www.neo.bet" },
+  { bookmaker: "CasinoDaddy", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global", url: "https://www.casinodaddy.com" },
+  { bookmaker: "Rabona", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", estProfit: "£7–£8", ukGbp: "⚠️", section: "global", url: "https://www.rabona.com" },
 ];
 
 export default function FreeBetsOffers() {
@@ -196,8 +197,11 @@ export default function FreeBetsOffers() {
               </div>
             ) : (
               filtered.map((o, i) => (
-                <div
+                <a
                   key={i}
+                  href={o.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-3 px-6 py-3 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-gray-900 items-center"
                 >
                   <div>
@@ -227,7 +231,7 @@ export default function FreeBetsOffers() {
                     <span className="text-xs text-gray-400">UK/GBP</span>
                     <p className="font-medium">{o.ukGbp}</p>
                   </div>
-                </div>
+                </a>
               ))
             )}
           </div>
