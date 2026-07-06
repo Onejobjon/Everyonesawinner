@@ -250,14 +250,14 @@ export default function Home() {
         </div>
       </section>
 
-      <FeaturedPicks />
-      <SportSections />
-
       <section className="py-20 md:py-28">
         <div className="mx-auto max-w-5xl px-6">
           <FreeBetsOffers />
         </div>
       </section>
+
+      <FeaturedPicks />
+      <SportSections />
 
       {/* Features */}
       <section id="features" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
