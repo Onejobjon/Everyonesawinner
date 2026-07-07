@@ -155,7 +155,8 @@ function Nav() {
           <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Features</a>
           <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Best Odds</Link>
           <Link to="/world-cup" className="text-sm font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 transition-colors">🏆 World Cup</Link>
-          <Link to="/calculator" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">Try the Calculator</Link>
+          <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Sign in</Link>
+          <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">Get Started</Link>
         </div>
         <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2 text-gray-600 dark:text-gray-400" aria-label="Toggle menu">
           <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -166,7 +167,8 @@ function Nav() {
           <a href="#features" className="text-sm font-medium text-gray-600 dark:text-gray-400">Features</a>
           <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 dark:text-gray-400">Best Odds</Link>
           <Link to="/world-cup" className="text-sm font-medium text-amber-600 dark:text-amber-400">🏆 World Cup</Link>
-          <Link to="/calculator" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white text-center">Calculator</Link>
+          <Link to="/login" className="text-sm font-medium text-gray-600 dark:text-gray-400">Sign in</Link>
+          <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white text-center">Get Started</Link>
         </div>
       )}
     </nav>
@@ -239,7 +241,7 @@ export default function Home() {
             Everyone's A Winner finds free bet offers and shows you exactly how to turn them into cash. No gambling, no risk — just consistent, tax-free earnings from promotions that bookmakers give away.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/calculator" className="rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">Try the Profit Calculator</Link>
+            <a href="#pricing" className="rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">View Plans →</a>
             <a href="#how-it-works" className="rounded-xl border border-gray-300 px-8 py-3.5 text-base font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900 transition-colors">How it works</a>
           </div>
           <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-3 border-y border-gray-200 dark:border-gray-800 py-8">
@@ -301,20 +303,33 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Start making money today. All plans include a 7-day free trial.</p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Start making money today. <strong>50% off your first month.</strong></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
-              {n:"Starter",p:"£9.99",pr:"/month",d:"Perfect for beginners.",f:["Profit calculator","10 offer alerts/month","Best odds finder","Email support","Guides & tutorials"],pop:false},
-              {n:"Pro",p:"£19.99",pr:"/month",d:"For regular users maximising earnings.",f:["Everything in Starter","Unlimited offer alerts","Advanced odds finder","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true},
-              {n:"Annual",p:"£199",pr:"/year",d:"Best value. Save £40.",f:["Everything in Pro","2 months free","Early access","Priority support"],pop:false},
+              {n:"Starter",orig:"£9.99",disc:"£4.99",pr:"/month",d:"Perfect for beginners.",f:["Full offer database","Unlimited calculator usage","Profit tracker","Email support"],pop:false,link:"https://buy.stripe.com/9B6eVd5qebFN5yL7ZadQQ03"},
+              {n:"Pro",orig:"£19.99",disc:"£9.99",pr:"/month",d:"For regular users maximising earnings.",f:["Everything in Starter","Unlimited offer alerts","Advanced oddsmatcher","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true,link:"https://buy.stripe.com/4gM8wP4ma4dlbX97ZadQQ04"},
+              {n:"Annual",orig:"",disc:"£199",pr:"/year",d:"Best value. Save £40.",f:["Everything in Pro","2 months free","Early access","Priority support"],pop:false,link:"https://buy.stripe.com/fZu9ATdWK1190ergvGdQQ05"},
             ].map((plan,i) => (
-              <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.popular ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>
-                {plan.popular && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">Most popular</span>}
+              <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.pop ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>
+                {plan.pop && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">Most popular</span>}
                 <h3 className="text-lg font-semibold">{plan.n}</h3>
-                <div className="mt-4 flex items-baseline gap-1"><span className="text-4xl font-extrabold">{plan.p}</span><span className="text-sm text-gray-500">{plan.pr}</span></div>
+                <div className="mt-4 flex items-baseline gap-1">
+                  {plan.orig ? (
+                    <>
+                      <span className="text-2xl font-extrabold text-gray-400 line-through">{plan.orig}</span>
+                      <span className="text-4xl font-extrabold text-indigo-600">{plan.disc}</span>
+                    </>
+                  ) : (
+                    <span className="text-4xl font-extrabold">{plan.disc}</span>
+                  )}
+                  <span className="text-sm text-gray-500">{plan.pr}</span>
+                  {plan.orig && (
+                    <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">50% OFF</span>
+                  )}
+                </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{plan.d}</p>
-                <ul className="mt-8 space-y-3">{plan.f.map((feat,j) => (<li key={j} className="flex items-center gap-3 text-sm"><svg className="h-5 w-5 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>{feat}</li>))}</ul>
-                <a href="https://buy.stripe.com/5kQ7sLf0OdNV7GTenydQQ00" target="_blank" rel="noopener noreferrer" className={`mt-8 w-full rounded-xl py-3 text-sm font-semibold transition-all block text-center ${plan.popular ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700" : "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300"}`}>Subscribe - {plan.p}{plan.pr}</a>
+                <ul className="mt-6 space-y-3">{plan.f.map((feat,j) => (<li key={j} className="flex items-center gap-3 text-sm"><svg className="h-5 w-5 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>{feat}</li>))}</ul>
+                <a href={plan.link} target="_blank" rel="noopener noreferrer" className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold transition-all block text-center ${plan.pop ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700" : "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300"}`}>Subscribe - {plan.disc}{plan.pr}</a>
               </div>
             ))}
           </div>
@@ -342,7 +357,7 @@ export default function Home() {
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Start turning free bets into profit today</h2>
           <p className="mt-4 text-lg text-indigo-100">Join thousands of users who make consistent, tax-free income with Everyone's A Winner.</p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/calculator" className="rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-indigo-700 shadow-lg hover:bg-indigo-50 transition-all">Try the Calculator — Free</Link>
+            <a href="#pricing" className="rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-indigo-700 shadow-lg hover:bg-indigo-50 transition-all">Subscribe Now →</a>
             <a href="#how-it-works" className="rounded-xl border border-white/30 px-8 py-3.5 text-base font-semibold text-white hover:bg-white/10 transition-colors">Learn more</a>
           </div>
         </div>
