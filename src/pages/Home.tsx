@@ -303,10 +303,10 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Start making money today. <strong>50% off your first month.</strong></p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Start making money today. <strong>50% off Pro for your first month.</strong></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
-              {n:"Starter",orig:"£9.99",disc:"£4.99",pr:"/month",d:"Perfect for beginners.",f:["Full offer database","Unlimited calculator usage","Profit tracker","Email support"],pop:false,link:"https://buy.stripe.com/9B6eVd5qebFN5yL7ZadQQ03"},
+              {n:"Starter",p:"£9.99",pr:"/month",d:"Perfect for beginners.",f:["Full offer database","Unlimited calculator usage","Profit tracker","Email support"],pop:false,link:"https://buy.stripe.com/aFaaEX3i6119e5h93edQQ06"},
               {n:"Pro",orig:"£19.99",disc:"£9.99",pr:"/month",d:"For regular users maximising earnings.",f:["Everything in Starter","Unlimited offer alerts","Advanced oddsmatcher","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true,link:"https://buy.stripe.com/4gM8wP4ma4dlbX97ZadQQ04"},
               {n:"Annual",orig:"",disc:"£199",pr:"/year",d:"Best value. Save £40.",f:["Everything in Pro","2 months free","Early access","Priority support"],pop:false,link:"https://buy.stripe.com/fZu9ATdWK1190ergvGdQQ05"},
             ].map((plan,i) => (
@@ -319,17 +319,19 @@ export default function Home() {
                       <span className="text-2xl font-extrabold text-gray-400 line-through">{plan.orig}</span>
                       <span className="text-4xl font-extrabold text-indigo-600">{plan.disc}</span>
                     </>
+                  ) : plan.p ? (
+                    <span className="text-4xl font-extrabold">{plan.p}</span>
                   ) : (
                     <span className="text-4xl font-extrabold">{plan.disc}</span>
                   )}
                   <span className="text-sm text-gray-500">{plan.pr}</span>
-                  {plan.orig && (
+                  {plan.orig && plan.n === "Pro" && (
                     <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">50% OFF</span>
                   )}
                 </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{plan.d}</p>
                 <ul className="mt-6 space-y-3">{plan.f.map((feat,j) => (<li key={j} className="flex items-center gap-3 text-sm"><svg className="h-5 w-5 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>{feat}</li>))}</ul>
-                <a href={plan.link} target="_blank" rel="noopener noreferrer" className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold transition-all block text-center ${plan.pop ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700" : "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300"}`}>Subscribe - {plan.disc}{plan.pr}</a>
+                <a href={plan.link} target="_blank" rel="noopener noreferrer" className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold transition-all block text-center ${plan.pop ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700" : "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300"}`}>Subscribe - {plan.disc || plan.p}{plan.pr}</a>
               </div>
             ))}
           </div>

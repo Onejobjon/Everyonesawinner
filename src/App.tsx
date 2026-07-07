@@ -8,6 +8,8 @@ import Signup from "./pages/Signup";
 import Login from "./pages/Login";
 import Logout from "./pages/Logout";
 import Dashboard from "./pages/Dashboard";
+import Subscribe from "./pages/Subscribe";
+import SubscribeSuccess from "./pages/SubscribeSuccess";
 
 export default function App() {
   return (
@@ -21,6 +23,8 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/logout" element={<Logout />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/subscribe" element={<Subscribe />} />
+        <Route path="/subscribe/success" element={<SubscribeSuccess />} />
       </Routes>
     </AuthProvider>
   );

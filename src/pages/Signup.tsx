@@ -22,8 +22,8 @@ export default function Signup() {
       setError("An account with this email already exists.");
       return;
     }
-    // After signup, redirect to home #pricing (to subscribe)
-    navigate("/#pricing");
+    // After signup, redirect to /subscribe
+    navigate("/subscribe");
   };
 
   return (
