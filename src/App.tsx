@@ -10,6 +10,7 @@ import Logout from "./pages/Logout";
 import Dashboard from "./pages/Dashboard";
 import Subscribe from "./pages/Subscribe";
 import SubscribeSuccess from "./pages/SubscribeSuccess";
+import Preview from "./pages/Preview";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/subscribe/success" element={<SubscribeSuccess />} />
+        <Route path="/preview" element={<Preview />} />
       </Routes>
     </AuthProvider>
   );

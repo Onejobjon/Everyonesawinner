@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 
 interface PaywallProps {
@@ -10,6 +10,14 @@ interface PaywallProps {
 export default function Paywall({ children, title }: PaywallProps) {
   const { user, checkAuth } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Preview bypass: ?preview=1 skips all auth/subscription checks
+  const isPreview = searchParams.get("preview") === "1";
+
+  if (isPreview) {
+    return <>{children}</>;
+  }
 
   // Not logged in → redirect to /login
   useEffect(() => {
