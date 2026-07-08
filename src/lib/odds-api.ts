@@ -5,6 +5,8 @@
  * API Key stored here for MVP; will be secured behind a backend proxy later.
  */
 
+import { calcDutchFreeBet } from "./odds";
+
 const API_KEY = "7c3d32f19360a9489dd8b5d6a6712d4f";
 const BASE = "https://api.the-odds-api.com/v4";
 const BOOKMAKERS = "bet365,skybet,paddypower,williamhill,betfred";
@@ -133,44 +135,96 @@ async function fetchOdds(sportKey = "upcoming"): Promise<ApiMatch[]> {
 
 // ── Transform ──────────────────────────────────────────────────────────────
 
-function pickBestBookmaker(
-  outcomeName: string,
-  bookmakers: ApiBookmaker[]
-): { bookmaker: string; odds: number } | null {
-  let best: { bookmaker: string; odds: number } | null = null;
-
-  for (const bm of bookmakers) {
-    const market = bm.markets.find((m) => m.key === "h2h");
-    if (!market) continue;
-    const outcome = market.outcomes.find(
-      (o) => o.name.toLowerCase() === outcomeName.toLowerCase()
-    );
-    if (!outcome) continue;
-    if (!best || outcome.price > best.odds) {
-      best = { bookmaker: bm.title, odds: outcome.price };
-    }
-  }
-
-  return best;
-}
-
 /**
- * Find the best (highest) back odds for each distinct outcome across all
- * bookmakers. Returns an array of { outcomeName, back, bookmakerTitle }.
+ * For a given fixture, find the optimal assignment of bookmakers to outcomes
+ * where each outcome gets a different bookmaker. Uses brute-force over all
+ * valid permutations (max 5 bookmakers × 3 outcomes = 60 permutations).
+ *
+ * Scores each combination by running through calcDutchFreeBet and picks the
+ * one with the highest net profit.
  */
-function bestOddsPerOutcome(
+function bestUniqueBookmakerOdds(
   outcomes: ApiOutcome[],
   bookmakers: ApiBookmaker[]
 ): { outcome: string; backOdds: number; bookmaker: string }[] {
   // Collect distinct outcome names
   const outcomeNames = [...new Set(outcomes.map((o) => o.name))];
-  return outcomeNames
-    .map((name) => {
-      const best = pickBestBookmaker(name, bookmakers);
-      if (!best) return null;
-      return { outcome: name, backOdds: best.odds, bookmaker: best.bookmaker };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  // Build a matrix: for each outcome, list all (bookmaker, odds) pairs
+  const matrix: { outcome: string; options: { bookmaker: string; odds: number }[] }[] =
+    outcomeNames.map((name) => {
+      const options: { bookmaker: string; odds: number }[] = [];
+      for (const bm of bookmakers) {
+        const market = bm.markets.find((m) => m.key === "h2h");
+        if (!market) continue;
+        const outcome = market.outcomes.find(
+          (o) => o.name.toLowerCase() === name.toLowerCase()
+        );
+        if (!outcome) continue;
+        options.push({ bookmaker: bm.title, odds: outcome.price });
+      }
+      return { outcome: name, options };
+    });
+
+  // Filter out outcomes that have no bookmaker coverage
+  const validMatrix = matrix.filter((m) => m.options.length > 0);
+  if (validMatrix.length === 0) return [];
+
+  // If fewer bookmakers than outcomes, we can't assign unique bookmakers
+  // Use the original pickBestBookmaker approach as fallback
+  if (validMatrix.length > bookmakers.length) {
+    // Fallback: just pick best per outcome (same as before)
+    return validMatrix.map((m) => {
+      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
+      return { outcome: m.outcome, backOdds: best.odds, bookmaker: best.bookmaker };
+    });
+  }
+
+  // Generate all valid permutations of bookmaker assignments
+  // Each outcome gets one bookmaker, no bookmaker reused
+  let bestAssignment: { outcome: string; backOdds: number; bookmaker: string }[] | null = null;
+  let bestProfit = -Infinity;
+
+  function generatePermutations(
+    idx: number,
+    usedBookmakers: Set<string>,
+    current: { outcome: string; backOdds: number; bookmaker: string }[]
+  ) {
+    if (idx === validMatrix.length) {
+      // Score this assignment
+      const oddsArr = current.map((a) => a.backOdds);
+      if (oddsArr.length < 2) return; // Need at least 2 outcomes for dutching
+
+      const result = calcDutchFreeBet(oddsArr);
+      if (result.netProfit > bestProfit) {
+        bestProfit = result.netProfit;
+        bestAssignment = current.map((a) => ({ ...a }));
+      }
+      return;
+    }
+
+    const entry = validMatrix[idx];
+    for (const opt of entry.options) {
+      if (usedBookmakers.has(opt.bookmaker)) continue;
+      usedBookmakers.add(opt.bookmaker);
+      current.push({ outcome: entry.outcome, backOdds: opt.odds, bookmaker: opt.bookmaker });
+      generatePermutations(idx + 1, usedBookmakers, current);
+      current.pop();
+      usedBookmakers.delete(opt.bookmaker);
+    }
+  }
+
+  generatePermutations(0, new Set(), []);
+
+  // If no valid assignment found (shouldn't happen), fallback
+  if (!bestAssignment) {
+    return validMatrix.map((m) => {
+      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
+      return { outcome: m.outcome, backOdds: best.odds, bookmaker: best.bookmaker };
+    });
+  }
+
+  return bestAssignment;
 }
 
 /**
@@ -262,7 +316,7 @@ function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
 
     if (allOutcomes.length === 0) continue;
 
-    const perOutcome = bestOddsPerOutcome(allOutcomes, apiMatch.bookmakers);
+    const perOutcome = bestUniqueBookmakerOdds(allOutcomes, apiMatch.bookmakers);
     if (perOutcome.length === 0) continue;
 
     const sorted = perOutcome.sort((a, b) => {
