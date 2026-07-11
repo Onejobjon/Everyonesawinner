@@ -69,6 +69,8 @@ export function formatOdds(odds: number): string {
 /**
  * Dutching calculator — fixes £10 on the favourite (lowest odds),
  * then calculates variable stakes on other outcomes to equalise the return.
+ * All stakes are capped at £20 max — if a calculated stake exceeds £20,
+ * all stakes are scaled down proportionally so the max is exactly £20.
  *
  * @param oddsArr - Array of decimal odds for each outcome
  * @param favStake - Fixed stake on the favourite (default £10)
@@ -96,12 +98,22 @@ export function calcDutch(
   const guaranteedReturn = favStake * favOdds;
 
   // Calculate stakes for each outcome
-  const stakes = oddsArr.map((odds, i) =>
+  let stakes = oddsArr.map((odds, i) =>
     i === favIndex ? favStake : guaranteedReturn / odds
   );
 
+  // Cap max stake at £20 using proportional scaling
+  const maxStake = Math.max(...stakes);
+  const MAX_ALLOWED = 20;
+  if (maxStake > MAX_ALLOWED) {
+    const scale = MAX_ALLOWED / maxStake;
+    stakes = stakes.map((s) => s * scale);
+  }
+
   const totalStake = stakes.reduce((sum, s) => sum + s, 0);
-  const netProfit = guaranteedReturn - totalStake;
+  // Recalculate guaranteed return: min of (stake × odds) across all outcomes
+  const guaranteedReturnCapped = Math.min(...stakes.map((s, i) => s * oddsArr[i]));
+  const netProfit = guaranteedReturnCapped - totalStake;
 
   // Overround still uses the standard formula
   const S = oddsArr.reduce((sum, o) => sum + 1 / o, 0);
@@ -111,7 +123,7 @@ export function calcDutch(
     stakes,
     favIndex,
     totalStake,
-    guaranteedReturn,
+    guaranteedReturn: guaranteedReturnCapped,
     netProfit,
     overroundPct,
     isArbitrage: netProfit > 0,
@@ -123,6 +135,9 @@ export function calcDutch(
  * profitable outcome, then calculates cash stakes on all other outcomes
  * to equalise the return. SNR means the stake is NOT returned, so the
  * free bet return = freeBetAmount × (odds - 1).
+ *
+ * All cash stakes are capped at £20 max — if a calculated stake exceeds £20,
+ * all cash stakes are scaled down proportionally so the max is exactly £20.
  *
  * Tries all outcomes and picks the one that maximises net profit.
  *
@@ -142,11 +157,13 @@ export function calcDutchFreeBet(
   overroundPct: number;         // (S - 1) × 100 — bookmaker margin
   isArbitrage: boolean;         // True when guaranteed profit exists
 } {
+  const MAX_ALLOWED = 20;
   let bestResult: {
     stakes: number[];
     freeBetIndex: number;
     freeBetReturn: number;
     totalCashStake: number;
+    guaranteedReturn: number;
     netProfit: number;
   } | null = null;
 
@@ -157,15 +174,25 @@ export function calcDutchFreeBet(
     const freeBetReturn = freeBetAmount * (fbOdds - 1);
 
     // Calculate cash stakes for all other outcomes
-    const stakes = oddsArr.map((odds, i) =>
+    let stakes = oddsArr.map((odds, i) =>
       i === fbIdx ? 0 : freeBetReturn / odds
     );
 
+    // Cap max cash stake at £20 using proportional scaling
+    const maxStake = Math.max(...stakes);
+    if (maxStake > MAX_ALLOWED) {
+      const scale = MAX_ALLOWED / maxStake;
+      stakes = stakes.map((s) => s * scale);
+    }
+
     const totalCashStake = stakes.reduce((sum, s) => sum + s, 0);
-    const netProfit = freeBetReturn - totalCashStake;
+    // Guaranteed return = min of freeBetReturn and (cashStake × odds) for cash outcomes
+    const cashReturns = stakes.map((s, i) => (i === fbIdx ? Infinity : s * oddsArr[i]));
+    const guaranteedReturn = Math.min(freeBetReturn, ...cashReturns);
+    const netProfit = guaranteedReturn - totalCashStake;
 
     if (!bestResult || netProfit > bestResult.netProfit) {
-      bestResult = { stakes, freeBetIndex: fbIdx, freeBetReturn, totalCashStake, netProfit };
+      bestResult = { stakes, freeBetIndex: fbIdx, freeBetReturn, totalCashStake, guaranteedReturn, netProfit };
     }
   }
 
@@ -180,7 +207,7 @@ export function calcDutchFreeBet(
     freeBetIndex: bestResult.freeBetIndex,
     freeBetReturn: bestResult.freeBetReturn,
     totalCashStake: bestResult.totalCashStake,
-    guaranteedReturn: bestResult.freeBetReturn,
+    guaranteedReturn: bestResult.guaranteedReturn,
     netProfit: bestResult.netProfit,
     overroundPct,
     isArbitrage: bestResult.netProfit > 0,

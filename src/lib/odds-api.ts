@@ -170,14 +170,9 @@ function bestUniqueBookmakerOdds(
   const validMatrix = matrix.filter((m) => m.options.length > 0);
   if (validMatrix.length === 0) return [];
 
-  // If fewer bookmakers than outcomes, we can't assign unique bookmakers
-  // Use the original pickBestBookmaker approach as fallback
+  // If fewer bookmakers than outcomes, we can't assign unique bookmakers — skip
   if (validMatrix.length > bookmakers.length) {
-    // Fallback: just pick best per outcome (same as before)
-    return validMatrix.map((m) => {
-      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
-      return { outcome: m.outcome, backOdds: best.odds, bookmaker: best.bookmaker };
-    });
+    return [];
   }
 
   // Generate all valid permutations of bookmaker assignments
@@ -216,12 +211,9 @@ function bestUniqueBookmakerOdds(
 
   generatePermutations(0, new Set(), []);
 
-  // If no valid assignment found (shouldn't happen), fallback
+  // No valid unique assignment found — return empty; caller will skip this match
   if (!bestAssignment) {
-    return validMatrix.map((m) => {
-      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
-      return { outcome: m.outcome, backOdds: best.odds, bookmaker: best.bookmaker };
-    });
+    return [];
   }
 
   return bestAssignment;
