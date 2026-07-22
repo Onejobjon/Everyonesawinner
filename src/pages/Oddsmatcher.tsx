@@ -161,6 +161,11 @@ export default function Oddsmatcher() {
                         <span className="text-gray-400 dark:text-gray-500"> (overround: {dutch.overroundPct.toFixed(1)}%)</span>
                       </span>
                     </div>
+                    {m.warning && (
+                      <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                        ⚠️ {m.warning}
+                      </div>
+                    )}
                   </div>
                 );
               })}

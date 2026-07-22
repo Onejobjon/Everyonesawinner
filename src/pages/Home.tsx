@@ -74,6 +74,11 @@ function FeaturedPicks() {
                   )}
                   <span className="text-xs text-gray-400">({dutch.overroundPct.toFixed(1)}% overround)</span>
                 </div>
+                {m.warning && (
+                  <div className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                    ⚠️ {m.warning}
+                  </div>
+                )}
               </Link>
             );
           })}

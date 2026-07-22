@@ -9,7 +9,6 @@ import { calcDutchFreeBet } from "./odds";
 
 const API_KEY = "7c3d32f19360a9489dd8b5d6a6712d4f";
 const BASE = "https://api.the-odds-api.com/v4";
-const BOOKMAKERS = "bet365,skybet,paddypower,williamhill,betfred";
 const REGIONS = "uk";
 const MARKETS = "h2h";
 
@@ -71,6 +70,8 @@ export interface Match {
   time: string;
   /** All available outcomes (2 for most sports, 3 for soccer) */
   outcomes: MatchOutcome[];
+  /** Warning message if bookmaker availability is limited */
+  warning?: string;
 }
 
 // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -119,12 +120,15 @@ async function fetchOdds(sportKey = "upcoming"): Promise<ApiMatch[]> {
 
   // 3. Fetch from API
   const url = sportKey === "upcoming"
-    ? `${BASE}/sports/upcoming/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&bookmakers=${BOOKMAKERS}&oddsFormat=decimal`
-    : `${BASE}/sports/${sportKey}/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&bookmakers=${BOOKMAKERS}&oddsFormat=decimal`;
+    ? `${BASE}/sports/upcoming/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal`
+    : `${BASE}/sports/${sportKey}/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal`;
 
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Odds API error (${sportKey}): ${res.status} ${res.statusText}`);
+    const msg = res.status === 429
+      ? "Too many requests — please wait and try again shortly"
+      : `Unable to fetch live odds (${res.status}). Please try again.`;
+    throw new Error(msg);
   }
 
   const data: ApiMatch[] = await res.json();
@@ -146,7 +150,7 @@ async function fetchOdds(sportKey = "upcoming"): Promise<ApiMatch[]> {
 function bestUniqueBookmakerOdds(
   outcomes: ApiOutcome[],
   bookmakers: ApiBookmaker[]
-): { outcome: string; backOdds: number; bookmaker: string }[] {
+): { outcome: string; backOdds: number; bookmaker: string; warning?: string }[] {
   // Collect distinct outcome names
   const outcomeNames = [...new Set(outcomes.map((o) => o.name))];
 
@@ -170,14 +174,25 @@ function bestUniqueBookmakerOdds(
   const validMatrix = matrix.filter((m) => m.options.length > 0);
   if (validMatrix.length === 0) return [];
 
-  // If fewer bookmakers than outcomes, we can't assign unique bookmakers — skip
-  if (validMatrix.length > bookmakers.length) {
-    return [];
+  // Count unique bookmakers available
+  const uniqueBookmakers = new Set<string>();
+  for (const m of validMatrix) {
+    for (const opt of m.options) {
+      uniqueBookmakers.add(opt.bookmaker);
+    }
+  }
+
+  // If not enough bookmakers for unique assignment, use best-per-outcome with warning
+  if (uniqueBookmakers.size < validMatrix.length) {
+    return validMatrix.map((m) => {
+      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
+      return { outcome: m.outcome, backOdds: best.odds, bookmaker: best.bookmaker, warning: "Bookmaker availability limited" };
+    });
   }
 
   // Generate all valid permutations of bookmaker assignments
   // Each outcome gets one bookmaker, no bookmaker reused
-  let bestAssignment: { outcome: string; backOdds: number; bookmaker: string }[] | null = null;
+  let bestAssignment: { outcome: string; backOdds: number; bookmaker: string; warning?: string }[] | null = null;
   let bestProfit = -Infinity;
 
   function generatePermutations(
@@ -186,10 +201,8 @@ function bestUniqueBookmakerOdds(
     current: { outcome: string; backOdds: number; bookmaker: string }[]
   ) {
     if (idx === validMatrix.length) {
-      // Score this assignment
       const oddsArr = current.map((a) => a.backOdds);
-      if (oddsArr.length < 2) return; // Need at least 2 outcomes for dutching
-
+      if (oddsArr.length < 2) return;
       const result = calcDutchFreeBet(oddsArr);
       if (result.netProfit > bestProfit) {
         bestProfit = result.netProfit;
@@ -211,9 +224,12 @@ function bestUniqueBookmakerOdds(
 
   generatePermutations(0, new Set(), []);
 
-  // No valid unique assignment found — return empty; caller will skip this match
+  // No valid unique assignment found — fallback to best-per-outcome with warning
   if (!bestAssignment) {
-    return [];
+    return validMatrix.map((m) => {
+      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
+      return { outcome: m.outcome, backOdds: best.odds, bookmaker: best.bookmaker, warning: "Bookmaker availability limited" };
+    });
   }
 
   return bestAssignment;
@@ -311,6 +327,9 @@ function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
     const perOutcome = bestUniqueBookmakerOdds(allOutcomes, apiMatch.bookmakers);
     if (perOutcome.length === 0) continue;
 
+    // Check if any outcome has a warning (duplicate bookmaker fallback)
+    const hasWarning = perOutcome.some((o) => o.warning);
+
     const sorted = perOutcome.sort((a, b) => {
       const aIsHome = a.outcome.toLowerCase() === apiMatch.home_team.toLowerCase();
       const bIsHome = b.outcome.toLowerCase() === apiMatch.home_team.toLowerCase();
@@ -336,6 +355,7 @@ function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
         odds: o.backOdds,
         return20: Math.round(20 * o.backOdds * 100) / 100,
       })),
+      ...(hasWarning ? { warning: "Bookmaker availability limited — some outcomes may share the same bookmaker" } : {}),
     });
   }
 
