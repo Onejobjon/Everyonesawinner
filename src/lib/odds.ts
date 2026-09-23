@@ -213,3 +213,78 @@ export function calcDutchFreeBet(
     isArbitrage: bestResult.netProfit > 0,
   };
 }
+
+/**
+ * Betfair's standard commission on exchange winnings.
+ */
+export const COMMISSION = 0.05;
+
+export interface LayCalc {
+  /** Amount to stake on the exchange (the "lay" bet) */
+  layStake: number;
+  /** How much you risk on the lay bet = layStake × (layOdds − 1) */
+  liability: number;
+  /**
+   * Qualifying profit/loss on a fixed back stake.
+   * Negative = small qualifying loss (normal for matched betting),
+   * positive = a value opportunity.
+   */
+  profitLoss: number;
+}
+
+/**
+ * Matched-betting lay calculator.
+ *
+ * You back an outcome at the bookmaker (backOdds, fixed back stake) and lay the
+ * SAME outcome on the exchange (layOdds). The lay stake below equalises the
+ * result so the outcome barely matters — this is the core of matched betting.
+ *
+ *   layStake = (backStake × backOdds) / (layOdds − COMMISSION)
+ *   liability = layStake × (layOdds − 1)
+ *   profit/loss = backStake × (backOdds − 1) − layStake × (layOdds − 1)
+ *
+ * Returns null when there's no usable lay price (never fabricate a number).
+ */
+export function calcLay(
+  backOdds: number,
+  layOdds: number | null,
+  backStake = 20,
+  commission = COMMISSION
+): LayCalc | null {
+  if (!layOdds || layOdds <= commission || backOdds <= 0) return null;
+  const layStake = (backStake * backOdds) / (layOdds - commission);
+  const liability = layStake * (layOdds - 1);
+  const profitLoss = backStake * (backOdds - 1) - liability;
+  return { layStake, liability, profitLoss };
+}
+
+export interface LayMetrics {
+  /** Highest profit/loss across all outcomes in the match (best value lay) */
+  bestProfit: number;
+  /** Smallest |profit/loss| — the outcome closest to break-even */
+  closestLoss: number;
+  /** Whether any outcome had a usable lay price */
+  hasLay: boolean;
+}
+
+/**
+ * Aggregate matched-betting metrics for a whole match, used for sorting and
+ * for highlighting matches that contain a value opportunity.
+ */
+export function matchLayMetrics(
+  outcomes: { odds: number; layOdds: number | null }[],
+  backStake = 20
+): LayMetrics {
+  let bestProfit = -Infinity;
+  let closestLoss = Infinity;
+  let hasLay = false;
+  for (const o of outcomes) {
+    const c = calcLay(o.odds, o.layOdds, backStake);
+    if (!c) continue;
+    hasLay = true;
+    if (c.profitLoss > bestProfit) bestProfit = c.profitLoss;
+    const abs = Math.abs(c.profitLoss);
+    if (abs < closestLoss) closestLoss = abs;
+  }
+  return { bestProfit, closestLoss, hasLay };
+}

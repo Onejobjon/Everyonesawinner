@@ -10,7 +10,12 @@ import { calcDutchFreeBet } from "./odds";
 const API_KEY = "7c3d32f19360a9489dd8b5d6a6712d4f";
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
-const MARKETS = "h2h";
+// h2h = bookmaker back odds, h2h_lay = exchange lay odds. Requested together in
+// one call so we don't spend extra quota on the free tier.
+const MARKETS = "h2h,h2h_lay";
+
+// Exchange sources for lay odds, in order of preference.
+const LAY_SOURCES = ["betfair_ex_uk", "smarkets"];
 
 // Free tier: 500 requests/month. Cache aggressively to stay well under.
 // Cache in memory (per session) + localStorage (across page loads).
@@ -59,6 +64,10 @@ export interface MatchOutcome {
   odds: number;
   /** What £20 returns (£20 × odds) */
   return20: number;
+  /** Exchange lay odds (decimal) — null when no exchange lay price exists */
+  layOdds: number | null;
+  /** Source of the lay odds ("Betfair" or "Smarkets") — null when no lay data */
+  laySource: string | null;
 }
 
 export interface Match {
@@ -67,7 +76,10 @@ export interface Match {
   away: string;
   league: string;
   leagueKey: string;
+  /** Kick-off time, HH:MM (local) */
   time: string;
+  /** Full ISO commence time for accurate sorting */
+  commenceTime: string;
   /** All available outcomes (2 for most sports, 3 for soccer) */
   outcomes: MatchOutcome[];
   /** Warning message if bookmaker availability is limited */
@@ -77,7 +89,9 @@ export interface Match {
 // ── Fetch ──────────────────────────────────────────────────────────────────
 
 function lsKey(sport: string): string {
-  return `eaw_odds_cache_${sport}`;
+  // v2 prefix — data shape changed (lay odds added), so stale v1 caches
+  // must not be read as if they had the new shape.
+  return `eaw_odds_cache_v2_${sport}`;
 }
 
 function loadFromLS(sport: string): ApiMatch[] | null {
@@ -279,19 +293,29 @@ function getLeagueKey(sportKey: string): string {
 }
 
 /**
- * Calculate profit percentage from back and lay odds.
- * Formula: (backOdds / layOdds - 1) * 100
- * Only returns a non-null value if there's a real profit (>= 0.1%).
+ * Find real exchange lay odds for an outcome. Prefers Betfair, falls back to
+ * Smarkets. Returns null (never a fabricated number) when no lay price exists.
  */
-function calcProfitPct(backOdds: number, layOdds: number): number | null {
-  const pct = (backOdds / layOdds - 1) * 100;
-  return pct >= 0.1 ? Math.round(pct * 10) / 10 : null;
+function findLayOdds(
+  outcomeName: string,
+  bookmakers: ApiBookmaker[]
+): { layOdds: number; laySource: string } | null {
+  for (const key of LAY_SOURCES) {
+    const bm = bookmakers.find((b) => b.key === key);
+    if (!bm) continue;
+    const market = bm.markets.find((m) => m.key === "h2h_lay");
+    if (!market) continue;
+    const outcome = market.outcomes.find(
+      (o) => o.name.toLowerCase() === outcomeName.toLowerCase()
+    );
+    if (outcome && outcome.price > 0) {
+      return { layOdds: outcome.price, laySource: bm.title };
+    }
+  }
+  return null;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
-
-export const EXCHANGE_MULTIPLIER = 1.02;
-export const EXCHANGE_NAME = "Betfair"; // placeholder name for the exchange side
 
 /**
  * Get only World Cup matches from the dedicated sport endpoint.
@@ -349,12 +373,18 @@ function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       league: apiMatch.sport_title,
       leagueKey: getLeagueKey(apiMatch.sport_key),
       time: formatTime(apiMatch.commence_time),
-      outcomes: sorted.map((o) => ({
-        name: o.outcome,
-        bookmaker: o.bookmaker,
-        odds: o.backOdds,
-        return20: Math.round(20 * o.backOdds * 100) / 100,
-      })),
+      commenceTime: apiMatch.commence_time,
+      outcomes: sorted.map((o) => {
+        const lay = findLayOdds(o.outcome, apiMatch.bookmakers);
+        return {
+          name: o.outcome,
+          bookmaker: o.bookmaker,
+          odds: o.backOdds,
+          return20: Math.round(20 * o.backOdds * 100) / 100,
+          layOdds: lay ? lay.layOdds : null,
+          laySource: lay ? lay.laySource : null,
+        };
+      }),
       ...(hasWarning ? { warning: "Bookmaker availability limited — some outcomes may share the same bookmaker" } : {}),
     });
   }
@@ -393,7 +423,7 @@ export function clearCache(sportKey?: string): void {
   } else {
     // Clear all caches
     Object.keys(caches).forEach((k) => delete caches[k]);
-    // Clear localStorage entries
+    // Clear localStorage entries (both v1 and v2 prefixes)
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith("eaw_odds_cache_")) {
