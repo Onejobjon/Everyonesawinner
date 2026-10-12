@@ -44,10 +44,10 @@ export default function Dashboard() {
               <Link to="/calculator" className="mt-4 inline-block text-sm font-semibold text-indigo-600 hover:text-indigo-700">Open →</Link>
             </div>
             <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-950">
-              <span className="text-2xl">🏆</span>
-              <h3 className="mt-4 text-lg font-semibold">World Cup 2026</h3>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">World Cup match odds with profit calculations.</p>
-              <Link to="/world-cup" className="mt-4 inline-block text-sm font-semibold text-indigo-600 hover:text-indigo-700">Open →</Link>
+              <span className="text-2xl">⚡</span>
+              <h3 className="mt-4 text-lg font-semibold">Lay Bet Finder</h3>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Close, profitable lays — bookmaker odds vs Betfair exchange.</p>
+              <Link to="/lay-bets" className="mt-4 inline-block text-sm font-semibold text-indigo-600 hover:text-indigo-700">Open →</Link>
             </div>
           </div>
 
@@ -56,7 +56,7 @@ export default function Dashboard() {
             <div className="mt-4 space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">Email</span><span>{user?.email}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Name</span><span>{user?.name}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Plan</span><span className="font-semibold text-green-600">Active</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Plan</span><span className="font-semibold text-green-600">{user?.plan === "pro" ? "Pro" : user?.plan === "annual" ? "Pro Annual" : "Starter"}</span></div>
             </div>
           </div>
 

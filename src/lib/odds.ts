@@ -288,3 +288,30 @@ export function matchLayMetrics(
   }
   return { bestProfit, closestLoss, hasLay };
 }
+
+/**
+ * Lay Bet Finder eligibility (owner-defined):
+ * a row qualifies only when BOTH hold —
+ *   (a) back odds < 2.8
+ *   (b) (lay odds − back odds) < 0.1
+ * Values are rounded to 2dp before the gap comparison to avoid float noise
+ * (e.g. 2.82 − 2.76 is not exactly 0.06 in IEEE-754).
+ */
+export const MAX_BACK_ODDS = 2.8;
+export const MAX_LAY_GAP = 0.1;
+
+/** Round to 2 decimal places (for display and float-safe comparisons). */
+export function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Lay gap in decimal odds, rounded to 2dp. Negative = back beats lay. */
+export function layGap(backOdds: number, layOdds: number): number {
+  return round2(layOdds - backOdds);
+}
+
+/** Whether a back/lay pair is close enough to show in the Lay Bet Finder. */
+export function qualifiesForLay(backOdds: number, layOdds: number | null): boolean {
+  if (!layOdds || layOdds <= COMMISSION) return false;
+  return backOdds < MAX_BACK_ODDS && layGap(backOdds, layOdds) < MAX_LAY_GAP;
+}

@@ -32,12 +32,12 @@ export default function Preview() {
           </Link>
 
           <Link
-            to="/world-cup?preview=1"
+            to="/lay-bets?preview=1"
             className="rounded-xl border-2 border-gray-200 bg-white p-6 shadow-sm hover:border-indigo-400 hover:shadow-md transition-all dark:border-gray-800 dark:bg-gray-950"
           >
-            <span className="text-3xl">🏆</span>
-            <h3 className="mt-3 text-lg font-bold">World Cup 2026</h3>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">World Cup match odds with profit calculations.</p>
+            <span className="text-3xl">⚡</span>
+            <h3 className="mt-3 text-lg font-bold">Lay Bet Finder</h3>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Close, profitable lays — bookmaker odds vs Betfair exchange (Pro).</p>
           </Link>
 
           <Link

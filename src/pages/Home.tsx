@@ -49,7 +49,6 @@ function FeaturedPicks() {
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  {m.leagueKey === "World Cup" && <span className="text-base">🏆</span>}
                   <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">{m.league}</span>
                 </div>
                 <p className="mt-3 font-bold">{m.home} vs {m.away}</p>
@@ -96,7 +95,7 @@ function FeaturedPicks() {
 
 function SportSections() {
   const sports = [
-    { key: "World Cup", icon: "🏆", desc: "Live odds for every World Cup 2026 match", link: "/world-cup", color: "green" },
+    { key: "Lay Bets", icon: "⚡", desc: "Close, profitable lays — bookmaker odds vs Betfair exchange", link: "/lay-bets", color: "purple" },
     { key: "Premier League", icon: "⚽", desc: "Best prices across all EPL matches", link: "/oddsmatcher", color: "indigo" },
     { key: "La Liga", icon: "🇪🇸", desc: "Spanish La Liga odds compared", link: "/oddsmatcher", color: "red" },
     { key: "Bundesliga", icon: "🇩🇪", desc: "German Bundesliga best odds", link: "/oddsmatcher", color: "amber" },
@@ -159,7 +158,7 @@ function Nav() {
         <div className="hidden md:flex items-center gap-8">
           <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Features</a>
           <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Best Odds</Link>
-          <Link to="/world-cup" className="text-sm font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 transition-colors">🏆 World Cup</Link>
+          <Link to="/lay-bets" className="text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 transition-colors">⚡ Lay Bets</Link>
           <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Sign in</Link>
           <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">Get Started</Link>
         </div>
@@ -171,7 +170,7 @@ function Nav() {
         <div className="md:hidden border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4 flex flex-col gap-4">
           <a href="#features" className="text-sm font-medium text-gray-600 dark:text-gray-400">Features</a>
           <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 dark:text-gray-400">Best Odds</Link>
-          <Link to="/world-cup" className="text-sm font-medium text-amber-600 dark:text-amber-400">🏆 World Cup</Link>
+          <Link to="/lay-bets" className="text-sm font-medium text-purple-600 dark:text-purple-400">⚡ Lay Bets</Link>
           <Link to="/login" className="text-sm font-medium text-gray-600 dark:text-gray-400">Sign in</Link>
           <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white text-center">Get Started</Link>
         </div>
@@ -205,7 +204,7 @@ function Footer() {
             <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <li><a href="#how-it-works" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">How it works</a></li>
               <li><a href="#faq" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">FAQ</a></li>
-              <li><Link to="/world-cup" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">World Cup</Link></li>
+              <li><Link to="/lay-bets" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Lay Bet Finder</Link></li>
               <li><Link to="/oddsmatcher" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Best Odds Finder</Link></li>
             </ul>
           </div>
@@ -312,7 +311,7 @@ export default function Home() {
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
               {n:"Starter",p:"£9.99",pr:"/month",d:"Perfect for beginners.",f:["Full offer database","Unlimited calculator usage","Profit tracker","Email support"],pop:false,link:"https://buy.stripe.com/aFaaEX3i6119e5h93edQQ06"},
-              {n:"Pro",orig:"£19.99",disc:"£9.99",pr:"/month",d:"For regular users maximising earnings.",f:["Everything in Starter","Unlimited offer alerts","Advanced oddsmatcher","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true,link:"https://buy.stripe.com/4gM8wP4ma4dlbX97ZadQQ04"},
+              {n:"Pro",orig:"£19.99",disc:"£9.99",pr:"/month",d:"For regular users maximising earnings.",f:["Lay Bet Finder (Pro-exclusive)","Everything in Starter","Unlimited offer alerts","Advanced oddsmatcher","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true,link:"https://buy.stripe.com/4gM8wP4ma4dlbX97ZadQQ04"},
               {n:"Annual",orig:"",disc:"£199",pr:"/year",d:"Best value. Save £40.",f:["Everything in Pro","2 months free","Early access","Priority support"],pop:false,link:"https://buy.stripe.com/fZu9ATdWK1190ergvGdQQ05"},
             ].map((plan,i) => (
               <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.pop ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../lib/auth";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useAuth, type Plan } from "../lib/auth";
 
 export default function SubscribeSuccess() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { activateSubscription, user } = useAuth();
   const [status, setStatus] = useState<"activating" | "done" | "error">("activating");
   const [countdown, setCountdown] = useState(3);
@@ -15,7 +16,18 @@ export default function SubscribeSuccess() {
     }
 
     try {
-      activateSubscription();
+      // Determine the plan: ?plan= query param takes precedence, else the
+      // plan the user selected in /subscribe before opening Stripe.
+      const fromQuery = searchParams.get("plan");
+      const pending = localStorage.getItem("eaw_pending_plan");
+      const plan: Plan =
+        fromQuery === "pro" || fromQuery === "annual" || fromQuery === "starter"
+          ? fromQuery
+          : pending === "pro" || pending === "annual" || pending === "starter"
+          ? pending
+          : "starter";
+      localStorage.removeItem("eaw_pending_plan");
+      activateSubscription(plan);
       setStatus("done");
 
       // Redirect to dashboard after 3 seconds

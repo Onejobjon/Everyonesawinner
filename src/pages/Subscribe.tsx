@@ -1,8 +1,19 @@
 import { Link } from "react-router-dom";
-import { useAuth } from "../lib/auth";
+import { useAuth, type Plan } from "../lib/auth";
 
-const plans = [
+const plans: {
+  id: Plan;
+  name: string;
+  price: string;
+  period: string;
+  desc: string;
+  features: string[];
+  link: string;
+  popular: boolean;
+  orig?: string;
+}[] = [
   {
+    id: "starter",
     name: "Starter",
     price: "£9.99",
     period: "/month",
@@ -17,6 +28,7 @@ const plans = [
     popular: false,
   },
   {
+    id: "pro",
     name: "Pro",
     orig: "£19.99",
     price: "£9.99",
@@ -24,6 +36,7 @@ const plans = [
     desc: "For regular users maximising earnings.",
     features: [
       "Everything in Starter",
+      "Lay Bet Finder (find close & profitable lays)",
       "Unlimited offer alerts",
       "Advanced oddsmatcher",
       "Auto-calculation",
@@ -35,6 +48,7 @@ const plans = [
     popular: true,
   },
   {
+    id: "annual",
     name: "Annual",
     price: "£199",
     period: "/year",
@@ -53,7 +67,10 @@ const plans = [
 export default function Subscribe() {
   const { user } = useAuth();
 
-  const handleSubscribe = (url: string) => {
+  const handleSubscribe = (url: string, plan: Plan) => {
+    // Remember which plan the user is buying so /subscribe/success can
+    // assign the right tier when they return from Stripe.
+    localStorage.setItem("eaw_pending_plan", plan);
     // Open Stripe payment link in new tab
     window.open(url, "_blank", "noopener,noreferrer");
   };
@@ -153,7 +170,7 @@ export default function Subscribe() {
                 ))}
               </ul>
               <button
-                onClick={() => handleSubscribe(plan.link)}
+                onClick={() => handleSubscribe(plan.link, plan.id)}
                 className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold transition-all ${
                   plan.popular
                     ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700"

@@ -1,9 +1,9 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./lib/auth";
 import Home from "./pages/Home";
 import Calculator from "./pages/Calculator";
 import Oddsmatcher from "./pages/Oddsmatcher";
-import WorldCup from "./pages/WorldCup";
+import LayBets from "./pages/LayBets";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
 import Logout from "./pages/Logout";
@@ -19,7 +19,9 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/calculator" element={<Calculator />} />
         <Route path="/oddsmatcher" element={<Oddsmatcher />} />
-        <Route path="/world-cup" element={<WorldCup />} />
+        <Route path="/lay-bets" element={<LayBets />} />
+        {/* World Cup is over — redirect old links to the Lay Bet Finder */}
+        <Route path="/world-cup" element={<Navigate to="/lay-bets" replace />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/logout" element={<Logout />} />

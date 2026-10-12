@@ -55,6 +55,16 @@ interface ApiMatch {
   bookmakers: ApiBookmaker[];
 }
 
+/** One bookmaker's back odds for a single outcome. */
+export interface OutcomeBookmakerOdds {
+  /** Bookmaker key (e.g. "williamhill", "bet365") — used for 2up eligibility */
+  key: string;
+  /** Display title (e.g. "William Hill") */
+  title: string;
+  /** Decimal back odds */
+  odds: number;
+}
+
 export interface MatchOutcome {
   /** Display name (team name or "Draw") */
   name: string;
@@ -68,6 +78,8 @@ export interface MatchOutcome {
   layOdds: number | null;
   /** Source of the lay odds ("Betfair" or "Smarkets") — null when no lay data */
   laySource: string | null;
+  /** Full per-bookmaker back-odds matrix for this outcome (for 2up and similar) */
+  bookmakerOdds: OutcomeBookmakerOdds[];
 }
 
 export interface Match {
@@ -285,7 +297,6 @@ function getLeagueKey(sportKey: string): string {
     soccer_epl: "Premier League",
     soccer_spain_la_liga: "La Liga",
     soccer_germany_bundesliga: "Bundesliga",
-    soccer_fifa_world_cup: "World Cup",
     soccer_italy_serie_a: "Serie A",
     soccer_france_ligue_one: "Ligue 1",
   };
@@ -318,14 +329,6 @@ function findLayOdds(
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Get only World Cup matches from the dedicated sport endpoint.
- */
-export async function getWorldCupMatches(): Promise<Match[]> {
-  const data = await fetchOdds("soccer_fifa_world_cup");
-  return transformMatches(data, "soccer_fifa_world_cup");
-}
-
-/**
  * Transform raw API matches into our Match format.
  */
 function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
@@ -347,6 +350,19 @@ function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
     }
 
     if (allOutcomes.length === 0) continue;
+
+    // Build the full per-outcome bookmaker back-odds matrix (kept for the
+    // 2up feature and other offer-eligibility lookups downstream).
+    const matrix = new Map<string, OutcomeBookmakerOdds[]>();
+    for (const bm of apiMatch.bookmakers) {
+      const market = bm.markets.find((m) => m.key === "h2h");
+      if (!market) continue;
+      for (const outcome of market.outcomes) {
+        const key = outcome.name.toLowerCase();
+        if (!matrix.has(key)) matrix.set(key, []);
+        matrix.get(key)!.push({ key: bm.key, title: bm.title, odds: outcome.price });
+      }
+    }
 
     const perOutcome = bestUniqueBookmakerOdds(allOutcomes, apiMatch.bookmakers);
     if (perOutcome.length === 0) continue;
@@ -383,6 +399,7 @@ function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
           return20: Math.round(20 * o.backOdds * 100) / 100,
           layOdds: lay ? lay.layOdds : null,
           laySource: lay ? lay.laySource : null,
+          bookmakerOdds: matrix.get(o.outcome.toLowerCase()) || [],
         };
       }),
       ...(hasWarning ? { warning: "Bookmaker availability limited — some outcomes may share the same bookmaker" } : {}),

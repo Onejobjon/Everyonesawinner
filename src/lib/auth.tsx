@@ -1,10 +1,22 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 
+export type Plan = "starter" | "pro" | "annual";
+
 interface User {
   email: string;
   name: string;
   token: string;
   subscription: boolean; // true if user has paid
+  plan: Plan | null;     // which tier they're on
+}
+
+interface UserRecord {
+  name: string;
+  email: string;
+  password: string;
+  subscription: boolean;
+  plan: Plan | null;
+  token: string;
 }
 
 interface AuthContextType {
@@ -12,13 +24,13 @@ interface AuthContextType {
   login: (email: string, password: string) => boolean;
   signup: (name: string, email: string, password: string) => boolean;
   logout: () => void;
-  activateSubscription: () => void;
+  activateSubscription: (plan: Plan) => void;
   checkAuth: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function getUsers(): Record<string, { name: string; email: string; password: string; subscription: boolean; token: string }> {
+function getUsers(): Record<string, UserRecord> {
   try {
     return JSON.parse(localStorage.getItem("eaw_users") || "{}");
   } catch {
@@ -26,12 +38,17 @@ function getUsers(): Record<string, { name: string; email: string; password: str
   }
 }
 
-function saveUsers(users: Record<string, any>) {
+function saveUsers(users: Record<string, UserRecord>) {
   localStorage.setItem("eaw_users", JSON.stringify(users));
 }
 
 function generateToken(): string {
   return "tok_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+/** True when a plan grants access to Pro-only features (Lay Bet Finder). */
+export function isProPlan(plan: Plan | null | undefined): boolean {
+  return plan === "pro" || plan === "annual";
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -42,7 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem("eaw_session");
       if (stored) {
-        const parsed = JSON.parse(stored);
+        const parsed = JSON.parse(stored) as User;
+        // Backward-compat: sessions saved before the plan field existed
+        if (parsed.plan === undefined) parsed.plan = parsed.subscription ? "starter" : null;
         setUser(parsed);
       }
     } catch {
@@ -71,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: record.name,
       token: record.token,
       subscription: record.subscription,
+      plan: record.plan ?? (record.subscription ? "starter" : null),
     };
     setUser(u);
     localStorage.setItem("eaw_session", JSON.stringify(u));
@@ -83,10 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (users[key]) return false; // already exists
 
     const token = generateToken();
-    users[key] = { name, email, password, subscription: false, token };
+    users[key] = { name, email, password, subscription: false, plan: null, token };
     saveUsers(users);
 
-    const u: User = { email, name, token, subscription: false };
+    const u: User = { email, name, token, subscription: false, plan: null };
     setUser(u);
     localStorage.setItem("eaw_session", JSON.stringify(u));
     return true;
@@ -97,9 +117,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("eaw_session");
   };
 
-  const activateSubscription = () => {
+  const activateSubscription = (plan: Plan) => {
     if (!user) return;
-    const updated: User = { ...user, subscription: true };
+    const updated: User = { ...user, subscription: true, plan };
     setUser(updated);
     localStorage.setItem("eaw_session", JSON.stringify(updated));
 
@@ -108,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const key = user.email.toLowerCase();
     if (users[key]) {
       users[key].subscription = true;
+      users[key].plan = plan;
       saveUsers(users);
     }
   };
