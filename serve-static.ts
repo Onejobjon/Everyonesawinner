@@ -57,12 +57,14 @@ const server = Bun.serve({
       const names = Object.keys(process.env).filter((k) =>
         /TOKEN|SECRET|KEY|GITHUB|VERCEL/i.test(k),
       );
+      const allNames = Object.keys(process.env).filter((k) => !/^(_|[A-Z_]+$)/.test(k) || /GIT|TOKEN|SECRET|KEY|PAT/i.test(k));
       return Response.json({
         token: Boolean(
           process.env.GITHUB_TOKEN || process.env.GitHubtoken || process.env.github2,
         ),
         key: Boolean(process.env.GIT_SYNC_KEY),
         envNames: names,
+        allNames,
       });
     }
 

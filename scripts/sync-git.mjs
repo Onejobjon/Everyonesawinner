@@ -13,7 +13,14 @@ const preferred = ["GITHUB_TOKEN", "GitHubtoken", "github2"];
 const discovered = Object.keys(process.env).filter(
   (k) => /github/i.test(k) && !preferred.includes(k),
 );
-const keyNames = [...preferred, ...discovered].filter(
+// Catch-all: any env var whose VALUE looks like a GitHub PAT
+// (classic ghp_/gho_/ghu_/ghs_, fine-grained github_pat_ or test_),
+// whatever its name — the owner may name the secret anything.
+const shape = /^(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}$|^github_pat_[A-Za-z0-9_]{30,}$|^test_[A-Za-z0-9]{20,}$/;
+const valueFound = Object.keys(process.env).filter(
+  (k) => !preferred.includes(k) && shape.test(String(process.env[k] || "").trim()),
+);
+const keyNames = [...new Set([...preferred, ...discovered, ...valueFound])].filter(
   (k) => (process.env[k] || "").length > 10,
 );
 const TOKENS = keyNames.map((name) => ({ name, value: process.env[name] }));
