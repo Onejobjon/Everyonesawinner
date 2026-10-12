@@ -34,6 +34,16 @@ const freePort =
   `done`;
 Bun.spawnSync(["bash", "-c", freePort]);
 
+// Sync committed code to GitHub before serving, when GITHUB_TOKEN is
+// available in this environment (owner secrets reach the site runtime).
+// Idempotent — skips when remote already matches HEAD. Never blocks on
+// failure: the sync script always exits 0 and logs to .run/git-sync.log.
+const sync = Bun.spawnSync(["bun", join(import.meta.dir, "scripts/sync-git.mjs")], {
+  env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+});
+if (sync.stdout.length) console.log(new TextDecoder().decode(sync.stdout).trim());
+if (sync.stderr.length) console.log(new TextDecoder().decode(sync.stderr).trim());
+
 const server = Bun.serve({
   port: PORT,
   hostname: HOST,
