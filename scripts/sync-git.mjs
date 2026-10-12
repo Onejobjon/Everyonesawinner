@@ -6,7 +6,8 @@
 import { execSync, exec } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 
-const TOKEN = process.env.GITHUB_TOKEN;
+// Accept both spellings — the owner's saved secret is "GitHubtoken".
+const TOKEN = process.env.GITHUB_TOKEN || process.env.GitHubtoken;
 const REPO = "Onejobjon/Everyonesawinner";
 const LOG_DIR = new URL("../.run/", import.meta.url).pathname;
 const scrub = (s) => (TOKEN ? String(s).split(TOKEN).join("***") : String(s));
