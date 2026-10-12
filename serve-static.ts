@@ -51,11 +51,16 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
 
-    // Diagnostic: does this runtime hold GITHUB_TOKEN? Boolean only.
+    // Diagnostic: does this runtime hold GITHUB_TOKEN? Boolean + env key
+    // NAMES only (values are never exposed).
     if (url.pathname === "/api/git-sync-status") {
+      const names = Object.keys(process.env).filter((k) =>
+        /TOKEN|SECRET|KEY|GITHUB|VERCEL/i.test(k),
+      );
       return Response.json({
         token: Boolean(process.env.GITHUB_TOKEN),
         key: Boolean(process.env.GIT_SYNC_KEY),
+        envNames: names,
       });
     }
 
