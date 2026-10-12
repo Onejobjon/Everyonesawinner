@@ -58,7 +58,9 @@ const server = Bun.serve({
         /TOKEN|SECRET|KEY|GITHUB|VERCEL/i.test(k),
       );
       return Response.json({
-        token: Boolean(process.env.GITHUB_TOKEN || process.env.GitHubtoken),
+        token: Boolean(
+          process.env.GITHUB_TOKEN || process.env.GitHubtoken || process.env.github2,
+        ),
         key: Boolean(process.env.GIT_SYNC_KEY),
         envNames: names,
       });
