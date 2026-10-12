@@ -51,9 +51,15 @@ try {
 
   for (const t of TOKENS) {
     const url = `https://x-access-token:${t.value}@github.com/${REPO}.git`;
+    let remoteSha = null;
     try {
       const out = sh(`git ls-remote ${url} refs/heads/main`);
-      const remoteSha = out ? out.split(/\s+/)[0] : null;
+      remoteSha = out ? out.split(/\s+/)[0] : null;
+    } catch (e) {
+      log(`secret "${t.name}": no read access (${e.message.split("\n").slice(0, 3).join(" | ").slice(0, 240)})`);
+      continue;
+    }
+    try {
       if (remoteSha === head) {
         log(`already up to date (${head.slice(0, 7)}) — secret "${t.name}"`);
         process.exit(0);
@@ -62,7 +68,7 @@ try {
       log(`pushed ${head.slice(0, 7)} to ${REPO} main — secret "${t.name}"`);
       process.exit(0);
     } catch (e) {
-      log(`secret "${t.name}" rejected: ${e.message.split("\n")[0].slice(0, 160)}`);
+      log(`secret "${t.name}" has read but push rejected: ${e.message.split("\n").slice(0, 5).join(" | ").slice(0, 400)}`);
     }
   }
   log("all candidate tokens failed — no push");
