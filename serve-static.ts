@@ -50,6 +50,32 @@ const server = Bun.serve({
   idleTimeout: 255,
   async fetch(req) {
     const url = new URL(req.url);
+
+    // Diagnostic: does this runtime hold GITHUB_TOKEN? Boolean only.
+    if (url.pathname === "/api/git-sync-status") {
+      return Response.json({
+        token: Boolean(process.env.GITHUB_TOKEN),
+        key: Boolean(process.env.GIT_SYNC_KEY),
+      });
+    }
+
+    // Guarded one-shot sync: runs the git-sync script if the caller knows
+    // GIT_SYNC_KEY. Effect is idempotent (pushes HEAD; no-op when synced).
+    if (url.pathname === "/api/git-sync") {
+      const key = process.env.GIT_SYNC_KEY;
+      if (!key) return Response.json({ ok: false, error: "key not configured" }, { status: 403 });
+      if (url.searchParams.get("key") !== key) {
+        return Response.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
+      const r = Bun.spawnSync(
+        ["bun", join(import.meta.dir, "scripts/sync-git.mjs")],
+        { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } },
+      );
+      const out = new TextDecoder().decode(r.stdout).trim();
+      const err = new TextDecoder().decode(r.stderr).trim();
+      return Response.json({ ok: true, out: out.slice(0, 500), err: err.slice(0, 300) });
+    }
+
     let path = decodeURIComponent(url.pathname);
     if (path.endsWith("/")) path += "index.html";
 
