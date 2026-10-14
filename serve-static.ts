@@ -4,6 +4,7 @@
 // rewrites in vercel.json. Binds 0.0.0.0:3000, pinned like the old
 // serve.ts, because the platform gateway reverse-proxies that port.
 import { join, extname } from "node:path";
+import { startAlertWorker, runAlertCheck, alertStatus } from "./src/server/alerts";
 
 const PORT = 3000;
 const HOST = "0.0.0.0";
@@ -68,6 +69,28 @@ const server = Bun.serve({
       });
     }
 
+    // Non-secret alert-config status (channel presence + schedule only).
+    if (url.pathname === "/api/alert-status") {
+      return Response.json(alertStatus());
+    }
+
+    // Guarded one-shot alert check: runs the lay-bets scanner and delivers
+    // any new opportunities, if the caller knows GIT_SYNC_KEY. Useful for
+    // verifying end-to-end delivery without waiting for the schedule.
+    if (url.pathname === "/api/alert-run") {
+      const key = process.env.GIT_SYNC_KEY;
+      if (!key) return Response.json({ ok: false, error: "key not configured" }, { status: 403 });
+      if (url.searchParams.get("key") !== key) {
+        return Response.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
+      try {
+        const r = await runAlertCheck();
+        return Response.json({ ok: true, ...r });
+      } catch (e) {
+        return Response.json({ ok: false, error: String(e) }, { status: 500 });
+      }
+    }
+
     // Guarded one-shot sync: runs the git-sync script if the caller knows
     // GIT_SYNC_KEY. Effect is idempotent (pushes HEAD; no-op when synced).
     if (url.pathname === "/api/git-sync") {
@@ -102,3 +125,6 @@ const server = Bun.serve({
 });
 
 console.log(`Serving dist/ on http://${HOST}:${PORT}`);
+
+// Start the opportunity alert worker (no-op unless a channel is configured).
+startAlertWorker();

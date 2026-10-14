@@ -7,7 +7,7 @@
 
 import { calcDutchFreeBet } from "./odds";
 
-const API_KEY = "7c3d32f19360a9489dd8b5d6a6712d4f";
+export const API_KEY = "7c3d32f19360a9489dd8b5d6a6712d4f";
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
 // h2h = bookmaker back odds, h2h_lay = exchange lay odds. Requested together in
@@ -331,7 +331,7 @@ function findLayOdds(
 /**
  * Transform raw API matches into our Match format.
  */
-function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
+export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
   const results: Match[] = [];
 
   for (const apiMatch of data) {

@@ -1,0 +1,380 @@
+/**
+ * Opportunity alert worker — server-side (Bun runtime only).
+ *
+ * Watches for profitable lay-bet opportunities using the SAME filter as the
+ * /lay-bets Lay Bet Finder (back odds < 2.8, lay gap < 0.1) but only fires an
+ * alert when the opportunity is genuinely PROFITABLE (expectedProfit > 0).
+ *
+ * Delivery channels (each independent, all disabled until configured):
+ *   A. Webhook — POST JSON to ALERT_WEBHOOK_URL with an HMAC-SHA256 signature
+ *      header (secret ALERT_WEBHOOK_SECRET).
+ *   B. Email — short plain-text alert to ALERT_EMAIL_TO via the Resend HTTP API
+ *      (ALERT_EMAIL_API_KEY + ALERT_EMAIL_FROM).
+ *   C. Telegram (optional) — message to ALERT_TELEGRAM_CHAT_ID via the Bot API
+ *      (ALERT_TELEGRAM_BOT_TOKEN).
+ *
+ * Quota-aware: the-odds-api.com free tier is ~500 requests/month. The worker
+ * reuses a fresh on-disk cache instead of re-fetching, and runs on a
+ * conservative configurable schedule. Dedup is persisted so the same
+ * opportunity (match + outcome + rounded odds) is never re-alerted.
+ *
+ * EXPLICITLY OUT OF SCOPE: any automated bet placement or bookmaker login.
+ * This is an alert feed only — it tells the owner what exists, never acts on it.
+ */
+
+import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { transformMatches, API_KEY as FALLBACK_API_KEY } from "../lib/odds-api";
+import { calcLay, qualifiesForLay, layGap, round2, type Match } from "../lib/odds";
+
+const BASE = "https://api.the-odds-api.com/v4";
+const REGIONS = "uk";
+const MARKETS = "h2h,h2h_lay";
+const BACK_STAKE = 20;
+const ODDS_API_KEY = process.env.ODDS_API_KEY || FALLBACK_API_KEY;
+
+// ── Config (all env-var driven, safe defaults) ─────────────────────────────
+// How often the worker runs a check (minutes). Default 180 = every 3h.
+const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, 180);
+// How long a fetched odds snapshot stays "fresh" before the worker re-fetches.
+const CACHE_TTL_MIN = num(process.env.ALERT_CACHE_TTL_MIN, 120);
+
+// Channel A — webhook
+const WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
+const WEBHOOK_SECRET = process.env.ALERT_WEBHOOK_SECRET || "";
+// Channel B — email (Resend)
+const EMAIL_API_KEY = process.env.ALERT_EMAIL_API_KEY || "";
+const EMAIL_FROM = process.env.ALERT_EMAIL_FROM || "";
+const EMAIL_TO = process.env.ALERT_EMAIL_TO || "";
+// Channel C — Telegram
+const TG_TOKEN = process.env.ALERT_TELEGRAM_BOT_TOKEN || "";
+const TG_CHAT_ID = process.env.ALERT_TELEGRAM_CHAT_ID || "";
+
+const RUN_DIR = join(import.meta.dir, "../../.run");
+const CACHE_FILE = join(RUN_DIR, "alerts-cache.json");
+const SEEN_FILE = join(RUN_DIR, "alerts-seen.json");
+const LOG_FILE = join(RUN_DIR, "alerts.log");
+const SEEN_MAX = 4000; // cap the persisted dedup set so it can't grow unbounded
+
+function num(v: string | undefined, dflt: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : dflt;
+}
+
+function log(msg: string): void {
+  const line = `[alerts ${new Date().toISOString()}] ${msg}`;
+  console.log(line);
+  try {
+    mkdirSync(RUN_DIR, { recursive: true });
+    const existing = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "";
+    writeFileSync(LOG_FILE, existing + line + "\n", "utf8");
+  } catch {
+    /* logging must never break the worker */
+  }
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface Opportunity {
+  matchId: string;
+  match: string;
+  league: string;
+  kickoff: string;
+  bookmaker: string;
+  outcome: string;
+  backOdds: number;
+  layOdds: number;
+  gap: number;
+  layStake: number;
+  liability: number;
+  expectedProfit: number;
+  detectedAt: string;
+}
+
+// ── Odds fetch (server-side, cache-aware) ─────────────────────────────────
+
+async function fetchRawMatches(): Promise<unknown[]> {
+  const url = `${BASE}/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const why =
+      res.status === 401 ? " (401 — ODDS_API_KEY rejected)"
+      : res.status === 429 ? " (429 — quota exceeded)"
+      : "";
+    throw new Error(`odds API ${res.status}${why}`);
+  }
+  return (await res.json()) as unknown[];
+}
+
+async function getMatches(): Promise<Match[]> {
+  // Reuse a fresh on-disk cache instead of spending quota on every check.
+  try {
+    if (existsSync(CACHE_FILE)) {
+      const cached = JSON.parse(readFileSync(CACHE_FILE, "utf8")) as {
+        ts: number;
+        data: Match[];
+      };
+      if (Date.now() - cached.ts < CACHE_TTL_MIN * 60_000) {
+        return cached.data;
+      }
+    }
+  } catch {
+    /* stale/corrupt cache — just refetch */
+  }
+
+  const raw = await fetchRawMatches();
+  const matches = transformMatches(raw as Parameters<typeof transformMatches>[0]);
+
+  try {
+    mkdirSync(RUN_DIR, { recursive: true });
+    writeFileSync(CACHE_FILE, JSON.stringify({ ts: Date.now(), data: matches }));
+  } catch (e) {
+    log(`cache write failed: ${String(e)}`);
+  }
+  return matches;
+}
+
+// ── Filter ─────────────────────────────────────────────────────────────────
+
+function findOpportunities(matches: Match[]): Opportunity[] {
+  const opps: Opportunity[] = [];
+  for (const m of matches) {
+    for (const o of m.outcomes) {
+      if (!qualifiesForLay(o.odds, o.layOdds)) continue;
+      const lay = calcLay(o.odds, o.layOdds, BACK_STAKE);
+      if (!lay) continue;
+      if (lay.profitLoss <= 0) continue; // alert only on genuine value
+      opps.push({
+        matchId: m.matchId,
+        match: `${m.home} vs ${m.away}`,
+        league: m.league,
+        kickoff: m.commenceTime,
+        bookmaker: o.bookmaker,
+        outcome: o.name,
+        backOdds: o.odds,
+        layOdds: o.layOdds as number,
+        gap: layGap(o.odds, o.layOdds as number),
+        layStake: round2(lay.layStake),
+        liability: round2(lay.liability),
+        expectedProfit: round2(lay.profitLoss),
+        detectedAt: new Date().toISOString(),
+      });
+    }
+  }
+  // Prefer matches kicking off soonest, then best profit.
+  opps.sort((a, b) => {
+    const t = a.kickoff.localeCompare(b.kickoff);
+    if (t !== 0) return t;
+    return b.expectedProfit - a.expectedProfit;
+  });
+  return opps;
+}
+
+// ── Dedup (persisted) ──────────────────────────────────────────────────────
+
+function keyFor(o: Opportunity): string {
+  return `${o.matchId}|${o.outcome}|${round2(o.backOdds)}|${round2(o.layOdds)}`;
+}
+
+function loadSeen(): Set<string> {
+  try {
+    if (existsSync(SEEN_FILE)) {
+      const arr = JSON.parse(readFileSync(SEEN_FILE, "utf8")) as string[];
+      return new Set(arr);
+    }
+  } catch {
+    /* ignore */
+  }
+  return new Set();
+}
+
+function saveSeen(seen: Set<string>): void {
+  try {
+    mkdirSync(RUN_DIR, { recursive: true });
+    let arr = [...seen];
+    if (arr.length > SEEN_MAX) arr = arr.slice(arr.length - SEEN_MAX);
+    writeFileSync(SEEN_FILE, JSON.stringify(arr));
+  } catch (e) {
+    log(`seen write failed: ${String(e)}`);
+  }
+}
+
+// ── Delivery ───────────────────────────────────────────────────────────────
+
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function payloadFor(o: Opportunity) {
+  return {
+    match: o.match,
+    league: o.league,
+    kickoff: o.kickoff,
+    bookmaker: o.bookmaker,
+    outcome: o.outcome,
+    backOdds: o.backOdds,
+    layOdds: o.layOdds,
+    gap: o.gap,
+    layStake: o.layStake,
+    liability: o.liability,
+    expectedProfit: o.expectedProfit,
+    detectedAt: o.detectedAt,
+  };
+}
+
+function emailText(o: Opportunity): string {
+  return [
+    "Everyone's A Winner — lay-bet opportunity",
+    "",
+    `Match: ${o.match} (${o.league})`,
+    `Kickoff: ${o.kickoff}`,
+    `Back: ${o.outcome} @ ${o.backOdds.toFixed(2)} (${o.bookmaker})`,
+    `Lay: ${o.layOdds.toFixed(2)} — gap ${o.gap.toFixed(2)}`,
+    `Lay stake: £${o.layStake.toFixed(2)} | Liability: £${o.liability.toFixed(2)}`,
+    `Expected profit: +£${o.expectedProfit.toFixed(2)}`,
+    `Detected: ${o.detectedAt}`,
+    "",
+    "Alert feed only — no bet is placed for you.",
+  ].join("\n");
+}
+
+function telegramText(o: Opportunity): string {
+  return [
+    `⚡ ${o.match} (${o.league})`,
+    `Back ${o.outcome} @ ${o.backOdds.toFixed(2)} (${o.bookmaker})`,
+    `Lay @ ${o.layOdds.toFixed(2)} (gap ${o.gap.toFixed(2)})`,
+    `Lay stake £${o.layStake.toFixed(2)} | Liability £${o.liability.toFixed(2)}`,
+    `Profit +£${o.expectedProfit.toFixed(2)}`,
+  ].join("\n");
+}
+
+async function deliver(o: Opportunity): Promise<void> {
+  // A — webhook with HMAC-SHA256 signature
+  if (WEBHOOK_URL && WEBHOOK_SECRET) {
+    const body = JSON.stringify(payloadFor(o));
+    const sig = await hmacSha256Hex(WEBHOOK_SECRET, body);
+    await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-signature-256": `sha256=${sig}`,
+        "x-eaw-timestamp": o.detectedAt,
+      },
+      body,
+    });
+  } else if (WEBHOOK_URL && !WEBHOOK_SECRET) {
+    log("ALERT_WEBHOOK_URL set but ALERT_WEBHOOK_SECRET missing — webhook skipped");
+  }
+
+  // B — email
+  if (EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM) {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${EMAIL_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: [EMAIL_TO],
+        subject: `Lay alert: ${o.match} — ${o.outcome}`,
+        text: emailText(o),
+      }),
+    });
+  } else if (EMAIL_TO && !(EMAIL_API_KEY && EMAIL_FROM)) {
+    log("ALERT_EMAIL_TO set but ALERT_EMAIL_API_KEY/ALERT_EMAIL_FROM missing — email skipped");
+  }
+
+  // C — Telegram (optional)
+  if (TG_TOKEN && TG_CHAT_ID) {
+    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT_ID, text: telegramText(o) }),
+    });
+  }
+}
+
+// ── Orchestration ──────────────────────────────────────────────────────────
+
+export async function runAlertCheck(): Promise<{ checked: number; alerted: number }> {
+  const matches = await getMatches();
+  const opps = findOpportunities(matches);
+  const seen = loadSeen();
+
+  let alerted = 0;
+  for (const o of opps) {
+    const k = keyFor(o);
+    if (seen.has(k)) continue;
+    try {
+      await deliver(o);
+      seen.add(k);
+      alerted++;
+    } catch (e) {
+      log(`deliver failed for ${k}: ${String(e)}`);
+    }
+  }
+  saveSeen(seen);
+  log(`check done: ${opps.length} profitable, ${alerted} newly alerted`);
+  return { checked: opps.length, alerted };
+}
+
+export function hasAlertChannel(): boolean {
+  return Boolean(
+    WEBHOOK_URL || (EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM) || (TG_TOKEN && TG_CHAT_ID),
+  );
+}
+
+/** Non-secret status of the alert config (channel presence + schedule). */
+export function alertStatus() {
+  return {
+    webhook: Boolean(WEBHOOK_URL && WEBHOOK_SECRET),
+    webhookUrlSet: Boolean(WEBHOOK_URL),
+    webhookSecretSet: Boolean(WEBHOOK_SECRET),
+    email: Boolean(EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM),
+    emailToSet: Boolean(EMAIL_TO),
+    telegram: Boolean(TG_TOKEN && TG_CHAT_ID),
+    telegramTokenSet: Boolean(TG_TOKEN),
+    intervalMin: CHECK_INTERVAL_MIN,
+    cacheTtlMin: CACHE_TTL_MIN,
+    oddsApiKey: Boolean(ODDS_API_KEY || FALLBACK_API_KEY),
+  };
+}
+
+/** Start the background worker. No-op unless at least one channel is configured. */
+export function startAlertWorker(): void {
+  if (!hasAlertChannel()) {
+    log(
+      "no alert channel configured — worker idle. Set ALERT_WEBHOOK_URL (+ALERT_WEBHOOK_SECRET), ALERT_EMAIL_TO, or ALERT_TELEGRAM_BOT_TOKEN.",
+    );
+    return;
+  }
+  const ms = CHECK_INTERVAL_MIN * 60_000;
+  log(`alert worker started (every ${CHECK_INTERVAL_MIN}m, cache TTL ${CACHE_TTL_MIN}m)`);
+  const tick = () => runAlertCheck().catch((e) => log(`check error: ${String(e)}`));
+  setTimeout(tick, 5_000); // first check shortly after boot
+  setInterval(tick, ms);
+}
+
+// CLI: `bun src/server/alerts.ts --once` runs a single check and exits.
+// (Used for local end-to-end verification against a fake webhook receiver.)
+if ((import.meta as { main?: boolean }).main && Bun.argv.includes("--once")) {
+  runAlertCheck()
+    .then((r) => {
+      console.log(`ALERT_ONCE result=${JSON.stringify(r)}`);
+      process.exit(0);
+    })
+    .catch((e) => {
+      console.error(`ALERT_ONCE error: ${String(e)}`);
+      process.exit(1);
+    });
+}
