@@ -10,8 +10,8 @@
  *      header (secret ALERT_WEBHOOK_SECRET).
  *   B. Email — short plain-text alert to ALERT_EMAIL_TO via the Resend HTTP API
  *      (ALERT_EMAIL_API_KEY + ALERT_EMAIL_FROM).
- *   C. Telegram (optional) — message to ALERT_TELEGRAM_CHAT_ID via the Bot API
- *      (ALERT_TELEGRAM_BOT_TOKEN).
+ *   C. Telegram (optional) — message to TELEGRAM_CHAT_ID via the Bot API
+ *      (TELEGRAM_BOT_TOKEN).
  *
  * Quota-aware: the-odds-api.com free tier is ~500 requests/month. The worker
  * reuses a fresh on-disk cache instead of re-fetching, and runs on a
@@ -46,9 +46,9 @@ const WEBHOOK_SECRET = process.env.ALERT_WEBHOOK_SECRET || "";
 const EMAIL_API_KEY = process.env.ALERT_EMAIL_API_KEY || "";
 const EMAIL_FROM = process.env.ALERT_EMAIL_FROM || "";
 const EMAIL_TO = process.env.ALERT_EMAIL_TO || "";
-// Channel C — Telegram
-const TG_TOKEN = process.env.ALERT_TELEGRAM_BOT_TOKEN || "";
-const TG_CHAT_ID = process.env.ALERT_TELEGRAM_CHAT_ID || "";
+// Channel C — Telegram (env names per owner spec)
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
 const RUN_DIR = join(import.meta.dir, "../../.run");
 const CACHE_FILE = join(RUN_DIR, "alerts-cache.json");
