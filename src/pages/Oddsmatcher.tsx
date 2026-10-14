@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { formatOdds, calcDutch, calcDutchFreeBet } from "../lib/odds";
+import { calcDutch, calcDutchFreeBet } from "../lib/odds";
 import { getMatches, type Match } from "../lib/odds-api";
 import FreeBetsOffers from "../components/FreeBetsOffers";
 import Paywall from "../components/Paywall";
@@ -132,7 +132,7 @@ export default function Oddsmatcher() {
                           <span className="font-medium">
                             {freeBetMode && i === (dutch as any).freeBetIndex && <span className="text-purple-500 mr-1">🎟️</span>}
                             {!freeBetMode && i === (dutch as any).favIndex && <span className="text-amber-500 mr-1">⭐</span>}
-                            <strong>{o.name}</strong> at <strong>{o.bookmaker}</strong> ({formatOdds(o.odds)})
+                            <strong>{o.name}</strong> at <strong>{o.bookmaker}</strong> ({o.odds.toFixed(2)})
                           </span>
                           <span className="font-medium text-indigo-700 dark:text-indigo-400">
                             {freeBetMode && i === (dutch as any).freeBetIndex

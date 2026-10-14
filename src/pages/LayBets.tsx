@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   calcLay,
-  formatOdds,
   layGap,
   qualifiesForLay,
   round2,
@@ -73,6 +72,9 @@ export default function LayBets() {
     return rows;
   }, [matches, query]);
 
+  // The single highest-profit opportunity — flagged "Best" when it's profitable.
+  const bestProfit = opportunities.length > 0 ? round2(opportunities[0].lay.profitLoss) : 0;
+
   return (
     <Paywall tier="pro" title="the Lay Bet Finder">
       <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
@@ -89,7 +91,7 @@ export default function LayBets() {
           </div>
         </nav>
 
-        <div className="mx-auto max-w-6xl px-6 py-8">
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
           <h1 className="text-3xl font-bold tracking-tight">Lay Bet Finder</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             Back an outcome at the bookmaker, lay the same outcome on the exchange — and lock in the result. Only close, profitable lays are shown.
@@ -130,70 +132,95 @@ export default function LayBets() {
           )}
 
           {!loading && !error && opportunities.length > 0 && (
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-gray-400">
-                    <th className="pb-2 font-medium">Match</th>
-                    <th className="pb-2 font-medium">Outcome</th>
-                    <th className="pb-2 font-medium">Back (bookmaker)</th>
-                    <th className="pb-2 font-medium">Lay (exchange)</th>
-                    <th className="pb-2 text-right font-medium">Lay stake</th>
-                    <th className="pb-2 text-right font-medium">Liability</th>
-                    <th className="pb-2 text-right font-medium">Est. profit/loss</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {opportunities.map((op, i) => (
-                    <tr key={i} className="border-t border-gray-100 dark:border-gray-800 align-top">
-                      <td className="py-3 pr-3">
-                        <div className="font-medium text-gray-800 dark:text-gray-100">
-                          {op.match.home} vs {op.match.away}
-                        </div>
-                        <div className="text-xs text-gray-400">{op.match.league} · {op.match.time}</div>
-                      </td>
-                      <td className="py-3 pr-3 whitespace-nowrap">
-                        <span className="mr-1">{getIcon(op.outcome.name, op.match.home, op.match.away)}</span>
-                        <span className="font-medium">{op.outcome.name}</span>
-                      </td>
-                      <td className="py-3 pr-3 whitespace-nowrap">
-                        <span className="font-semibold">{op.outcome.odds.toFixed(2)}</span>
-                        <span className="ml-1 text-gray-500">({formatOdds(op.outcome.odds)})</span>
-                        <span className="ml-1 text-gray-500">@ {op.outcome.bookmaker}</span>
-                      </td>
-                      <td className="py-3 pr-3 whitespace-nowrap">
-                        {op.outcome.layOdds ? (
-                          <span>
-                            <span className="font-semibold">{op.outcome.layOdds.toFixed(2)}</span>
-                            <span className="ml-1 text-gray-500">({formatOdds(op.outcome.layOdds)})</span>
-                            <span className="ml-1 text-gray-500">({op.outcome.laySource})</span>
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 pr-3 text-right whitespace-nowrap">{money(op.lay.layStake)}</td>
-                      <td className="py-3 pr-3 text-right whitespace-nowrap">{money(op.lay.liability)}</td>
-                      <td className="py-3 text-right whitespace-nowrap">
-                        <span className={`font-semibold ${op.lay.profitLoss >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
-                          {op.lay.profitLoss >= 0 ? "+" : "-"}{money(Math.abs(op.lay.profitLoss))}
+            <>
+              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {opportunities.map((op) => {
+                  const profitable = op.lay.profitLoss >= 0;
+                  const isBest = profitable && round2(op.lay.profitLoss) === bestProfit;
+                  return (
+                    <div
+                      key={`${op.match.matchId}-${op.outcome.name}`}
+                      className={`relative rounded-2xl border-2 bg-white p-5 shadow-sm transition-shadow hover:shadow-md dark:bg-gray-950 ${
+                        profitable
+                          ? "border-green-300 dark:border-green-800"
+                          : "border-gray-200 dark:border-gray-800"
+                      }`}
+                    >
+                      {isBest && (
+                        <span className="absolute -top-3 right-4 rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white shadow-sm">
+                          ★ Best
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="mt-3 text-xs text-gray-400">
+                      )}
+
+                      {/* Match header */}
+                      <div>
+                        <div className="pr-16 text-lg font-bold leading-tight text-gray-900 dark:text-gray-100">
+                          {op.match.home} <span className="font-normal text-gray-400">vs</span> {op.match.away}
+                        </div>
+                        <div className="mt-1 text-xs text-gray-400">
+                          {op.match.league} · {op.match.time}
+                        </div>
+                      </div>
+
+                      {/* Picked outcome */}
+                      <div className="mt-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <span className="text-lg">{getIcon(op.outcome.name, op.match.home, op.match.away)}</span>
+                        <span className="font-semibold">{op.outcome.name}</span>
+                      </div>
+
+                      {/* Back vs Lay — the two big numbers side by side */}
+                      <div className="mt-3 grid grid-cols-2 gap-3">
+                        <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-900">
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Back</div>
+                          <div className="mt-1 text-2xl font-extrabold text-gray-900 dark:text-white">{op.outcome.odds.toFixed(2)}</div>
+                          <div className="mt-0.5 truncate text-xs text-gray-500">@ {op.outcome.bookmaker}</div>
+                        </div>
+                        <div className="rounded-xl bg-purple-50 p-3 dark:bg-purple-950/40">
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-purple-500">Lay</div>
+                          <div className="mt-1 text-2xl font-extrabold text-purple-700 dark:text-purple-300">{op.outcome.layOdds!.toFixed(2)}</div>
+                          <div className="mt-0.5 truncate text-xs text-purple-500">@ {op.outcome.laySource}</div>
+                        </div>
+                      </div>
+
+                      {/* Stake / liability / profit */}
+                      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                        <div>
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Lay stake</div>
+                          <div className="mt-0.5 font-semibold text-gray-800 dark:text-gray-100">{money(op.lay.layStake)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Liability</div>
+                          <div className="mt-0.5 font-semibold text-gray-800 dark:text-gray-100">{money(op.lay.liability)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Profit/Loss</div>
+                          <div className={`mt-0.5 font-semibold ${profitable ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>
+                            {profitable ? "+" : "-"}{money(Math.abs(op.lay.profitLoss))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-4 text-xs text-gray-400">
                 Lay = betting <strong>against</strong> this outcome on the exchange (Betfair). Figures use a £20 back stake and include 5% exchange commission. Only rows with back odds under 2.8 and a lay gap under 0.1 are shown.
               </p>
-            </div>
+            </>
           )}
 
           <section id="how-lay-works" className="mt-16 border-t border-gray-200 pt-10 dark:border-gray-800">
-            <h2 className="text-2xl font-bold tracking-tight">How lay betting works</h2>
-            <div className="mt-4">
-              <Markdown source={guideMarkdown} />
-            </div>
+            <details open className="group">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+                <h2 className="text-2xl font-bold tracking-tight">How lay betting works</h2>
+                <svg className="h-5 w-5 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </summary>
+              <div className="mt-4">
+                <Markdown source={guideMarkdown} />
+              </div>
+            </details>
           </section>
         </div>
       </div>

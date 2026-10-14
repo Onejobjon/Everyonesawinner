@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { formatOdds } from "../lib/odds";
 import Paywall from "../components/Paywall";
 
 function calcProfit(stake: number, backOdds: number, layOdds: number, comm: number) {
@@ -54,13 +53,13 @@ export default function Calculator() {
                 <label className="block text-sm font-medium mb-1">Bookmaker Odds</label>
                 <input type="number" value={backOdds} onChange={(e) => setBackOdds(Number(e.target.value))}
                   className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-900" min={1.01} step={0.01} />
-                <p className="text-xs text-gray-400 mt-0.5">Fractional: {formatOdds(backOdds)}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Decimal odds (e.g. 2.50)</p>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Exchange Odds</label>
                 <input type="number" value={layOdds} onChange={(e) => setLayOdds(Number(e.target.value))}
                   className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-900" min={1.01} step={0.01} />
-                <p className="text-xs text-gray-400 mt-0.5">Fractional: {formatOdds(layOdds)}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Decimal odds (e.g. 2.55)</p>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Exchange Fee (%)</label>
@@ -98,8 +97,8 @@ export default function Calculator() {
               </div>
 
               <div className="mt-4 flex gap-4 text-xs text-gray-500">
-                <span>Bookmaker: {formatOdds(result.backOdds)}</span>
-                <span>Exchange: {formatOdds(result.layOdds)}</span>
+                <span>Bookmaker: {result.backOdds.toFixed(2)}</span>
+                <span>Exchange: {result.layOdds.toFixed(2)}</span>
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getMatches, type Match } from "../lib/odds-api";
-import { formatOdds, calcDutch, calcDutchFreeBet } from "../lib/odds";
+import { calcDutch, calcDutchFreeBet } from "../lib/odds";
 import FreeBetsOffers from "../components/FreeBetsOffers";
 
 function FeaturedPicks() {
@@ -56,7 +56,7 @@ function FeaturedPicks() {
                   {m.outcomes.slice(0, 2).map((o, i) => (
                     <div key={i} className="flex justify-between">
                       <span>{o.name}</span>
-                      <span className="font-mono text-indigo-600 dark:text-indigo-400">{formatOdds(o.odds)}</span>
+                      <span className="font-mono text-indigo-600 dark:text-indigo-400">{o.odds.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
