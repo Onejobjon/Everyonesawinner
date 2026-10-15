@@ -83,9 +83,9 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
         <Nav />
         <div className="mx-auto max-w-4xl px-6 py-16 text-center">
           <span className="text-6xl">⚡</span>
-          <h1 className="mt-6 text-3xl font-bold tracking-tight sm:text-4xl">Upgrade to Pro for the Lay Bet Finder</h1>
+          <h1 className="mt-6 text-3xl font-bold tracking-tight sm:text-4xl">Upgrade to Pro for {title || "this tool"}</h1>
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            The Lay Bet Finder is a Pro feature. It shows bookmaker back odds next to Betfair lay odds and finds close, profitable lays for you — so you know exactly what to back and what to lay.
+            {title || "This tool"} is a Pro feature. Upgrade to unlock it alongside the Lay Bet Finder, the advanced oddsmatcher, and everything in Starter.
           </p>
 
           <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 max-w-3xl mx-auto text-left">
@@ -99,6 +99,7 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
               </div>
               <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
                 <li>• Lay Bet Finder</li>
+                <li>• Acca Finder</li>
                 <li>• Everything in Starter</li>
                 <li>• Advanced oddsmatcher</li>
               </ul>
