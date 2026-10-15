@@ -24,14 +24,14 @@
 
 import { join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
-import { transformMatches, API_KEY as FALLBACK_API_KEY } from "../lib/odds-api";
+import { transformMatches } from "../lib/odds-api";
+import { ODDS_API_KEY } from "./odds-key";
 import { calcLay, qualifiesForLay, layGap, round2, type Match } from "../lib/odds";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
 const MARKETS = "h2h,h2h_lay";
 const BACK_STAKE = 20;
-const ODDS_API_KEY = process.env.ODDS_API_KEY || FALLBACK_API_KEY;
 
 // ── Config (all env-var driven, safe defaults) ─────────────────────────────
 // How often the worker runs a check (minutes). Default 180 = every 3h.
@@ -346,7 +346,7 @@ export function alertStatus() {
     telegramTokenSet: Boolean(TG_TOKEN),
     intervalMin: CHECK_INTERVAL_MIN,
     cacheTtlMin: CACHE_TTL_MIN,
-    oddsApiKey: Boolean(ODDS_API_KEY || FALLBACK_API_KEY),
+    oddsApiKey: Boolean(ODDS_API_KEY),
   };
 }
 

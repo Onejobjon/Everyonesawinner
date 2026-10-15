@@ -5,6 +5,7 @@
 // serve.ts, because the platform gateway reverse-proxies that port.
 import { join, extname } from "node:path";
 import { startAlertWorker, runAlertCheck, alertStatus } from "./src/server/alerts";
+import { ODDS_API_KEY } from "./src/server/odds-key";
 
 const PORT = 3000;
 const HOST = "0.0.0.0";
@@ -67,6 +68,25 @@ const server = Bun.serve({
         envNames: names,
         allNames,
       });
+    }
+
+    // Odds proxy — fetches live odds server-side so the API key never ships
+    // to the client. Query: ?sport=<sportKey> (default "upcoming").
+    if (url.pathname === "/api/odds") {
+      const sport = url.searchParams.get("sport") || "upcoming";
+      const target =
+        sport === "upcoming"
+          ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`
+          : `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`;
+      try {
+        const upstream = await fetch(target);
+        const body = await upstream.text();
+        const headers: Record<string, string> = { "content-type": "application/json" };
+        if (upstream.ok) headers["cache-control"] = "public, max-age=300";
+        return new Response(body, { status: upstream.status, headers });
+      } catch (e) {
+        return Response.json({ error: "odds proxy failed" }, { status: 502 });
+      }
     }
 
     // Non-secret alert-config status (channel presence + schedule only).

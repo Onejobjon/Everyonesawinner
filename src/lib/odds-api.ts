@@ -1,18 +1,14 @@
 /**
  * The Odds API integration — fetches live odds from the-odds-api.com
- * and transforms them into our Match format for display.
- *
- * API Key stored here for MVP; will be secured behind a backend proxy later.
+ * (via our server-side /api/odds proxy, which holds the API key) and
+ * transforms them into our Match format for display.
  */
 
 import { calcDutchFreeBet } from "./odds";
 
-export const API_KEY = "7c3d32f19360a9489dd8b5d6a6712d4f";
-const BASE = "https://api.the-odds-api.com/v4";
-const REGIONS = "uk";
-// h2h = bookmaker back odds, h2h_lay = exchange lay odds. Requested together in
-// one call so we don't spend extra quota on the free tier.
-const MARKETS = "h2h,h2h_lay";
+// The Odds API key is held server-side only (src/server/odds-key.ts) and is
+// never shipped in the client bundle. The client fetches through our own
+// /api/odds proxy, which attaches the key + fixed params (regions/markets).
 
 // Exchange sources for lay odds, in order of preference.
 const LAY_SOURCES = ["betfair_ex_uk", "smarkets"];
@@ -144,11 +140,8 @@ async function fetchOdds(sportKey = "upcoming"): Promise<ApiMatch[]> {
     return lsData;
   }
 
-  // 3. Fetch from API
-  const url = sportKey === "upcoming"
-    ? `${BASE}/sports/upcoming/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal`
-    : `${BASE}/sports/${sportKey}/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal`;
-
+  // 3. Fetch from our server proxy (the API key is server-side, never in the client).
+  const url = `/api/odds?sport=${encodeURIComponent(sportKey)}`;
   const res = await fetch(url);
   if (!res.ok) {
     const msg = res.status === 429
