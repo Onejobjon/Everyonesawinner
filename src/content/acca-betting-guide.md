@@ -132,6 +132,7 @@ You **can't** matched-bet these, because:
 ## Honest Expectations
 
 - **Aim to retain 70–80% of a free bet's value.** The £20 example above keeps £15 (75%). That's the realistic target, not 100%.
+- **Accas can beat the 70–80% rule of thumb.** When every leg is laid at a tight gap, laying leg-by-leg can retain more — the Acca Finder shows the exact retained profit for every plan, so judge each acca by its own numbers.
 - **The gap matters.** The closer the lay odds are to the back odds, the more you keep. Wide gaps quietly eat your profit.
 - **You need exchange funds for the later legs.** If the acca survives to leg 3, be ready to cover that £73.50 liability.
 - **Odds move between legs.** By the time leg 2 kicks off, leg 2's lay odds may have shifted. Re-check before you lay each leg.
