@@ -5,7 +5,7 @@ import { COMMISSION } from "../lib/odds";
 import { getMatches, type Match, type MatchOutcome } from "../lib/odds-api";
 import Paywall from "../components/Paywall";
 import Markdown from "../components/Markdown";
-import accaGuideMarkdown from "../content/acca-guide.md?raw";
+import guideMarkdown from "../content/acca-betting-guide.md?raw";
 
 const TOP_N = 10;
 const MAX_MATCHES = 24; // soonest matches considered — bounds the 4-leg search
@@ -404,7 +404,7 @@ export default function AccaFinder() {
                 </svg>
               </summary>
               <div className="mt-4">
-                <Markdown source={accaGuideMarkdown} />
+                <Markdown source={guideMarkdown} />
               </div>
             </details>
           </section>
