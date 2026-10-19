@@ -325,41 +325,24 @@ function payloadFor(o: Opportunity) {
   };
 }
 
-function emailText(o: Opportunity): string {
-  const lines = [
-    o.type === "cash"
-      ? "Everyone's A Winner — GREEN CASH lay-bet opportunity"
-      : "Everyone's A Winner — FREE BET 100%+ opportunity",
-    "",
-    `Match: ${o.match} (${o.league})`,
-    `Kickoff: ${o.kickoff}`,
-    `Back: ${o.outcome} @ ${o.backOdds.toFixed(2)} (${o.bookmaker})`,
-    `Lay: ${o.layOdds.toFixed(2)} — gap ${o.gap.toFixed(2)}`,
-  ];
-  if (o.type === "cash") {
-    lines.push(
-      `Lay stake: £${o.layStake.toFixed(2)} | Liability: £${o.liability.toFixed(2)}`,
-      `Expected profit: +£${o.expectedProfit.toFixed(2)}`,
-    );
-  } else {
-    lines.push(
-      `Free bet £${BACK_STAKE} retains £${o.freeBetProfit.toFixed(2)} (${o.retentionPct}%)`,
-    );
-  }
-  lines.push(`Detected: ${o.detectedAt}`, "", "Alert feed only — no bet is placed for you.");
-  return lines.join("\n");
-}
-
-export function telegramText(o: Opportunity): string {
-  // Owner format — max two short lines, one alert. League, lay stake,
-  // liability, gap and detected-at are deliberately omitted (the webhook
-  // payload keeps full data for automation).
+/** Concise human-facing text shared by Telegram and email (full data → webhook). */
+export function conciseText(o: Opportunity): string {
   const line1 =
     o.type === "cash"
       ? `💰 GREEN CASH — ${o.outcome} @ ${o.backOdds.toFixed(2)} back / ${o.layOdds.toFixed(2)} lay — £${BACK_STAKE} → ~£${o.expectedProfit.toFixed(2)}`
       : `🎯 FREE BET 100%+ — ${o.outcome} @ ${o.backOdds.toFixed(2)} back / ${o.layOdds.toFixed(2)} lay — £${BACK_STAKE} free bet → £${o.freeBetProfit.toFixed(2)} (${o.retentionPct}%)`;
   const line2 = `${o.home} v ${o.away} · ${o.bookmaker} · kicks off ${o.kickoffTime} · odds move fast`;
   return [line1, line2].join("\n");
+}
+
+function emailText(o: Opportunity): string {
+  // Same trimmed two lines as Telegram — no league, lay stake, liability, gap
+  // or detected-at (webhook payload keeps full data for automation).
+  return [conciseText(o), "", "Alert feed only — no bet is placed for you."].join("\n");
+}
+
+export function telegramText(o: Opportunity): string {
+  return conciseText(o);
 }
 
 async function deliver(o: Opportunity): Promise<void> {
