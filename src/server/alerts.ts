@@ -26,7 +26,7 @@ import { join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { transformMatches } from "../lib/odds-api";
 import { ODDS_API_KEY } from "./odds-key";
-import { calcLay, qualifiesForLay, layGap, round2, type Match } from "../lib/odds";
+import { calcLay, calcFreeBetProfit, qualifiesForLay, layGap, round2, type Match } from "../lib/odds";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
@@ -75,7 +75,10 @@ function log(msg: string): void {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface Opportunity {
+type AlertType = "cash" | "freebet";
+
+interface BaseOpportunity {
+  type: AlertType;
   matchId: string;
   match: string;
   league: string;
@@ -85,11 +88,25 @@ interface Opportunity {
   backOdds: number;
   layOdds: number;
   gap: number;
+  detectedAt: string;
+}
+
+/** GREEN CASH — close-lay qualifying profit on a £20 cash back bet. */
+interface CashOpportunity extends BaseOpportunity {
+  type: "cash";
   layStake: number;
   liability: number;
   expectedProfit: number;
-  detectedAt: string;
 }
+
+/** FREE BET 100%+ — SNR free bet retains more than its own stake (arb-grade). */
+interface FreebetOpportunity extends BaseOpportunity {
+  type: "freebet";
+  freeBetProfit: number;
+  retentionPct: number;
+}
+
+type Opportunity = CashOpportunity | FreebetOpportunity;
 
 // ── Odds fetch (server-side, cache-aware) ─────────────────────────────────
 
@@ -140,32 +157,66 @@ function findOpportunities(matches: Match[]): Opportunity[] {
   const opps: Opportunity[] = [];
   for (const m of matches) {
     for (const o of m.outcomes) {
-      if (!qualifiesForLay(o.odds, o.layOdds)) continue;
-      const lay = calcLay(o.odds, o.layOdds, BACK_STAKE);
+      const back = o.odds;
+      const lay = o.layOdds;
       if (!lay) continue;
-      if (lay.profitLoss <= 0) continue; // alert only on genuine value
-      opps.push({
-        matchId: m.matchId,
-        match: `${m.home} vs ${m.away}`,
-        league: m.league,
-        kickoff: m.commenceTime,
-        bookmaker: o.bookmaker,
-        outcome: o.name,
-        backOdds: o.odds,
-        layOdds: o.layOdds as number,
-        gap: layGap(o.odds, o.layOdds as number),
-        layStake: round2(lay.layStake),
-        liability: round2(lay.liability),
-        expectedProfit: round2(lay.profitLoss),
-        detectedAt: new Date().toISOString(),
-      });
+
+      // GREEN CASH — existing close-lay qualifying profit (back < 2.8, gap < 0.1).
+      if (qualifiesForLay(back, lay)) {
+        const c = calcLay(back, lay, BACK_STAKE);
+        if (c && c.profitLoss > 0) {
+          opps.push({
+            type: "cash",
+            matchId: m.matchId,
+            match: `${m.home} vs ${m.away}`,
+            league: m.league,
+            kickoff: m.commenceTime,
+            bookmaker: o.bookmaker,
+            outcome: o.name,
+            backOdds: back,
+            layOdds: lay,
+            gap: layGap(back, lay),
+            layStake: round2(c.layStake),
+            liability: round2(c.liability),
+            expectedProfit: round2(c.profitLoss),
+            detectedAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      // FREE BET 100%+ — SNR free bet retains more than its own stake. These are
+      // arb-grade rows where the exchange lay price sits below the bookmaker's
+      // back price — genuinely rare, so expect few alerts (correct, not a bug).
+      const fb = calcFreeBetProfit(back, lay, BACK_STAKE);
+      if (fb && fb > BACK_STAKE) {
+        opps.push({
+          type: "freebet",
+          matchId: m.matchId,
+          match: `${m.home} vs ${m.away}`,
+          league: m.league,
+          kickoff: m.commenceTime,
+          bookmaker: o.bookmaker,
+          outcome: o.name,
+          backOdds: back,
+          layOdds: lay,
+          gap: layGap(back, lay),
+          freeBetProfit: round2(fb),
+          retentionPct: Math.round((fb / BACK_STAKE) * 100),
+          detectedAt: new Date().toISOString(),
+        });
+      }
     }
   }
-  // Prefer matches kicking off soonest, then best profit.
+
+  // Cash first, soonest kickoff then best profit; freebets after, best retention first.
   opps.sort((a, b) => {
+    if (a.type !== b.type) return a.type === "cash" ? -1 : 1;
     const t = a.kickoff.localeCompare(b.kickoff);
     if (t !== 0) return t;
-    return b.expectedProfit - a.expectedProfit;
+    if (a.type === "cash") {
+      return (b as CashOpportunity).expectedProfit - (a as CashOpportunity).expectedProfit;
+    }
+    return (b as FreebetOpportunity).freeBetProfit - (a as FreebetOpportunity).freeBetProfit;
   });
   return opps;
 }
@@ -173,7 +224,7 @@ function findOpportunities(matches: Match[]): Opportunity[] {
 // ── Dedup (persisted) ──────────────────────────────────────────────────────
 
 function keyFor(o: Opportunity): string {
-  return `${o.matchId}|${o.outcome}|${round2(o.backOdds)}|${round2(o.layOdds)}`;
+  return `${o.type}|${o.matchId}|${o.outcome}|${round2(o.backOdds)}|${round2(o.layOdds)}`;
 }
 
 function loadSeen(): Set<string> {
@@ -215,7 +266,8 @@ async function hmacSha256Hex(secret: string, body: string): Promise<string> {
 }
 
 function payloadFor(o: Opportunity) {
-  return {
+  const base = {
+    type: o.type,
     match: o.match,
     league: o.league,
     kickoff: o.kickoff,
@@ -224,36 +276,58 @@ function payloadFor(o: Opportunity) {
     backOdds: o.backOdds,
     layOdds: o.layOdds,
     gap: o.gap,
-    layStake: o.layStake,
-    liability: o.liability,
-    expectedProfit: o.expectedProfit,
     detectedAt: o.detectedAt,
+  };
+  if (o.type === "cash") {
+    return {
+      ...base,
+      layStake: o.layStake,
+      liability: o.liability,
+      expectedProfit: o.expectedProfit,
+    };
+  }
+  return {
+    ...base,
+    freeBetProfit: o.freeBetProfit,
+    retentionPct: o.retentionPct,
   };
 }
 
 function emailText(o: Opportunity): string {
-  return [
-    "Everyone's A Winner — lay-bet opportunity",
+  const lines = [
+    o.type === "cash"
+      ? "Everyone's A Winner — GREEN CASH lay-bet opportunity"
+      : "Everyone's A Winner — FREE BET 100%+ opportunity",
     "",
     `Match: ${o.match} (${o.league})`,
     `Kickoff: ${o.kickoff}`,
     `Back: ${o.outcome} @ ${o.backOdds.toFixed(2)} (${o.bookmaker})`,
     `Lay: ${o.layOdds.toFixed(2)} — gap ${o.gap.toFixed(2)}`,
-    `Lay stake: £${o.layStake.toFixed(2)} | Liability: £${o.liability.toFixed(2)}`,
-    `Expected profit: +£${o.expectedProfit.toFixed(2)}`,
-    `Detected: ${o.detectedAt}`,
-    "",
-    "Alert feed only — no bet is placed for you.",
-  ].join("\n");
+  ];
+  if (o.type === "cash") {
+    lines.push(
+      `Lay stake: £${o.layStake.toFixed(2)} | Liability: £${o.liability.toFixed(2)}`,
+      `Expected profit: +£${o.expectedProfit.toFixed(2)}`,
+    );
+  } else {
+    lines.push(
+      `Free bet £${BACK_STAKE} retains £${o.freeBetProfit.toFixed(2)} (${o.retentionPct}%)`,
+    );
+  }
+  lines.push(`Detected: ${o.detectedAt}`, "", "Alert feed only — no bet is placed for you.");
+  return lines.join("\n");
 }
 
 function telegramText(o: Opportunity): string {
+  if (o.type === "cash") {
+    return [
+      `💰 GREEN CASH — ${o.match}, ${o.outcome} @ ${o.backOdds.toFixed(2)} back / ${o.layOdds.toFixed(2)} lay`,
+      `£${BACK_STAKE} locks in £${o.expectedProfit.toFixed(2)} (${o.bookmaker})`,
+    ].join("\n");
+  }
   return [
-    `⚡ ${o.match} (${o.league})`,
-    `Back ${o.outcome} @ ${o.backOdds.toFixed(2)} (${o.bookmaker})`,
-    `Lay @ ${o.layOdds.toFixed(2)} (gap ${o.gap.toFixed(2)})`,
-    `Lay stake £${o.layStake.toFixed(2)} | Liability £${o.liability.toFixed(2)}`,
-    `Profit +£${o.expectedProfit.toFixed(2)}`,
+    `🎯 FREE BET 100%+ — ${o.match}, ${o.outcome} @ ${o.backOdds.toFixed(2)} back / ${o.layOdds.toFixed(2)} lay`,
+    `£${BACK_STAKE} free bet retains £${o.freeBetProfit.toFixed(2)} (${o.retentionPct}%)`,
   ].join("\n");
 }
 
@@ -286,7 +360,9 @@ async function deliver(o: Opportunity): Promise<void> {
       body: JSON.stringify({
         from: EMAIL_FROM,
         to: [EMAIL_TO],
-        subject: `Lay alert: ${o.match} — ${o.outcome}`,
+        subject: o.type === "cash"
+          ? `GREEN CASH: ${o.match} — ${o.outcome}`
+          : `FREE BET 100%+: ${o.match} — ${o.outcome}`,
         text: emailText(o),
       }),
     });
@@ -324,7 +400,9 @@ export async function runAlertCheck(): Promise<{ checked: number; alerted: numbe
     }
   }
   saveSeen(seen);
-  log(`check done: ${opps.length} profitable, ${alerted} newly alerted`);
+  const cash = opps.filter((o) => o.type === "cash").length;
+  const freebet = opps.length - cash;
+  log(`check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted`);
   return { checked: opps.length, alerted };
 }
 
@@ -347,6 +425,10 @@ export function alertStatus() {
     intervalMin: CHECK_INTERVAL_MIN,
     cacheTtlMin: CACHE_TTL_MIN,
     oddsApiKey: Boolean(ODDS_API_KEY),
+    rules: {
+      cash: true, // GREEN CASH — cash qualifying profit > 0
+      freebet: true, // FREE BET 100%+ — SNR free bet retains more than its stake
+    },
   };
 }
 

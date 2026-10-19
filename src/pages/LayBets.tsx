@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   calcLay,
+  calcFreeBetProfit,
   layGap,
   qualifiesForLay,
   round2,
@@ -137,6 +138,8 @@ export default function LayBets() {
                 {opportunities.map((op) => {
                   const profitable = op.lay.profitLoss >= 0;
                   const isBest = profitable && round2(op.lay.profitLoss) === bestProfit;
+                  const freeBetProfit = calcFreeBetProfit(op.outcome.odds, op.outcome.layOdds, BACK_STAKE);
+                  const retentionPct = freeBetProfit != null ? Math.round((freeBetProfit / BACK_STAKE) * 100) : 0;
                   return (
                     <div
                       key={`${op.match.matchId}-${op.outcome.name}`}
@@ -199,12 +202,19 @@ export default function LayBets() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Free-bet retention (SNR) — highlighted when it retains > 100% */}
+                      {freeBetProfit != null && (
+                        <div className={`mt-3 rounded-lg px-3 py-1.5 text-xs ${freeBetProfit > BACK_STAKE ? "bg-green-50 font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300" : "bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                          Free bet £{BACK_STAKE} → {money(freeBetProfit)} ({retentionPct}%)
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Lay = betting <strong>against</strong> this outcome on the exchange (Betfair). Figures use a £20 back stake and include 5% exchange commission. Only rows with back odds under 2.8 and a lay gap under 0.1 are shown.
+                Lay = betting <strong>against</strong> this outcome on the exchange (Betfair). Figures use a £20 back stake and include 5% exchange commission. Only rows with back odds under 2.8 and a lay gap under 0.1 are shown. The free-bet line shows what a £20 stake-not-returned free bet on that outcome would retain — not a claim you hold one.
               </p>
             </>
           )}

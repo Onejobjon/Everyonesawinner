@@ -258,6 +258,29 @@ export function calcLay(
   return { layStake, liability, profitLoss };
 }
 
+/**
+ * Retained profit from laying a stake-not-returned (SNR) free bet on a single
+ * outcome. The free bet is backed at backOdds and laid at layOdds; the lay stake
+ * is sized so the result is the same whether the outcome wins or loses, and
+ * commission (5%) is deducted from the lay winnings only.
+ *
+ *   freeBetProfit = stake × (backOdds − 1) × (1 − commission) / (layOdds − commission)
+ *
+ * Returns null when there's no usable lay price (never fabricate a number).
+ * "Retention" = freeBetProfit / stake — how much of the free bet's value you
+ * keep. Above 1.0 (100%) means the exchange lay price sits below the bookmaker's
+ * back price, which is arb-grade and rare.
+ */
+export function calcFreeBetProfit(
+  backOdds: number,
+  layOdds: number | null,
+  stake = 20,
+  commission = COMMISSION
+): number | null {
+  if (!layOdds || layOdds <= commission || backOdds <= 1) return null;
+  return (stake * (backOdds - 1) * (1 - commission)) / (layOdds - commission);
+}
+
 export interface LayMetrics {
   /** Highest profit/loss across all outcomes in the match (best value lay) */
   bestProfit: number;
