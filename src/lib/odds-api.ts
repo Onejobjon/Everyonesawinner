@@ -74,6 +74,12 @@ export interface MatchOutcome {
   layOdds: number | null;
   /** Source of the lay odds ("Betfair" or "Smarkets") — null when no lay data */
   laySource: string | null;
+  /** Exchange bookmaker key providing the lay odds ("betfair_ex_uk" | "smarkets") — null when no lay data */
+  layBookmakerKey: string | null;
+  /** ISO last_update of the back bookmaker's h2h market — null when unknown */
+  backLastUpdate: string | null;
+  /** ISO last_update of the exchange lay bookmaker's h2h_lay market — null when no lay */
+  layLastUpdate: string | null;
   /** Full per-bookmaker back-odds matrix for this outcome (for 2up and similar) */
   bookmakerOdds: OutcomeBookmakerOdds[];
 }
@@ -90,6 +96,8 @@ export interface Match {
   commenceTime: string;
   /** All available outcomes (2 for most sports, 3 for soccer) */
   outcomes: MatchOutcome[];
+  /** Whether this match's league has genuine exchange lay coverage (Betfair/Smarkets quoting h2h_lay) */
+  hasLayCoverage: boolean;
   /** Warning message if bookmaker availability is limited */
   warning?: string;
 }
@@ -303,7 +311,12 @@ function getLeagueKey(sportKey: string): string {
 function findLayOdds(
   outcomeName: string,
   bookmakers: ApiBookmaker[]
-): { layOdds: number; laySource: string } | null {
+): {
+  layOdds: number;
+  laySource: string;
+  layBookmakerKey: string;
+  layLastUpdate: string | null;
+} | null {
   for (const key of LAY_SOURCES) {
     const bm = bookmakers.find((b) => b.key === key);
     if (!bm) continue;
@@ -313,10 +326,30 @@ function findLayOdds(
       (o) => o.name.toLowerCase() === outcomeName.toLowerCase()
     );
     if (outcome && outcome.price > 0) {
-      return { layOdds: outcome.price, laySource: bm.title };
+      return {
+        layOdds: outcome.price,
+        laySource: bm.title,
+        layBookmakerKey: bm.key,
+        layLastUpdate: market.last_update || bm.last_update || null,
+      };
     }
   }
   return null;
+}
+
+/**
+ * The back bookmaker's h2h market last_update (falls back to the bookmaker-level
+ * timestamp). Used by the alert worker's free-bet freshness guard to detect
+ * stale/mismatched back-vs-lay data. Returns null when the bookmaker is unknown.
+ */
+function getBackLastUpdate(
+  bookmakerTitle: string,
+  bookmakers: ApiBookmaker[]
+): string | null {
+  const bm = bookmakers.find((b) => b.title === bookmakerTitle);
+  if (!bm) return null;
+  const market = bm.markets.find((m) => m.key === "h2h");
+  return market?.last_update || bm.last_update || null;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -326,6 +359,22 @@ function findLayOdds(
  */
 export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
   const results: Match[] = [];
+
+  // First pass: which leagues (sport_keys) have genuine exchange lay coverage —
+  // Betfair or Smarkets quoting an h2h_lay market with a usable price for at
+  // least one match. The alert worker uses this to skip sparse-coverage leagues
+  // outright for the free-bet rule (a lone stale quote is not real coverage).
+  const layCoveredLeagues = new Set<string>();
+  for (const apiMatch of data) {
+    if (
+      apiMatch.bookmakers?.some((bm) =>
+        LAY_SOURCES.includes(bm.key) &&
+        bm.markets.some((m) => m.key === "h2h_lay" && m.outcomes.some((o) => o.price > 0))
+      )
+    ) {
+      layCoveredLeagues.add(apiMatch.sport_key);
+    }
+  }
 
   for (const apiMatch of data) {
     if (!apiMatch.bookmakers || apiMatch.bookmakers.length === 0) continue;
@@ -383,6 +432,7 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       leagueKey: getLeagueKey(apiMatch.sport_key),
       time: formatTime(apiMatch.commence_time),
       commenceTime: apiMatch.commence_time,
+      hasLayCoverage: layCoveredLeagues.has(apiMatch.sport_key),
       outcomes: sorted.map((o) => {
         const lay = findLayOdds(o.outcome, apiMatch.bookmakers);
         return {
@@ -392,6 +442,9 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
           return20: Math.round(20 * o.backOdds * 100) / 100,
           layOdds: lay ? lay.layOdds : null,
           laySource: lay ? lay.laySource : null,
+          layBookmakerKey: lay ? lay.layBookmakerKey : null,
+          backLastUpdate: getBackLastUpdate(o.bookmaker, apiMatch.bookmakers),
+          layLastUpdate: lay ? lay.layLastUpdate : null,
           bookmakerOdds: matrix.get(o.outcome.toLowerCase()) || [],
         };
       }),

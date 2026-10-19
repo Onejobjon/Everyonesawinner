@@ -24,14 +24,21 @@
 
 import { join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
-import { transformMatches } from "../lib/odds-api";
+import { transformMatches, type Match, type MatchOutcome } from "../lib/odds-api";
 import { ODDS_API_KEY } from "./odds-key";
-import { calcLay, calcFreeBetProfit, qualifiesForLay, layGap, round2, type Match } from "../lib/odds";
+import { calcLay, calcFreeBetProfit, qualifiesForLay, layGap, round2 } from "../lib/odds";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
 const MARKETS = "h2h,h2h_lay";
 const BACK_STAKE = 20;
+
+// Free-bet freshness guard: skip a freebet row unless the back and lay prices
+// were last updated within this window of each other. Stale or sparse exchange
+// lay data (e.g. minor-league ice hockey) can show lay < back, which would
+// otherwise fire fake "free bet >100%" alerts. The cash rule is unaffected —
+// its tight close-lay gap already bounds the harm.
+const FRESHNESS_MAX_GAP_MS = 60 * 60_000; // 60 minutes
 
 // ── Config (all env-var driven, safe defaults) ─────────────────────────────
 // How often the worker runs a check (minutes). Default 180 = every 3h.
@@ -80,9 +87,12 @@ type AlertType = "cash" | "freebet";
 interface BaseOpportunity {
   type: AlertType;
   matchId: string;
-  match: string;
+  match: string; // "Home vs Away" (webhook/email)
+  home: string;
+  away: string;
   league: string;
-  kickoff: string;
+  kickoff: string; // full ISO commence time (sorting)
+  kickoffTime: string; // HH:MM (display)
   bookmaker: string;
   outcome: string;
   backOdds: number;
@@ -153,13 +163,49 @@ async function getMatches(): Promise<Match[]> {
 
 // ── Filter ─────────────────────────────────────────────────────────────────
 
-function findOpportunities(matches: Match[]): Opportunity[] {
+/**
+ * Free-bet freshness guard. A free-bet >100% row is only trustworthy when:
+ *   (a) its league has genuine exchange lay coverage (Betfair/Smarkets quoting
+ *       h2h_lay), and
+ *   (b) both the back and lay prices have last_update timestamps within 60 min
+ *       of each other.
+ * Stale/sparse exchange lay data (minor leagues) can show lay < back and would
+ * otherwise fire fake alerts. The cash rule does not use this guard.
+ */
+function freebetRowIsFresh(m: Match, o: MatchOutcome): boolean {
+  if (!m.hasLayCoverage) return false;
+  const backTs = o.backLastUpdate ? Date.parse(o.backLastUpdate) : NaN;
+  const layTs = o.layLastUpdate ? Date.parse(o.layLastUpdate) : NaN;
+  if (!Number.isFinite(backTs) || !Number.isFinite(layTs)) return false;
+  return Math.abs(backTs - layTs) <= FRESHNESS_MAX_GAP_MS;
+}
+
+export function findOpportunities(
+  matches: Match[]
+): { opps: Opportunity[]; skippedSuspects: number } {
   const opps: Opportunity[] = [];
+  let skippedSuspects = 0;
   for (const m of matches) {
     for (const o of m.outcomes) {
       const back = o.odds;
       const lay = o.layOdds;
       if (!lay) continue;
+
+      const base = {
+        matchId: m.matchId,
+        match: `${m.home} vs ${m.away}`,
+        home: m.home,
+        away: m.away,
+        league: m.league,
+        kickoff: m.commenceTime,
+        kickoffTime: m.time,
+        bookmaker: o.bookmaker,
+        outcome: o.name,
+        backOdds: back,
+        layOdds: lay,
+        gap: layGap(back, lay),
+        detectedAt: new Date().toISOString(),
+      };
 
       // GREEN CASH — existing close-lay qualifying profit (back < 2.8, gap < 0.1).
       if (qualifiesForLay(back, lay)) {
@@ -167,19 +213,10 @@ function findOpportunities(matches: Match[]): Opportunity[] {
         if (c && c.profitLoss > 0) {
           opps.push({
             type: "cash",
-            matchId: m.matchId,
-            match: `${m.home} vs ${m.away}`,
-            league: m.league,
-            kickoff: m.commenceTime,
-            bookmaker: o.bookmaker,
-            outcome: o.name,
-            backOdds: back,
-            layOdds: lay,
-            gap: layGap(back, lay),
+            ...base,
             layStake: round2(c.layStake),
             liability: round2(c.liability),
             expectedProfit: round2(c.profitLoss),
-            detectedAt: new Date().toISOString(),
           });
         }
       }
@@ -189,20 +226,15 @@ function findOpportunities(matches: Match[]): Opportunity[] {
       // back price — genuinely rare, so expect few alerts (correct, not a bug).
       const fb = calcFreeBetProfit(back, lay, BACK_STAKE);
       if (fb && fb > BACK_STAKE) {
+        if (!freebetRowIsFresh(m, o)) {
+          skippedSuspects++;
+          continue;
+        }
         opps.push({
           type: "freebet",
-          matchId: m.matchId,
-          match: `${m.home} vs ${m.away}`,
-          league: m.league,
-          kickoff: m.commenceTime,
-          bookmaker: o.bookmaker,
-          outcome: o.name,
-          backOdds: back,
-          layOdds: lay,
-          gap: layGap(back, lay),
+          ...base,
           freeBetProfit: round2(fb),
           retentionPct: Math.round((fb / BACK_STAKE) * 100),
-          detectedAt: new Date().toISOString(),
         });
       }
     }
@@ -218,7 +250,7 @@ function findOpportunities(matches: Match[]): Opportunity[] {
     }
     return (b as FreebetOpportunity).freeBetProfit - (a as FreebetOpportunity).freeBetProfit;
   });
-  return opps;
+  return { opps, skippedSuspects };
 }
 
 // ── Dedup (persisted) ──────────────────────────────────────────────────────
@@ -318,17 +350,16 @@ function emailText(o: Opportunity): string {
   return lines.join("\n");
 }
 
-function telegramText(o: Opportunity): string {
-  if (o.type === "cash") {
-    return [
-      `💰 GREEN CASH — ${o.match}, ${o.outcome} @ ${o.backOdds.toFixed(2)} back / ${o.layOdds.toFixed(2)} lay`,
-      `£${BACK_STAKE} locks in £${o.expectedProfit.toFixed(2)} (${o.bookmaker})`,
-    ].join("\n");
-  }
-  return [
-    `🎯 FREE BET 100%+ — ${o.match}, ${o.outcome} @ ${o.backOdds.toFixed(2)} back / ${o.layOdds.toFixed(2)} lay`,
-    `£${BACK_STAKE} free bet retains £${o.freeBetProfit.toFixed(2)} (${o.retentionPct}%)`,
-  ].join("\n");
+export function telegramText(o: Opportunity): string {
+  // Owner format — max two short lines, one alert. League, lay stake,
+  // liability, gap and detected-at are deliberately omitted (the webhook
+  // payload keeps full data for automation).
+  const line1 =
+    o.type === "cash"
+      ? `💰 GREEN CASH — ${o.outcome} @ ${o.backOdds.toFixed(2)} back / ${o.layOdds.toFixed(2)} lay — £${BACK_STAKE} → ~£${o.expectedProfit.toFixed(2)}`
+      : `🎯 FREE BET 100%+ — ${o.outcome} @ ${o.backOdds.toFixed(2)} back / ${o.layOdds.toFixed(2)} lay — £${BACK_STAKE} free bet → £${o.freeBetProfit.toFixed(2)} (${o.retentionPct}%)`;
+  const line2 = `${o.home} v ${o.away} · ${o.bookmaker} · kicks off ${o.kickoffTime} · odds move fast`;
+  return [line1, line2].join("\n");
 }
 
 async function deliver(o: Opportunity): Promise<void> {
@@ -382,9 +413,13 @@ async function deliver(o: Opportunity): Promise<void> {
 
 // ── Orchestration ──────────────────────────────────────────────────────────
 
-export async function runAlertCheck(): Promise<{ checked: number; alerted: number }> {
+export async function runAlertCheck(): Promise<{
+  checked: number;
+  alerted: number;
+  skippedSuspects: number;
+}> {
   const matches = await getMatches();
-  const opps = findOpportunities(matches);
+  const { opps, skippedSuspects } = findOpportunities(matches);
   const seen = loadSeen();
 
   let alerted = 0;
@@ -402,8 +437,10 @@ export async function runAlertCheck(): Promise<{ checked: number; alerted: numbe
   saveSeen(seen);
   const cash = opps.filter((o) => o.type === "cash").length;
   const freebet = opps.length - cash;
-  log(`check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted`);
-  return { checked: opps.length, alerted };
+  log(
+    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} suspect rows skipped`
+  );
+  return { checked: opps.length, alerted, skippedSuspects };
 }
 
 export function hasAlertChannel(): boolean {
