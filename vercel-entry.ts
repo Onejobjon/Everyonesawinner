@@ -1,5 +1,12 @@
+// ⚠️ DEAD CODE on the Vercel custom domain. Vercel auto-builds the repo as a
+// static Vite SPA (vercel.json framework:"vite") and NEVER runs build-vercel.sh
+// or this file — so this render-function entry has no effect on the domain.
+// The real server routes for the domain are `api/*.ts` functions (see api/odds.ts).
+// This file only runs if go-live.sh is invoked manually (bunx vercel deploy
+// --prebuilt) — and even then it imports dist/server/server.js, which the
+// current client-SPA build no longer produces.
+//
 // Vercel Build Output API function entry.
-// (2026-10-20: trivial bump to force a fresh Vercel deploy+promotion cycle.)
 //
 // The Build Output Node launcher invokes the default export as a classic Node
 // `(req, res)` handler — NOT a web handler. TanStack Start emits a portable web
