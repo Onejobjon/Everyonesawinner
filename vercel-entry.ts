@@ -83,6 +83,15 @@ export default async function vercelHandler(
     // ("https://host/api/odds?…").
     const rawUrl = req.url ?? "/";
     const parsed = new URL(rawUrl, `https://${req.headers.host ?? "localhost"}`);
+    // Diagnostic marker: identifies responses served by THIS render function
+    // (vs a Vercel api/* function deployed by the platform's own builder).
+    if (parsed.pathname === "/api/who") {
+      await sendWebRes(
+        res,
+        Response.json({ ok: true, from: "render-function" })
+      );
+      return;
+    }
     if (parsed.pathname === "/api/odds") {
       const webRes = await oddsProxy(parsed);
       await sendWebRes(res, webRes);
