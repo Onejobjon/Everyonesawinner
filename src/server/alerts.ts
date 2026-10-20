@@ -61,7 +61,19 @@ const RUN_DIR = join(import.meta.dir, "../../.run");
 const CACHE_FILE = join(RUN_DIR, "alerts-cache.json");
 const SEEN_FILE = join(RUN_DIR, "alerts-seen.json");
 const LOG_FILE = join(RUN_DIR, "alerts.log");
+const HEALTH_FILE = join(RUN_DIR, "alerts-health.json");
 const SEEN_MAX = 4000; // cap the persisted dedup set so it can't grow unbounded
+
+// Live surfaces to health-check. Each must serve JSON odds for the site to be
+// "working". Overridable via env for portability. NOTE: these hit the /api/odds
+// proxy, which forwards to the odds API — so this costs odds-API quota. The
+// worker runs 3-hourly, so this adds ~2 odds-API calls per scan.
+const HEALTH_PLATFORM_URL =
+  process.env.HEALTH_PLATFORM_URL ||
+  "https://515136800b641762e9aace79427eb7c4.ctonew.app/api/odds?sport=upcoming";
+const HEALTH_DOMAIN_URL =
+  process.env.HEALTH_DOMAIN_URL ||
+  "https://www.everyonesawinner.uk/api/odds?sport=upcoming";
 
 function num(v: string | undefined, dflt: number): number {
   const n = Number(v);
@@ -385,12 +397,73 @@ async function deliver(o: Opportunity): Promise<void> {
   }
 
   // C — Telegram (optional)
-  if (TG_TOKEN && TG_CHAT_ID) {
-    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: TG_CHAT_ID, text: telegramText(o) }),
-    });
+  await postTelegram(telegramText(o));
+}
+
+/** Send a raw Telegram message (no-op unless the channel is configured). */
+async function postTelegram(text: string): Promise<void> {
+  if (!TG_TOKEN || !TG_CHAT_ID) return;
+  await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: TG_CHAT_ID, text }),
+  });
+}
+
+// ── Site health check (never-again monitoring) ──────────────────────────────
+// The custom-domain incident (odds broken for days) happened because /api/odds
+// fell through to the SPA on Vercel and nobody noticed. This re-checks both
+// live surfaces each worker scan and pings Telegram after TWO consecutive
+// broken scans.
+
+interface HealthState {
+  platformBroken: number;
+  domainBroken: number;
+}
+
+function loadHealth(): HealthState {
+  try {
+    if (existsSync(HEALTH_FILE)) return JSON.parse(readFileSync(HEALTH_FILE, "utf8")) as HealthState;
+  } catch { /* ignore */ }
+  return { platformBroken: 0, domainBroken: 0 };
+}
+
+function saveHealth(h: HealthState): void {
+  try {
+    mkdirSync(RUN_DIR, { recursive: true });
+    writeFileSync(HEALTH_FILE, JSON.stringify(h));
+  } catch { /* logging must never break the worker */ }
+}
+
+async function isOddsHealthy(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) return false;
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("json")) return false;
+    const data = (await res.json()) as unknown;
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function checkSiteHealth(): Promise<void> {
+  const h = loadHealth();
+  const [platformOk, domainOk] = await Promise.all([
+    isOddsHealthy(HEALTH_PLATFORM_URL),
+    isOddsHealthy(HEALTH_DOMAIN_URL),
+  ]);
+  h.platformBroken = platformOk ? 0 : h.platformBroken + 1;
+  h.domainBroken = domainOk ? 0 : h.domainBroken + 1;
+  saveHealth(h);
+  if (h.platformBroken === 2) {
+    log("health: platform URL odds broken for 2 consecutive scans");
+    await postTelegram("⚠️ Site odds are broken on the platform URL — investigating");
+  }
+  if (h.domainBroken === 2) {
+    log("health: domain odds broken for 2 consecutive scans");
+    await postTelegram("⚠️ Site odds are broken on the live domain — investigating");
   }
 }
 
@@ -401,6 +474,11 @@ export async function runAlertCheck(): Promise<{
   alerted: number;
   skippedSuspects: number;
 }> {
+  try {
+    await checkSiteHealth();
+  } catch (e) {
+    log(`health check failed: ${String(e)}`);
+  }
   const matches = await getMatches();
   const { opps, skippedSuspects } = findOpportunities(matches);
   const seen = loadSeen();
