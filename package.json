@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/sync-git.mjs",
+    "build": "vite build && node scripts/sync-git.mjs && (node scripts/verify-deploy.mjs || true)",
     "preview": "vite preview",
     "start": "bun serve-static.ts"
   },

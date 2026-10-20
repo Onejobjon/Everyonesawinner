@@ -27,6 +27,13 @@ const MIME: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8",
 };
 
+// Server-side odds cache (in-memory, TTL 15 min). Mirrors api/odds.ts so the
+// platform URL and the Vercel domain behave the same: repeated /api/odds hits
+// within the window serve the cached upstream body instead of re-fetching
+// the-odds-api.com (protects the free 500 req/month odds quota).
+const ODDS_CACHE_TTL_MS = 15 * 60 * 1000;
+const oddsCache = new Map<string, { body: string; status: number; ok: boolean; ts: number }>();
+
 // Free port 3000 if a previous server (any user) still holds it.
 const freePort =
   `for _ in $(seq 1 25); do ` +
@@ -78,9 +85,21 @@ const server = Bun.serve({
         sport === "upcoming"
           ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`
           : `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`;
+
+      const hit = oddsCache.get(target);
+      if (hit && Date.now() - hit.ts < ODDS_CACHE_TTL_MS) {
+        const headers: Record<string, string> = { "content-type": "application/json" };
+        if (hit.ok) headers["cache-control"] = "public, max-age=300";
+        return new Response(hit.body, { status: hit.status, headers });
+      }
+
       try {
         const upstream = await fetch(target);
         const body = await upstream.text();
+        // Only cache successful upstream responses — never pin a transient error.
+        if (upstream.ok) {
+          oddsCache.set(target, { body, status: upstream.status, ok: true, ts: Date.now() });
+        }
         const headers: Record<string, string> = { "content-type": "application/json" };
         if (upstream.ok) headers["cache-control"] = "public, max-age=300";
         return new Response(body, { status: upstream.status, headers });

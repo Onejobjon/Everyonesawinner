@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
 # Worker watchdog — keeps serve-static.ts (which embeds the alert worker) alive
-# across machine replacements. Check port 3000; restart if not listening.
+# across PROCESS crashes. Check port 3000; restart if not listening.
 #
-# Schedule every minute. NOTE: crontab is NOT available in this sandbox
-# (`crontab: command not found`), so this is invoked by an external scheduler on
-# the production host. On a host with cron:
+# This script is meant to be run every 60s by scripts/watchdog-loop.sh (an
+# in-process `while true` loop), since crontab is NOT available in this sandbox.
+# On a host WITH cron you can instead schedule it directly:
 #   * * * * *  cd /home/team/shared/site && bash scripts/watchdog.sh >> .run/watchdog.log 2>&1
+#
+# RESTART PROCEDURE — start BOTH the server and the watchdog loop, passing the
+# owner's Telegram secrets inline so the alert worker keeps its channel across
+# any crash restart (the base shell env does NOT carry them):
+#
+#   1. Start the server:
+#        nohup env TELEGRAM_BOT_TOKEN="<token>" TELEGRAM_CHAT_ID="<chat>" \
+#          bun serve-static.ts >> .run/serve.log 2>&1 &
+#   2. Start the watchdog loop:
+#        nohup env TELEGRAM_BOT_TOKEN="<token>" TELEGRAM_CHAT_ID="<chat>" \
+#          bash scripts/watchdog-loop.sh >> .run/watchdog-loop.log 2>&1 &
 set -u
 cd "$(dirname "$0")/.."
 
@@ -17,7 +28,8 @@ fi
 echo "[watchdog $(date -u +%Y-%m-%dT%H:%M:%SZ)] port 3000 down — restarting serve-static.ts"
 mkdir -p .run
 
-# Restart with owner secrets inline (inherited from this process's env, which the
-# platform re-injects with the owner's secrets — same pattern as sync-git.mjs).
-nohup bun serve-static.ts >> .run/serve.log 2>&1 &
+# Restart with the owner's Telegram secrets inline (inherited from this process's
+# env, which the watchdog loop re-injects), so the alert worker keeps its channel.
+nohup env TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}" \
+  bun serve-static.ts >> .run/serve.log 2>&1 &
 echo "[watchdog] restarted (pid $!)"

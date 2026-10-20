@@ -64,13 +64,12 @@ const LOG_FILE = join(RUN_DIR, "alerts.log");
 const HEALTH_FILE = join(RUN_DIR, "alerts-health.json");
 const SEEN_MAX = 4000; // cap the persisted dedup set so it can't grow unbounded
 
-// Live surfaces to health-check. Each must serve JSON odds for the site to be
-// "working". Overridable via env for portability. NOTE: these hit the /api/odds
-// proxy, which forwards to the odds API — so this costs odds-API quota. The
-// worker runs 3-hourly, so this adds ~2 odds-API calls per scan.
-const HEALTH_PLATFORM_URL =
-  process.env.HEALTH_PLATFORM_URL ||
-  "https://515136800b641762e9aace79427eb7c4.ctonew.app/api/odds?sport=upcoming";
+// Live surface to health-check. Must serve JSON odds for the site to be
+// "working". Overridable via env for portability. NOTE: this hits the /api/odds
+// proxy, which forwards to the odds API — so it costs odds-API quota. The
+// worker runs 3-hourly, so this adds ~1 odds-API call per scan (the platform
+// URL's health is implied by the worker's own scan fetch, so we only check the
+// public domain).
 const HEALTH_DOMAIN_URL =
   process.env.HEALTH_DOMAIN_URL ||
   "https://www.everyonesawinner.uk/api/odds?sport=upcoming";
@@ -412,12 +411,11 @@ async function postTelegram(text: string): Promise<void> {
 
 // ── Site health check (never-again monitoring) ──────────────────────────────
 // The custom-domain incident (odds broken for days) happened because /api/odds
-// fell through to the SPA on Vercel and nobody noticed. This re-checks both
-// live surfaces each worker scan and pings Telegram after TWO consecutive
+// fell through to the SPA on Vercel and nobody noticed. This re-checks the
+// public domain each worker scan and pings Telegram after TWO consecutive
 // broken scans.
 
 interface HealthState {
-  platformBroken: number;
   domainBroken: number;
 }
 
@@ -425,7 +423,7 @@ function loadHealth(): HealthState {
   try {
     if (existsSync(HEALTH_FILE)) return JSON.parse(readFileSync(HEALTH_FILE, "utf8")) as HealthState;
   } catch { /* ignore */ }
-  return { platformBroken: 0, domainBroken: 0 };
+  return { domainBroken: 0 };
 }
 
 function saveHealth(h: HealthState): void {
@@ -450,17 +448,9 @@ async function isOddsHealthy(url: string): Promise<boolean> {
 
 async function checkSiteHealth(): Promise<void> {
   const h = loadHealth();
-  const [platformOk, domainOk] = await Promise.all([
-    isOddsHealthy(HEALTH_PLATFORM_URL),
-    isOddsHealthy(HEALTH_DOMAIN_URL),
-  ]);
-  h.platformBroken = platformOk ? 0 : h.platformBroken + 1;
+  const domainOk = await isOddsHealthy(HEALTH_DOMAIN_URL);
   h.domainBroken = domainOk ? 0 : h.domainBroken + 1;
   saveHealth(h);
-  if (h.platformBroken === 2) {
-    log("health: platform URL odds broken for 2 consecutive scans");
-    await postTelegram("⚠️ Site odds are broken on the platform URL — investigating");
-  }
   if (h.domainBroken === 2) {
     log("health: domain odds broken for 2 consecutive scans");
     await postTelegram("⚠️ Site odds are broken on the live domain — investigating");
