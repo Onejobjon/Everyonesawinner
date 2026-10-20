@@ -4,7 +4,6 @@ import Home from "./pages/Home";
 import Calculator from "./pages/Calculator";
 import Oddsmatcher from "./pages/Oddsmatcher";
 import LayBets from "./pages/LayBets";
-import AccaFinder from "./pages/AccaFinder";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
 import Logout from "./pages/Logout";
@@ -21,7 +20,8 @@ export default function App() {
         <Route path="/calculator" element={<Calculator />} />
         <Route path="/oddsmatcher" element={<Oddsmatcher />} />
         <Route path="/lay-bets" element={<LayBets />} />
-        <Route path="/acca-finder" element={<AccaFinder />} />
+        {/* Acca Finder is merged into the Lay Bet Finder (single tool, legs 1–4) */}
+        <Route path="/acca-finder" element={<Navigate to="/lay-bets" replace />} />
         {/* World Cup is over — redirect old links to the Lay Bet Finder */}
         <Route path="/world-cup" element={<Navigate to="/lay-bets" replace />} />
         <Route path="/signup" element={<Signup />} />

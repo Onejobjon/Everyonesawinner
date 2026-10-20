@@ -21,6 +21,11 @@ const LS_TTL_MS = 7_200_000; // 2 hours in localStorage (across sessions)
 // Separate caches per sport endpoint
 const caches: Record<string, { data: ApiMatch[]; ts: number }> = {};
 
+// When each sport's odds were actually last fetched from the API (network),
+// per sport. Distinct from the in-memory TTL `ts` — this drives the
+// "Odds updated Xm ago" stamp.
+const fetchedAt: Record<string, number> = {};
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface ApiOutcome {
@@ -112,7 +117,7 @@ function lsKey(sport: string): string {
   return `eaw_odds_cache_v2_${sport}`;
 }
 
-function loadFromLS(sport: string): ApiMatch[] | null {
+function loadFromLS(sport: string): { data: ApiMatch[]; ts: number } | null {
   try {
     const key = lsKey(sport);
     const raw = localStorage.getItem(key);
@@ -122,7 +127,7 @@ function loadFromLS(sport: string): ApiMatch[] | null {
       localStorage.removeItem(key);
       return null;
     }
-    return parsed.data as ApiMatch[];
+    return { data: parsed.data as ApiMatch[], ts: parsed.ts };
   } catch {
     return null;
   }
@@ -146,8 +151,9 @@ async function fetchOdds(sportKey = "upcoming"): Promise<ApiMatch[]> {
   // 2. Check localStorage
   const lsData = loadFromLS(sportKey);
   if (lsData) {
-    caches[sportKey] = { data: lsData, ts: now };
-    return lsData;
+    caches[sportKey] = { data: lsData.data, ts: now };
+    fetchedAt[sportKey] = lsData.ts;
+    return lsData.data;
   }
 
   // 3. Fetch from our server proxy (the API key is server-side, never in the client).
@@ -162,8 +168,19 @@ async function fetchOdds(sportKey = "upcoming"): Promise<ApiMatch[]> {
 
   const data: ApiMatch[] = await res.json();
   caches[sportKey] = { data, ts: now };
+  fetchedAt[sportKey] = now;
   saveToLS(sportKey, data);
   return data;
+}
+
+/**
+ * Age in milliseconds of the odds currently cached for a sport — i.e. how long
+ * ago they were last fetched from the API. Returns null when we haven't fetched
+ * (or loaded a cache entry) for that sport yet.
+ */
+export function getOddsAgeMs(sportKey = "upcoming"): number | null {
+  const t = fetchedAt[sportKey];
+  return t == null ? null : Date.now() - t;
 }
 
 // ── Transform ──────────────────────────────────────────────────────────────

@@ -159,7 +159,6 @@ function Nav() {
           <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Features</a>
           <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Best Odds</Link>
           <Link to="/lay-bets" className="text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 transition-colors">⚡ Lay Bets</Link>
-          <Link to="/acca-finder" className="text-sm font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 transition-colors">Acca Finder</Link>
           <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Sign in</Link>
           <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">Get Started</Link>
         </div>
@@ -172,7 +171,6 @@ function Nav() {
           <a href="#features" className="text-sm font-medium text-gray-600 dark:text-gray-400">Features</a>
           <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 dark:text-gray-400">Best Odds</Link>
           <Link to="/lay-bets" className="text-sm font-medium text-purple-600 dark:text-purple-400">⚡ Lay Bets</Link>
-          <Link to="/acca-finder" className="text-sm font-medium text-amber-600 dark:text-amber-400">Acca Finder</Link>
           <Link to="/login" className="text-sm font-medium text-gray-600 dark:text-gray-400">Sign in</Link>
           <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white text-center">Get Started</Link>
         </div>
@@ -207,7 +205,6 @@ function Footer() {
               <li><a href="#how-it-works" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">How it works</a></li>
               <li><a href="#faq" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">FAQ</a></li>
               <li><Link to="/lay-bets" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Lay Bet Finder</Link></li>
-              <li><Link to="/acca-finder" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Acca Finder</Link></li>
               <li><Link to="/oddsmatcher" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Best Odds Finder</Link></li>
             </ul>
           </div>
