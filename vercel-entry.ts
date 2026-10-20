@@ -11,6 +11,43 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import handler from "./dist/server/server.js";
+import { ODDS_API_KEY } from "./src/server/odds-key";
+
+// ── Odds proxy (parity with serve-static.ts) ────────────────────────────────
+// The client fetches /api/odds?sport=… — a server-side proxy that attaches the
+// key. Without this route on Vercel, the request falls through to the SPA and
+// the client gets HTML back, so the custom domain shows NO odds (the platform
+// URL was unaffected because serve-static implements the route there).
+const oddsProxy = async (url: URL): Promise<Response> => {
+  const sport = url.searchParams.get("sport") || "upcoming";
+  const target =
+    sport === "upcoming"
+      ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`
+      : `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`;
+  try {
+    const upstream = await fetch(target);
+    const body = await upstream.text();
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (upstream.ok) headers["cache-control"] = "public, max-age=300";
+    return new Response(body, { status: upstream.status, headers });
+  } catch {
+    return Response.json({ error: "odds proxy failed" }, { status: 502 });
+  }
+};
+
+const sendWebRes = async (res: ServerResponse, webRes: Response): Promise<void> => {
+  res.statusCode = webRes.status;
+  webRes.headers.forEach((value, key) => res.setHeader(key, value));
+  if (webRes.body) {
+    const reader = webRes.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(value);
+    }
+  }
+  res.end();
+};
 
 const fetchHandler = handler as {
   fetch: (request: Request) => Response | Promise<Response>;
@@ -39,18 +76,17 @@ export default async function vercelHandler(
   res: ServerResponse
 ): Promise<void> {
   try {
-    const webRes = await fetchHandler.fetch(toWebRequest(req));
-    res.statusCode = webRes.status;
-    webRes.headers.forEach((value, key) => res.setHeader(key, value));
-    if (webRes.body) {
-      const reader = webRes.body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-      }
+    // Intercept the odds proxy before the SSR handoff (SSR app has no
+    // /api/odds route — see comment above).
+    const rawUrl = req.url ?? "/";
+    if (rawUrl.split("?")[0] === "/api/odds") {
+      const host = req.headers.host ?? "localhost";
+      const webRes = await oddsProxy(new URL(rawUrl, `https://${host}`));
+      await sendWebRes(res, webRes);
+      return;
     }
-    res.end();
+    const webRes = await fetchHandler.fetch(toWebRequest(req));
+    await sendWebRes(res, webRes);
   } catch (error) {
     // Log the detail server-side (captured by the host's function logs); never
     // return a stack trace to the public visitor of the site.
