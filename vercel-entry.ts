@@ -78,11 +78,13 @@ export default async function vercelHandler(
 ): Promise<void> {
   try {
     // Intercept the odds proxy before the SSR handoff (SSR app has no
-    // /api/odds route — see comment above).
+    // /api/odds route — see comment above). Parse with a base so this works
+    // whether the launcher passes a path ("/api/odds?…") or an absolute URL
+    // ("https://host/api/odds?…").
     const rawUrl = req.url ?? "/";
-    if (rawUrl.split("?")[0] === "/api/odds") {
-      const host = req.headers.host ?? "localhost";
-      const webRes = await oddsProxy(new URL(rawUrl, `https://${host}`));
+    const parsed = new URL(rawUrl, `https://${req.headers.host ?? "localhost"}`);
+    if (parsed.pathname === "/api/odds") {
+      const webRes = await oddsProxy(parsed);
       await sendWebRes(res, webRes);
       return;
     }
