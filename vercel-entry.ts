@@ -1,4 +1,5 @@
 // Vercel Build Output API function entry.
+// (2026-10-20: trivial bump to force a fresh Vercel deploy+promotion cycle.)
 //
 // The Build Output Node launcher invokes the default export as a classic Node
 // `(req, res)` handler — NOT a web handler. TanStack Start emits a portable web
