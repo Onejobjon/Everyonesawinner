@@ -90,6 +90,8 @@ export interface Match {
   away: string;
   league: string;
   leagueKey: string;
+  /** Raw The Odds API sport_key (e.g. "soccer_epl") — for the sport-category filter. */
+  sportKey: string;
   /** Kick-off time, HH:MM (local) */
   time: string;
   /** Full ISO commence time for accurate sorting */
@@ -430,6 +432,7 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       away: apiMatch.away_team,
       league: apiMatch.sport_title,
       leagueKey: getLeagueKey(apiMatch.sport_key),
+      sportKey: apiMatch.sport_key,
       time: formatTime(apiMatch.commence_time),
       commenceTime: apiMatch.commence_time,
       hasLayCoverage: layCoveredLeagues.has(apiMatch.sport_key),
