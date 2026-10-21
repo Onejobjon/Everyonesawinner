@@ -378,6 +378,10 @@ function getBackLastUpdate(
  */
 export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
   const results: Match[] = [];
+  // Pre-match only (owner's "nothing in-play" directive): drop any match whose
+  // commence_time is already in the past. Applied by the site and alert worker
+  // alike — a started match must never show or alert.
+  const now = Date.now();
 
   // First pass: which leagues (sport_keys) have genuine exchange lay coverage —
   // Betfair or Smarkets quoting an h2h_lay market with a usable price for at
@@ -396,6 +400,9 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
   }
 
   for (const apiMatch of data) {
+    // Drop already-kicked-off matches (see `now` above). NaN (unparseable
+    // commence_time) is treated as "unknown" and kept, not silently dropped.
+    if (new Date(apiMatch.commence_time).getTime() <= now) continue;
     if (!apiMatch.bookmakers || apiMatch.bookmakers.length === 0) continue;
 
     const allOutcomes: ApiOutcome[] = [];

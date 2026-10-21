@@ -40,6 +40,10 @@ const BACK_STAKE = 20;
 // its tight close-lay gap already bounds the harm.
 const FRESHNESS_MAX_GAP_MS = 60 * 60_000; // 60 minutes
 
+// Minimum lead time an alert needs to be actionable: the user must be able to
+// place the back AND lay before kick-off. Anything closer than this is skipped.
+const ACTIONABILITY_BUFFER_MS = 15 * 60_000; // 15 minutes
+
 // ── Config (all env-var driven, safe defaults) ─────────────────────────────
 // How often the worker runs a check (minutes). Default 60 = hourly.
 const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, 60);
@@ -201,10 +205,33 @@ function freebetRowIsFresh(m: Match, o: MatchOutcome): boolean {
 
 export function findOpportunities(
   matches: Match[]
-): { opps: Opportunity[]; skippedSuspects: number } {
+): {
+  opps: Opportunity[];
+  skippedSuspects: number;
+  skippedStarted: number;
+  skippedTooSoon: number;
+} {
   const opps: Opportunity[] = [];
   let skippedSuspects = 0;
+  let skippedStarted = 0;
+  let skippedTooSoon = 0;
+  const now = Date.now();
   for (const m of matches) {
+    // Defense-in-depth on top of the transform guard (which drops started
+    // matches at fetch): the worker's on-disk cache can still hold a match for
+    // up to CACHE_TTL_MIN after it kicks off, so re-check commence_time here.
+    const kickoffMs = Date.parse(m.commenceTime);
+    if (Number.isFinite(kickoffMs) && kickoffMs <= now) {
+      skippedStarted++;
+      continue;
+    }
+    // An alert arriving with <15 min to kick-off isn't actionable (the user
+    // needs time to place the back AND lay). Too-soon candidates stay out of
+    // the seen-list, so they can still alert on a later scan if still open.
+    if (Number.isFinite(kickoffMs) && kickoffMs - now < ACTIONABILITY_BUFFER_MS) {
+      skippedTooSoon++;
+      continue;
+    }
     for (const o of m.outcomes) {
       const back = o.odds;
       const lay = o.layOdds;
@@ -269,7 +296,7 @@ export function findOpportunities(
     }
     return (b as FreebetOpportunity).freeBetProfit - (a as FreebetOpportunity).freeBetProfit;
   });
-  return { opps, skippedSuspects };
+  return { opps, skippedSuspects, skippedStarted, skippedTooSoon };
 }
 
 // ── Dedup (persisted) ──────────────────────────────────────────────────────
@@ -471,6 +498,8 @@ export async function runAlertCheck(): Promise<{
   checked: number;
   alerted: number;
   skippedSuspects: number;
+  skippedStarted: number;
+  skippedTooSoon: number;
 }> {
   try {
     await checkSiteHealth();
@@ -478,7 +507,7 @@ export async function runAlertCheck(): Promise<{
     log(`health check failed: ${String(e)}`);
   }
   const matches = await getMatches();
-  const { opps, skippedSuspects } = findOpportunities(matches);
+  const { opps, skippedSuspects, skippedStarted, skippedTooSoon } = findOpportunities(matches);
   const seen = loadSeen();
 
   let alerted = 0;
@@ -497,9 +526,9 @@ export async function runAlertCheck(): Promise<{
   const cash = opps.filter((o) => o.type === "cash").length;
   const freebet = opps.length - cash;
   log(
-    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} suspect rows skipped`
+    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} suspect rows skipped, skipped started: ${skippedStarted}, too-soon: ${skippedTooSoon}`
   );
-  return { checked: opps.length, alerted, skippedSuspects };
+  return { checked: opps.length, alerted, skippedSuspects, skippedStarted, skippedTooSoon };
 }
 
 export function hasAlertChannel(): boolean {

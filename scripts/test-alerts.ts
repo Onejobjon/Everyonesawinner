@@ -53,7 +53,9 @@ function mkMatch(
     league: "Test League",
     leagueKey: "test_league",
     time: "20:00",
-    commenceTime: "2026-10-19T20:00:00Z",
+    // Default kick-off 2h in the future (relative to real `now`) so a plain
+    // mkMatch is actionable under the new started/too-soon guards.
+    commenceTime: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
     outcomes,
     hasLayCoverage: true,
     ...rest,
@@ -209,6 +211,48 @@ console.log("7) Telegram format — freebet (two short lines, trimmed fields)");
     assert(lines[1] === "Team A v Team B · Sky Bet · kicks off 20:00 · odds move fast", `line2 ok: "${lines[1]}"`);
     assert(!/lay stake|liability|gap|detected|league/i.test(text), "no lay-stake/liability/gap/detected/league tokens");
   }
+}
+
+console.log("8) Started match (past commence_time) → does NOT alert");
+{
+  const m = mkMatch({
+    home: "FC Tokyo",
+    away: "V-Varen Nagasaki",
+    commenceTime: new Date(Date.now() - 30 * 60_000).toISOString(), // kicked off 30 min ago
+    outcomes: [mkOutcome({ name: "FC Tokyo", odds: 2.0, layOdds: 1.9 })],
+  });
+  const { opps, skippedStarted, skippedTooSoon } = findOpportunities([m]);
+  assert(opps.length === 0, `no opportunity (got ${opps.length})`);
+  assert(skippedStarted === 1, `1 started match skipped (got ${skippedStarted})`);
+  assert(skippedTooSoon === 0, `0 too-soon skipped (got ${skippedTooSoon})`);
+}
+
+console.log("9) Match 5 min from kick-off → does NOT alert (too soon to act)");
+{
+  const m = mkMatch({
+    home: "Arsenal",
+    away: "Chelsea",
+    commenceTime: new Date(Date.now() + 5 * 60_000).toISOString(), // 5 min away
+    outcomes: [mkOutcome({ name: "Arsenal", odds: 2.0, layOdds: 1.9 })],
+  });
+  const { opps, skippedStarted, skippedTooSoon } = findOpportunities([m]);
+  assert(opps.length === 0, `no opportunity (got ${opps.length})`);
+  assert(skippedStarted === 0, `0 started skipped (got ${skippedStarted})`);
+  assert(skippedTooSoon === 1, `1 too-soon match skipped (got ${skippedTooSoon})`);
+}
+
+console.log("10) Match 2h from kick-off → alerts");
+{
+  const m = mkMatch({
+    home: "Lille",
+    away: "Galatasaray",
+    commenceTime: new Date(Date.now() + 2 * 60 * 60_000).toISOString(), // 2h away
+    outcomes: [mkOutcome({ name: "Lille", odds: 2.0, layOdds: 1.9 })],
+  });
+  const { opps, skippedStarted, skippedTooSoon } = findOpportunities([m]);
+  assert(opps.length === 1, `exactly 1 opportunity (got ${opps.length})`);
+  assert(skippedStarted === 0, `0 started skipped (got ${skippedStarted})`);
+  assert(skippedTooSoon === 0, `0 too-soon skipped (got ${skippedTooSoon})`);
 }
 
 console.log("");
