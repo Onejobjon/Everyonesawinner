@@ -8,6 +8,7 @@ import {
   round2,
   COMMISSION,
   type LayCalc,
+  type FreeBetType,
 } from "../lib/odds";
 import { sequentialLayPlan, type AccaPlan } from "../lib/acca";
 import {
@@ -21,10 +22,13 @@ import Markdown from "../components/Markdown";
 import layGuide from "../content/lay-betting-guide.md?raw";
 import accaGuide from "../content/acca-betting-guide.md?raw";
 
-const BACK_STAKE = 20;
-const FREE_STAKE = 10; // acca free-bet stake (stake-not-returned)
+const BACK_STAKE = 20; // cash qualifying back stake (singles' lay stake/liability)
+const DEFAULT_FREE_STAKE = "10"; // free-bet stake default (singles + accas)
 const TOP_N = 10;
 const MAX_MATCHES = 24; // soonest matches considered — bounds the acca search
+
+const LS_FILTERS_KEY = "eaw_laybets_filters_v1";
+const LS_FREE_KEY = "eaw_laybets_free_v1";
 
 // Acca leg-quality guard: realistic back odds + a real, close exchange lay price.
 const MIN_LEG_ODDS = 1.1;
@@ -93,6 +97,76 @@ function parseMinOdds(raw: string): number {
   return Number.isFinite(n) && n >= 1 ? n : 1;
 }
 
+/** Parse the free-bet stake text (empty/invalid → default £10). */
+function parseStake(raw: string): number {
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : 10;
+}
+
+/** Convert a draft (raw min-odds text) into applied filters. */
+function toFilters(d: DraftFilters): Filters {
+  return {
+    legs: d.legs,
+    category: d.category,
+    bookmaker: d.bookmaker,
+    minOdds: parseMinOdds(d.minOdds),
+  };
+}
+
+/** Last-used controls, so the page can auto-run on open (zero-click). */
+function loadFilters(): DraftFilters {
+  try {
+    const raw = localStorage.getItem(LS_FILTERS_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<DraftFilters>;
+      if (p && typeof p.legs === "number") {
+        return {
+          legs: p.legs,
+          category: typeof p.category === "string" ? p.category : "all",
+          bookmaker: typeof p.bookmaker === "string" ? p.bookmaker : "all",
+          minOdds: typeof p.minOdds === "string" ? p.minOdds : DEFAULT_FILTERS.minOdds,
+        };
+      }
+    }
+  } catch {
+    /* corrupted/stale — fall back to defaults */
+  }
+  return DEFAULT_FILTERS;
+}
+
+function persistFilters(d: DraftFilters): void {
+  try {
+    localStorage.setItem(LS_FILTERS_KEY, JSON.stringify(d));
+  } catch {
+    /* localStorage can throw in private mode — non-fatal */
+  }
+}
+
+/** Last-used free-bet stake + type. */
+function loadFree(): { stake: string; type: FreeBetType } {
+  try {
+    const raw = localStorage.getItem(LS_FREE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as { stake?: string; type?: FreeBetType };
+      return {
+        stake: typeof p.stake === "string" && p.stake.length > 0 ? p.stake : DEFAULT_FREE_STAKE,
+        type: p.type === "sr" ? "sr" : "snr",
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+  return { stake: DEFAULT_FREE_STAKE, type: "snr" };
+}
+
+function persistFree(v: { stake: string; type: FreeBetType }): void {
+  try {
+    localStorage.setItem(LS_FREE_KEY, JSON.stringify(v));
+  } catch {
+    /* non-fatal */
+  }
+}
+
 function sportCategory(sportKey: string): string {
   return sportKey.split("_")[0];
 }
@@ -133,7 +207,8 @@ function usableLegs(m: Match): MatchOutcome[] {
 /** Build cross-match multi-leg bets (each leg from a different match, laid in order). */
 function buildAccas(
   matchesWithLegs: MatchWithLegs[],
-  legCount: number
+  legCount: number,
+  freeStake: number
 ): AccaCandidate[] {
   const out: AccaCandidate[] = [];
   const current: LegPick[] = [];
@@ -142,7 +217,7 @@ function buildAccas(
     if (current.length === legCount) {
       const plan = sequentialLayPlan(
         current.map((l) => ({ backOdds: l.outcome.odds, layOdds: l.outcome.layOdds! })),
-        FREE_STAKE
+        freeStake
       );
       if (plan) {
         out.push({ legs: [...current], plan });
@@ -169,19 +244,35 @@ export default function LayBets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Draft = the controls being edited; filters = applied when the user hits Run.
-  const [draft, setDraft] = useState<DraftFilters>(DEFAULT_FILTERS);
-  const [filters, setFilters] = useState<Filters | null>(null);
+  // Instant-on-open: load last-used controls and apply them immediately so
+  // results are visible with zero clicks (once the cached odds arrive).
+  const [draft, setDraft] = useState<DraftFilters>(loadFilters);
+  const [filters, setFilters] = useState<Filters>(() => toFilters(loadFilters()));
 
-  // Apply the draft as the active filter, parsing/clamping the min-odds text.
-  const run = () => {
-    setFilters({
-      legs: draft.legs,
-      category: draft.category,
-      bookmaker: draft.bookmaker,
-      minOdds: parseMinOdds(draft.minOdds),
-    });
+  // Free-bet mode: stake (£) + type. Singles use both; accas switch their stake
+  // to this value (always SNR — the sequential-lay engine is SNR-only).
+  const [free, setFree] = useState<{ stake: string; type: FreeBetType }>(loadFree);
+  const stakeVal = parseStake(free.stake);
+
+  // Apply a draft as the active filters (parsing the min-odds text) and persist
+  // it — used by control changes so the power flow auto-re-runs (no API cost).
+  const apply = (next: DraftFilters) => {
+    setDraft(next);
+    setFilters(toFilters(next));
   };
+
+  // Run button: normalise the min-odds text, then apply.
+  const run = () => {
+    apply({ ...draft, minOdds: String(parseMinOdds(draft.minOdds)) });
+  };
+
+  // Persist last-used controls + free-bet settings across visits.
+  useEffect(() => {
+    persistFilters(draft);
+  }, [draft]);
+  useEffect(() => {
+    persistFree(free);
+  }, [free]);
 
   useEffect(() => {
     let cancelled = false;
@@ -286,7 +377,7 @@ export default function LayBets() {
       }
       if (matchesWithLegs.length >= MAX_MATCHES) break;
     }
-    const all = buildAccas(matchesWithLegs, filters.legs);
+    const all = buildAccas(matchesWithLegs, filters.legs, stakeVal);
     all.sort((a, b) => b.plan.retainedProfit - a.plan.retainedProfit);
     return {
       singles: [],
@@ -297,7 +388,7 @@ export default function LayBets() {
       qualifiedOutcomes: legOutcomes,
       qualifiedFixtures: matchesWithLegs.length,
     };
-  }, [matches, filters]);
+  }, [matches, filters, stakeVal]);
 
   const bestProfit =
     filters?.legs === 1 && results.singles.length > 0
@@ -329,13 +420,46 @@ export default function LayBets() {
             Back an outcome at the bookmaker, lay it on the exchange — and lock in the result. Find close, profitable single lays or build a 2–4-leg bet with a done-for-you lay plan.
           </p>
 
+          {/* Free-bet mode (power user): stake + type, persisted across visits */}
+          <div className="mt-5 flex flex-wrap items-end gap-4 rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-900 dark:bg-purple-950/30">
+            <div className="text-sm font-semibold text-purple-700 dark:text-purple-300">🎁 Free bet</div>
+            <label className="block">
+              <span className="text-xs font-medium text-gray-500">Stake</span>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">£</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={free.stake}
+                  onChange={(e) => setFree({ ...free, stake: e.target.value })}
+                  onBlur={() => setFree({ ...free, stake: String(parseStake(free.stake)) })}
+                  className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-gray-500">Type</span>
+              <select
+                value={free.type}
+                onChange={(e) => setFree({ ...free, type: e.target.value as FreeBetType })}
+                className="mt-1 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+              >
+                <option value="snr">SNR — stake not returned</option>
+                <option value="sr">Stake returned</option>
+              </select>
+            </label>
+            <p className="min-w-0 flex-1 text-xs text-purple-600/80 dark:text-purple-400/80">
+              Singles show what this free bet retains; multi-leg bets use this stake (SNR). Last-used stake is remembered.
+            </p>
+          </div>
+
           {/* Controls */}
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <label className="block">
               <span className="text-xs font-medium text-gray-500">Legs</span>
               <select
                 value={draft.legs}
-                onChange={(e) => setDraft({ ...draft, legs: Number(e.target.value) })}
+                onChange={(e) => apply({ ...draft, legs: Number(e.target.value) })}
                 className={controlClass}
               >
                 <option value={1}>1 leg — singles</option>
@@ -349,7 +473,7 @@ export default function LayBets() {
               <span className="text-xs font-medium text-gray-500">Sport</span>
               <select
                 value={draft.category}
-                onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+                onChange={(e) => apply({ ...draft, category: e.target.value })}
                 className={controlClass}
               >
                 <option value="all">All sports</option>
@@ -363,7 +487,7 @@ export default function LayBets() {
               <span className="text-xs font-medium text-gray-500">Bookmaker</span>
               <select
                 value={draft.bookmaker}
-                onChange={(e) => setDraft({ ...draft, bookmaker: e.target.value })}
+                onChange={(e) => apply({ ...draft, bookmaker: e.target.value })}
                 className={controlClass}
               >
                 <option value="all">All bookmakers</option>
@@ -382,7 +506,7 @@ export default function LayBets() {
                 inputMode="decimal"
                 value={draft.minOdds}
                 onChange={(e) => setDraft({ ...draft, minOdds: e.target.value })}
-                onBlur={() => setDraft({ ...draft, minOdds: String(parseMinOdds(draft.minOdds)) })}
+                onBlur={() => apply({ ...draft, minOdds: String(parseMinOdds(draft.minOdds)) })}
                 className={controlClass}
               />
             </label>
@@ -401,10 +525,12 @@ export default function LayBets() {
           {/* Honesty rails + freshness */}
           <p className="mt-3 text-xs text-gray-400">
             {draft.legs === 1
-              ? "Singles show only rows with back odds under 2.8 and a lay gap under 0.1, on a £20 back stake, including 5% exchange commission."
-              : "Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20). Figures use a £10 stake-not-returned free bet and 5% exchange commission."}
+              ? `Singles show only rows with back odds under 2.8 and a lay gap under 0.1, on a £20 cash back stake, including 5% exchange commission. The free-bet line uses your entered stake (£${stakeVal}) and type.`
+              : `Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20). Figures use a £${stakeVal} stake-not-returned free bet and 5% exchange commission.`}
             {" "}Run searches the freshest cached odds — it never costs an API call.
           </p>
+
+          <p className="mt-1 text-xs text-gray-400">Pre-match odds — refresh every 10 minutes.</p>
 
           {oddsAgeMs != null && (
             <p className="mt-1 text-xs font-medium text-gray-500">
@@ -436,15 +562,7 @@ export default function LayBets() {
             </div>
           )}
 
-          {!loading && !error && !filters && (
-            <div className="mt-8 rounded-xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-950">
-              <span className="text-4xl">🎯</span>
-              <p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Pick your legs and hit Run</p>
-              <p className="mt-1 text-sm text-gray-500">Choose 1 leg for close-lay singles, or 2–4 legs for a lay-planned bet.</p>
-            </div>
-          )}
-
-          {!loading && !error && filters && results.singles.length === 0 && results.accas.length === 0 && (
+          {!loading && !error && results.singles.length === 0 && results.accas.length === 0 && (
             <div className="mt-8 rounded-xl border border-gray-200 bg-white p-8 text-left dark:border-gray-800 dark:bg-gray-950">
               <div className="flex items-start gap-3">
                 <span className="text-4xl">🔍</span>
@@ -465,7 +583,7 @@ export default function LayBets() {
                     {filters.minOdds > 1 && <li>Lower the minimum odds.</li>}
                     {filters.category !== "all" && <li>Set Sport back to “All sports”.</li>}
                     {filters.bookmaker !== "all" && <li>Set Bookmaker back to “All bookmakers”.</li>}
-                    <li>Odds refresh about every 3 hours — check back later.</li>
+                    <li>Odds refresh about every 10 minutes — check back later.</li>
                   </ul>
                 </div>
               </div>
@@ -479,8 +597,8 @@ export default function LayBets() {
                 {results.singles.map((op) => {
                   const profitable = op.lay.profitLoss >= 0;
                   const isBest = profitable && round2(op.lay.profitLoss) === bestProfit;
-                  const freeBetProfit = calcFreeBetProfit(op.outcome.odds, op.outcome.layOdds, BACK_STAKE);
-                  const retentionPct = freeBetProfit != null ? Math.round((freeBetProfit / BACK_STAKE) * 100) : 0;
+                  const freeBetProfit = calcFreeBetProfit(op.outcome.odds, op.outcome.layOdds, stakeVal, COMMISSION, free.type);
+                  const retentionPct = freeBetProfit != null ? Math.round((freeBetProfit / stakeVal) * 100) : 0;
                   return (
                     <div
                       key={`${op.match.matchId}-${op.outcome.name}`}
@@ -530,8 +648,8 @@ export default function LayBets() {
                         </div>
                       </div>
                       {freeBetProfit != null && (
-                        <div className={`mt-3 rounded-lg px-3 py-1.5 text-xs ${freeBetProfit > BACK_STAKE ? "bg-green-50 font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300" : "bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
-                          Free bet £{BACK_STAKE} → {money(freeBetProfit)} ({retentionPct}%)
+                        <div className={`mt-3 rounded-lg px-3 py-1.5 text-xs ${freeBetProfit > stakeVal ? "bg-green-50 font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300" : "bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                          Free bet £{stakeVal} ({free.type === "sr" ? "stake returned" : "SNR"}) → {money(freeBetProfit)} ({retentionPct}%)
                         </div>
                       )}
                     </div>
@@ -539,7 +657,7 @@ export default function LayBets() {
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair). Figures use a £20 back stake and include 5% exchange commission. The free-bet line shows what a £20 stake-not-returned free bet on that outcome would retain — not a claim you hold one.
+                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair). Figures use a £20 back stake and include 5% exchange commission. The free-bet line shows what your entered free bet (£{stakeVal}, {free.type === "sr" ? "stake returned" : "stake not returned"}) on that outcome would retain — not a claim you hold one.
               </p>
             </>
           )}

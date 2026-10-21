@@ -259,12 +259,20 @@ export function calcLay(
 }
 
 /**
- * Retained profit from laying a stake-not-returned (SNR) free bet on a single
- * outcome. The free bet is backed at backOdds and laid at layOdds; the lay stake
- * is sized so the result is the same whether the outcome wins or loses, and
- * commission (5%) is deducted from the lay winnings only.
+ * How a free bet pays out on a win.
+ *   snr — stake NOT returned: only the winnings, stake × (backOdds − 1).
+ *   sr  — stake returned: winnings AND stake, stake × backOdds.
+ */
+export type FreeBetType = "snr" | "sr";
+
+/**
+ * Retained profit from laying a free bet on a single outcome. The free bet is
+ * backed at backOdds and laid at layOdds; the lay stake is sized so the result
+ * is the same whether the outcome wins or loses, and commission (5%) is deducted
+ * from the lay winnings only.
  *
- *   freeBetProfit = stake × (backOdds − 1) × (1 − commission) / (layOdds − commission)
+ *   payout = type === "sr" ? backOdds : backOdds − 1
+ *   freeBetProfit = stake × payout × (1 − commission) / (layOdds − commission)
  *
  * Returns null when there's no usable lay price (never fabricate a number).
  * "Retention" = freeBetProfit / stake — how much of the free bet's value you
@@ -275,10 +283,12 @@ export function calcFreeBetProfit(
   backOdds: number,
   layOdds: number | null,
   stake = 20,
-  commission = COMMISSION
+  commission = COMMISSION,
+  type: FreeBetType = "snr"
 ): number | null {
   if (!layOdds || layOdds <= commission || backOdds <= 1) return null;
-  return (stake * (backOdds - 1) * (1 - commission)) / (layOdds - commission);
+  const payout = type === "sr" ? backOdds : backOdds - 1;
+  return (stake * payout * (1 - commission)) / (layOdds - commission);
 }
 
 export interface LayMetrics {
