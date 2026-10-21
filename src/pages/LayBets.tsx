@@ -76,7 +76,22 @@ interface Filters {
   minOdds: number;
 }
 
-const DEFAULT_FILTERS: Filters = { legs: 1, category: "all", bookmaker: "all", minOdds: 1.5 };
+// Draft state keeps min-odds as RAW TEXT (empty allowed) so the owner can clear
+// the field and type a fresh number; it is parsed/clamped only on Run or blur.
+interface DraftFilters {
+  legs: number;
+  category: string;
+  bookmaker: string;
+  minOdds: string;
+}
+
+const DEFAULT_FILTERS: DraftFilters = { legs: 1, category: "all", bookmaker: "all", minOdds: "1.5" };
+
+/** Parse the min-odds text, clamping to ≥ 1.0 (empty/invalid → 1). */
+function parseMinOdds(raw: string): number {
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n >= 1 ? n : 1;
+}
 
 function sportCategory(sportKey: string): string {
   return sportKey.split("_")[0];
@@ -115,11 +130,10 @@ function usableLegs(m: Match): MatchOutcome[] {
   });
 }
 
-/** Build cross-match accas (each leg from a different match, laid in order). */
+/** Build cross-match multi-leg bets (each leg from a different match, laid in order). */
 function buildAccas(
   matchesWithLegs: MatchWithLegs[],
-  legCount: number,
-  minOdds: number
+  legCount: number
 ): AccaCandidate[] {
   const out: AccaCandidate[] = [];
   const current: LegPick[] = [];
@@ -130,7 +144,7 @@ function buildAccas(
         current.map((l) => ({ backOdds: l.outcome.odds, layOdds: l.outcome.layOdds! })),
         FREE_STAKE
       );
-      if (plan && plan.combinedBackOdds >= minOdds) {
+      if (plan) {
         out.push({ legs: [...current], plan });
       }
       return;
@@ -156,8 +170,18 @@ export default function LayBets() {
   const [error, setError] = useState<string | null>(null);
 
   // Draft = the controls being edited; filters = applied when the user hits Run.
-  const [draft, setDraft] = useState<Filters>(DEFAULT_FILTERS);
+  const [draft, setDraft] = useState<DraftFilters>(DEFAULT_FILTERS);
   const [filters, setFilters] = useState<Filters | null>(null);
+
+  // Apply the draft as the active filter, parsing/clamping the min-odds text.
+  const run = () => {
+    setFilters({
+      legs: draft.legs,
+      category: draft.category,
+      bookmaker: draft.bookmaker,
+      minOdds: parseMinOdds(draft.minOdds),
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -198,7 +222,15 @@ export default function LayBets() {
   }, [matches]);
 
   const results = useMemo(() => {
-    const empty = { singles: [] as LayOpportunity[], accas: [] as AccaCandidate[], considered: 0, total: 0 };
+    const empty = {
+      singles: [] as LayOpportunity[],
+      accas: [] as AccaCandidate[],
+      considered: 0,
+      total: 0,
+      feedMatches: matches.length,
+      qualifiedOutcomes: 0,
+      qualifiedFixtures: 0,
+    };
     if (!filters || matches.length === 0) return empty;
 
     const byCategory = (m: Match) =>
@@ -229,24 +261,41 @@ export default function LayBets() {
         if (d !== 0) return d;
         return a.gap - b.gap;
       });
-      return { singles: rows, accas: [], considered: rows.length, total: rows.length };
+      return {
+        singles: rows,
+        accas: [],
+        considered: rows.length,
+        total: rows.length,
+        feedMatches: matches.length,
+        qualifiedOutcomes: rows.length,
+        qualifiedFixtures: rows.length,
+      };
     }
 
-    // ── Accas (legs = 2–4): cross-match, laid leg-by-leg ──
+    // ── Multi-leg bets (legs = 2–4): cross-match, laid leg-by-leg ──
     const matchesWithLegs: MatchWithLegs[] = [];
+    let legOutcomes = 0;
     for (const m of sorted) {
       if (!byCategory(m)) continue;
-      const outcomes = usableLegs(m).filter(byBookmaker);
-      if (outcomes.length > 0) matchesWithLegs.push({ match: m, outcomes });
+      const outcomes = usableLegs(m)
+        .filter(byBookmaker)
+        .filter((o) => o.odds >= filters.minOdds);
+      if (outcomes.length > 0) {
+        matchesWithLegs.push({ match: m, outcomes });
+        legOutcomes += outcomes.length;
+      }
       if (matchesWithLegs.length >= MAX_MATCHES) break;
     }
-    const all = buildAccas(matchesWithLegs, filters.legs, filters.minOdds);
+    const all = buildAccas(matchesWithLegs, filters.legs);
     all.sort((a, b) => b.plan.retainedProfit - a.plan.retainedProfit);
     return {
       singles: [],
       accas: all.slice(0, TOP_N),
       considered: matchesWithLegs.length,
       total: all.length,
+      feedMatches: matches.length,
+      qualifiedOutcomes: legOutcomes,
+      qualifiedFixtures: matchesWithLegs.length,
     };
   }, [matches, filters]);
 
@@ -277,7 +326,7 @@ export default function LayBets() {
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
           <h1 className="text-3xl font-bold tracking-tight">Lay Bet Finder</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Back an outcome at the bookmaker, lay it on the exchange — and lock in the result. Find close, profitable single lays or build a 2–4-leg acca with a done-for-you lay plan.
+            Back an outcome at the bookmaker, lay it on the exchange — and lock in the result. Find close, profitable single lays or build a 2–4-leg bet with a done-for-you lay plan.
           </p>
 
           {/* Controls */}
@@ -290,9 +339,9 @@ export default function LayBets() {
                 className={controlClass}
               >
                 <option value={1}>1 leg — singles</option>
-                <option value={2}>2 legs — acca</option>
-                <option value={3}>3 legs — acca</option>
-                <option value={4}>4 legs — acca</option>
+                <option value={2}>2 legs</option>
+                <option value={3}>3 legs</option>
+                <option value={4}>4 legs</option>
               </select>
             </label>
 
@@ -326,21 +375,21 @@ export default function LayBets() {
 
             <label className="block">
               <span className="text-xs font-medium text-gray-500">
-                Min odds {draft.legs === 1 ? "(back)" : "(combined)"}
+                {draft.legs === 1 ? "Minimum back odds" : "Minimum leg odds"}
               </span>
               <input
-                type="number"
-                min={1}
-                step={0.1}
+                type="text"
+                inputMode="decimal"
                 value={draft.minOdds}
-                onChange={(e) => setDraft({ ...draft, minOdds: Math.max(1, Number(e.target.value) || 1) })}
+                onChange={(e) => setDraft({ ...draft, minOdds: e.target.value })}
+                onBlur={() => setDraft({ ...draft, minOdds: String(parseMinOdds(draft.minOdds)) })}
                 className={controlClass}
               />
             </label>
 
             <div className="flex items-end">
               <button
-                onClick={() => setFilters({ ...draft })}
+                onClick={run}
                 disabled={loading}
                 className="w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 disabled:opacity-50"
               >
@@ -353,7 +402,7 @@ export default function LayBets() {
           <p className="mt-3 text-xs text-gray-400">
             {draft.legs === 1
               ? "Singles show only rows with back odds under 2.8 and a lay gap under 0.1, on a £20 back stake, including 5% exchange commission."
-              : "Accas always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20). Figures use a £10 stake-not-returned free bet and 5% exchange commission."}
+              : "Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20). Figures use a £10 stake-not-returned free bet and 5% exchange commission."}
             {" "}Run searches the freshest cached odds — it never costs an API call.
           </p>
 
@@ -391,21 +440,35 @@ export default function LayBets() {
             <div className="mt-8 rounded-xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-950">
               <span className="text-4xl">🎯</span>
               <p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">Pick your legs and hit Run</p>
-              <p className="mt-1 text-sm text-gray-500">Choose 1 leg for close-lay singles, or 2–4 legs for a lay-planned acca.</p>
+              <p className="mt-1 text-sm text-gray-500">Choose 1 leg for close-lay singles, or 2–4 legs for a lay-planned bet.</p>
             </div>
           )}
 
           {!loading && !error && filters && results.singles.length === 0 && results.accas.length === 0 && (
-            <div className="mt-8 rounded-xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-950">
-              <span className="text-4xl">🔍</span>
-              <p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">
-                {filters.legs === 1 ? "No close lays match these settings" : "No accas match these settings"}
-              </p>
-              <p className="mt-1 text-sm text-gray-500">
-                {filters.legs === 1
-                  ? "Try a lower minimum odds, another sport, or another bookmaker."
-                  : "Try lowering the minimum combined odds or dropping a leg. No combinations of the required size have exchange lay prices right now."}
-              </p>
+            <div className="mt-8 rounded-xl border border-gray-200 bg-white p-8 text-left dark:border-gray-800 dark:bg-gray-950">
+              <div className="flex items-start gap-3">
+                <span className="text-4xl">🔍</span>
+                <div>
+                  <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+                    {filters.legs === 1 ? "No close lays match these settings" : "No multi-leg bets match these settings"}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-500">
+                    The cached feed holds <strong>{results.feedMatches}</strong> match{results.feedMatches === 1 ? "" : "es"}.
+                    {filters.legs === 1 ? (
+                      <> <strong>{results.qualifiedOutcomes}</strong> outcome{results.qualifiedOutcomes === 1 ? "" : "s"} passed the close-lay guard at these settings.</>
+                    ) : (
+                      <> <strong>{results.qualifiedFixtures}</strong> fixture{results.qualifiedFixtures === 1 ? "" : "s"} have a qualifying leg (of {results.qualifiedOutcomes} total qualifying legs), but {filters.legs} legs need {filters.legs} different matches.</>
+                    )}
+                  </p>
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-500">
+                    {filters.legs > 2 && <li>Try fewer legs (e.g. 2 legs).</li>}
+                    {filters.minOdds > 1 && <li>Lower the minimum odds.</li>}
+                    {filters.category !== "all" && <li>Set Sport back to “All sports”.</li>}
+                    {filters.bookmaker !== "all" && <li>Set Bookmaker back to “All bookmakers”.</li>}
+                    <li>Odds refresh about every 3 hours — check back later.</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           )}
 
@@ -498,13 +561,13 @@ export default function LayBets() {
                         <span className="absolute -top-3 right-4 rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white shadow-sm">★ Best</span>
                       )}
                       <div>
-                        <div className="pr-14 text-sm font-semibold text-gray-500">{filters.legs}-leg acca · combined odds</div>
+                        <div className="pr-14 text-sm font-semibold text-gray-500">{filters.legs}-leg · combined odds</div>
                         <div className="mt-0.5 text-3xl font-extrabold text-gray-900 dark:text-white">{p.combinedBackOdds.toFixed(2)}</div>
                       </div>
                       <div className="mt-3 rounded-xl bg-green-50 p-3 dark:bg-green-950/30">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-green-600 dark:text-green-400">Guaranteed retained profit</div>
                         <div className="mt-0.5 text-2xl font-extrabold text-green-700 dark:text-green-300">+{money(p.retainedProfit)}</div>
-                        <div className="text-xs text-green-600/80 dark:text-green-400/80">Same if the acca wins or any leg loses</div>
+                        <div className="text-xs text-green-600/80 dark:text-green-400/80">Same if the bet wins or any leg loses</div>
                       </div>
                       <div className="mt-3">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Legs — lay in this order</div>
@@ -539,7 +602,7 @@ export default function LayBets() {
                       </div>
                       <div className="mt-4 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
                         <div>
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Acca return</div>
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Bet return</div>
                           <div className="mt-0.5 font-semibold text-gray-800 dark:text-gray-100">{money(p.grossReturn)}</div>
                         </div>
                         <div>
@@ -556,7 +619,7 @@ export default function LayBets() {
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing the top {results.accas.length} of {results.total} matching accas (from {results.considered} fixtures with exchange lay prices). Ranked by guaranteed retained profit. Lay each leg <strong>in order</strong>, only after the previous leg settles.
+                Showing the top {results.accas.length} of {results.total} matching multi-leg bets (from {results.considered} fixtures with exchange lay prices). Ranked by guaranteed retained profit. Lay each leg <strong>in order</strong>, only after the previous leg settles.
               </p>
             </>
           )}
