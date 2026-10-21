@@ -8,13 +8,12 @@
 // are dead code there. Keep every new domain route in `api/`.
 //
 // Server-side only — the key never reaches the client bundle.
-const DEV_KEY = "7c3d32f19360a9489dd8b5d6a6712d4f";
+const DEV_KEY = "5827ab1071dd26e737d7d2d1054ef8b4";
 
-// Server-side cache (in-memory per warm instance). TTL 15 min — repeated
+// Server-side cache (in-memory per warm instance). TTL 10 min — repeated
 // /api/odds hits within that window serve the cached upstream body instead of
-// re-fetching the-odds-api.com. This makes the worker's domain health check
-// cheap AND shields the free 500 req/month odds quota from visitor traffic.
-const CACHE_TTL_MS = 15 * 60 * 1000;
+// re-fetching the-odds-api.com (protects the monthly credit allowance).
+const CACHE_TTL_MS = 10 * 60 * 1000;
 const cache = new Map<string, { body: string; status: number; ok: boolean; ts: number }>();
 
 function respond(res: any, body: string, status: number, ok: boolean): void {
@@ -31,8 +30,8 @@ export default async function handler(req: any, res: any): Promise<void> {
   const key = process.env.ODDS_API_KEY || DEV_KEY;
   const target =
     sport === "upcoming"
-      ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${key}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`
-      : `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds/?apiKey=${key}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`;
+      ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${key}&regions=uk&markets=h2h&oddsFormat=decimal`
+      : `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds/?apiKey=${key}&regions=uk&markets=h2h&oddsFormat=decimal`;
 
   const hit = cache.get(target);
   if (hit && Date.now() - hit.ts < CACHE_TTL_MS) {

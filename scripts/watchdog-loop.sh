@@ -5,8 +5,8 @@
 # watchdog.
 #
 # Start it alongside serve-static.ts (same inline-secrets pattern as the server
-# restart, so the loop → watchdog → restarted-server chain keeps Telegram):
-#   nohup env TELEGRAM_BOT_TOKEN="<token>" TELEGRAM_CHAT_ID="<chat>" \
+# restart, so the loop → watchdog → restarted-server chain keeps Telegram + key):
+#   nohup env ODDS_API_KEY="<key>" TELEGRAM_BOT_TOKEN="<token>" TELEGRAM_CHAT_ID="<chat>" \
 #     bash scripts/watchdog-loop.sh >> .run/watchdog-loop.log 2>&1 &
 #
 # LIMITATION: this protects against PROCESS crashes only, not machine

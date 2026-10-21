@@ -30,7 +30,7 @@ import { calcLay, calcFreeBetProfit, qualifiesForLay, layGap, round2 } from "../
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
-const MARKETS = "h2h,h2h_lay";
+const MARKETS = "h2h"; // h2h_lay is auto-included with h2h — no need to request it
 const BACK_STAKE = 20;
 
 // Free-bet freshness guard: skip a freebet row unless the back and lay prices
@@ -41,10 +41,10 @@ const BACK_STAKE = 20;
 const FRESHNESS_MAX_GAP_MS = 60 * 60_000; // 60 minutes
 
 // ── Config (all env-var driven, safe defaults) ─────────────────────────────
-// How often the worker runs a check (minutes). Default 180 = every 3h.
-const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, 180);
+// How often the worker runs a check (minutes). Default 60 = hourly.
+const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, 60);
 // How long a fetched odds snapshot stays "fresh" before the worker re-fetches.
-const CACHE_TTL_MIN = num(process.env.ALERT_CACHE_TTL_MIN, 120);
+const CACHE_TTL_MIN = num(process.env.ALERT_CACHE_TTL_MIN, 10);
 
 // Channel A — webhook
 const WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
@@ -131,6 +131,9 @@ type Opportunity = CashOpportunity | FreebetOpportunity;
 
 // ── Odds fetch (server-side, cache-aware) ─────────────────────────────────
 
+// Last x-requests-remaining value seen from the odds API (quota visibility).
+let lastRequestsRemaining: number | null = null;
+
 async function fetchRawMatches(): Promise<unknown[]> {
   const url = `${BASE}/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal`;
   const res = await fetch(url);
@@ -140,6 +143,11 @@ async function fetchRawMatches(): Promise<unknown[]> {
       : res.status === 429 ? " (429 — quota exceeded)"
       : "";
     throw new Error(`odds API ${res.status}${why}`);
+  }
+  const remaining = res.headers.get("x-requests-remaining");
+  if (remaining != null && !Number.isNaN(Number(remaining))) {
+    lastRequestsRemaining = Number(remaining);
+    log(`odds API x-requests-remaining: ${remaining}`);
   }
   return (await res.json()) as unknown[];
 }
@@ -513,6 +521,7 @@ export function alertStatus() {
     intervalMin: CHECK_INTERVAL_MIN,
     cacheTtlMin: CACHE_TTL_MIN,
     oddsApiKey: Boolean(ODDS_API_KEY),
+    requestsRemaining: lastRequestsRemaining,
     rules: {
       cash: true, // GREEN CASH — cash qualifying profit > 0
       freebet: true, // FREE BET 100%+ — SNR free bet retains more than its stake

@@ -8,4 +8,4 @@
  * key never ships in the public JS bundle.
  */
 export const ODDS_API_KEY =
-  process.env.ODDS_API_KEY || "7c3d32f19360a9489dd8b5d6a6712d4f";
+  process.env.ODDS_API_KEY || "5827ab1071dd26e737d7d2d1054ef8b4";

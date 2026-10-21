@@ -27,11 +27,11 @@ const MIME: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8",
 };
 
-// Server-side odds cache (in-memory, TTL 15 min). Mirrors api/odds.ts so the
+// Server-side odds cache (in-memory, TTL 10 min). Mirrors api/odds.ts so the
 // platform URL and the Vercel domain behave the same: repeated /api/odds hits
 // within the window serve the cached upstream body instead of re-fetching
-// the-odds-api.com (protects the free 500 req/month odds quota).
-const ODDS_CACHE_TTL_MS = 15 * 60 * 1000;
+// the-odds-api.com (protects the monthly credit allowance).
+const ODDS_CACHE_TTL_MS = 10 * 60 * 1000;
 const oddsCache = new Map<string, { body: string; status: number; ok: boolean; ts: number }>();
 
 // Free port 3000 if a previous server (any user) still holds it.
@@ -83,8 +83,8 @@ const server = Bun.serve({
       const sport = url.searchParams.get("sport") || "upcoming";
       const target =
         sport === "upcoming"
-          ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`
-          : `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h,h2h_lay&oddsFormat=decimal`;
+          ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h&oddsFormat=decimal`
+          : `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h&oddsFormat=decimal`;
 
       const hit = oddsCache.get(target);
       if (hit && Date.now() - hit.ts < ODDS_CACHE_TTL_MS) {

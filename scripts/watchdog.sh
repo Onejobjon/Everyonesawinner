@@ -8,15 +8,16 @@
 #   * * * * *  cd /home/team/shared/site && bash scripts/watchdog.sh >> .run/watchdog.log 2>&1
 #
 # RESTART PROCEDURE — start BOTH the server and the watchdog loop, passing the
-# owner's Telegram secrets inline so the alert worker keeps its channel across
-# any crash restart (the base shell env does NOT carry them):
+# owner's Telegram secrets AND the odds API key inline so the alert worker keeps
+# its channel + quota across any crash restart (the base shell env does NOT
+# carry them):
 #
 #   1. Start the server:
-#        nohup env TELEGRAM_BOT_TOKEN="<token>" TELEGRAM_CHAT_ID="<chat>" \
-#          bun serve-static.ts >> .run/serve.log 2>&1 &
+#        nohup env ODDS_API_KEY="<key>" TELEGRAM_BOT_TOKEN="<token>" \
+#          TELEGRAM_CHAT_ID="<chat>" bun serve-static.ts >> .run/serve.log 2>&1 &
 #   2. Start the watchdog loop:
-#        nohup env TELEGRAM_BOT_TOKEN="<token>" TELEGRAM_CHAT_ID="<chat>" \
-#          bash scripts/watchdog-loop.sh >> .run/watchdog-loop.log 2>&1 &
+#        nohup env ODDS_API_KEY="<key>" TELEGRAM_BOT_TOKEN="<token>" \
+#          TELEGRAM_CHAT_ID="<chat>" bash scripts/watchdog-loop.sh >> .run/watchdog-loop.log 2>&1 &
 set -u
 cd "$(dirname "$0")/.."
 
@@ -28,8 +29,9 @@ fi
 echo "[watchdog $(date -u +%Y-%m-%dT%H:%M:%SZ)] port 3000 down — restarting serve-static.ts"
 mkdir -p .run
 
-# Restart with the owner's Telegram secrets inline (inherited from this process's
-# env, which the watchdog loop re-injects), so the alert worker keeps its channel.
-nohup env TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}" \
-  bun serve-static.ts >> .run/serve.log 2>&1 &
+# Restart with the owner's Telegram secrets + odds key inline (inherited from this
+# process's env, which the watchdog loop re-injects), so the alert worker keeps
+# its channel + quota.
+nohup env ODDS_API_KEY="${ODDS_API_KEY:-}" TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" \
+  TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}" bun serve-static.ts >> .run/serve.log 2>&1 &
 echo "[watchdog] restarted (pid $!)"

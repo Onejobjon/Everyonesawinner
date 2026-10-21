@@ -13,10 +13,10 @@ import { calcDutchFreeBet } from "./odds";
 // Exchange sources for lay odds, in order of preference.
 const LAY_SOURCES = ["betfair_ex_uk", "smarkets"];
 
-// Free tier: 500 requests/month. Cache aggressively to stay well under.
+// Paid tier (20K credits/mo). Cache to keep the burn predictable.
 // Cache in memory (per session) + localStorage (across page loads).
 const CACHE_TTL_MS = 600_000; // 10 minute in-memory cache (for page refreshes in same session)
-const LS_TTL_MS = 7_200_000; // 2 hours in localStorage (across sessions)
+const LS_TTL_MS = 600_000; // 10 min in localStorage (matches the server-side refresh)
 
 // Separate caches per sport endpoint
 const caches: Record<string, { data: ApiMatch[]; ts: number }> = {};
