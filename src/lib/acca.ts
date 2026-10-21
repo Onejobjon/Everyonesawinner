@@ -24,6 +24,12 @@ export interface AccaLegPlan {
   layStake: number;
   /** What you risk on this leg's lay = layStake × (layOdds − 1). */
   liability: number;
+  /**
+   * What the exchange lay WINS (after commission) if this leg's outcome fails —
+   * i.e. the gross win that offsets the earlier legs' liabilities and leaves the
+   * guaranteed retained profit. = layStake × (1 − commission).
+   */
+  layWin: number;
 }
 
 export interface AccaPlan {
@@ -96,7 +102,8 @@ export function sequentialLayPlan(
   const legPlans: AccaLegPlan[] = legs.map((l, i) => {
     const layStake = alpha[i] * retainedProfit;
     const liability = layStake * (l.layOdds - 1);
-    return { backOdds: l.backOdds, layOdds: l.layOdds, layStake, liability };
+    const layWin = layStake * (1 - commission);
+    return { backOdds: l.backOdds, layOdds: l.layOdds, layStake, liability, layWin };
   });
 
   const totalLiability = legPlans.reduce((sum, lp) => sum + lp.liability, 0);
@@ -110,6 +117,7 @@ export function sequentialLayPlan(
       ...lp,
       layStake: round2(lp.layStake),
       liability: round2(lp.liability),
+      layWin: round2(lp.layWin),
     })),
     totalLiability: round2(totalLiability),
   };

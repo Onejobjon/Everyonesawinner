@@ -182,6 +182,15 @@ function getIcon(name: string, home: string, away: string): string {
   return "➡️";
 }
 
+/** Exact outcome in plain language — match result only (Home/Draw/Away in h2h). */
+function outcomePhrase(name: string, home: string, away: string): string {
+  const lower = name.toLowerCase();
+  if (lower === home.toLowerCase()) return `${home} to beat ${away}`;
+  if (lower === away.toLowerCase()) return `${away} to beat ${home}`;
+  if (lower === "draw" || lower === "tie") return "Draw";
+  return name;
+}
+
 function money(n: number): string {
   return `£${n.toFixed(2)}`;
 }
@@ -321,6 +330,7 @@ export default function LayBets() {
       feedMatches: matches.length,
       qualifiedOutcomes: 0,
       qualifiedFixtures: 0,
+      noLayExcluded: 0,
     };
     if (!filters || matches.length === 0) return empty;
 
@@ -360,14 +370,24 @@ export default function LayBets() {
         feedMatches: matches.length,
         qualifiedOutcomes: rows.length,
         qualifiedFixtures: rows.length,
+        noLayExcluded: 0,
       };
     }
 
     // ── Multi-leg bets (legs = 2–4): cross-match, laid leg-by-leg ──
     const matchesWithLegs: MatchWithLegs[] = [];
     let legOutcomes = 0;
+    let noLayExcluded = 0;
     for (const m of sorted) {
       if (!byCategory(m)) continue;
+      // Outcomes with no exchange lay price can never be a leg (we never
+      // fabricate one) — count them so the user sees they were excluded,
+      // not silently dropped.
+      for (const o of m.outcomes) {
+        if (byBookmaker(o) && (o.layOdds == null || o.layOdds <= COMMISSION)) {
+          noLayExcluded += 1;
+        }
+      }
       const outcomes = usableLegs(m)
         .filter(byBookmaker)
         .filter((o) => o.odds >= filters.minOdds);
@@ -387,6 +407,7 @@ export default function LayBets() {
       feedMatches: matches.length,
       qualifiedOutcomes: legOutcomes,
       qualifiedFixtures: matchesWithLegs.length,
+      noLayExcluded,
     };
   }, [matches, filters, stakeVal]);
 
@@ -678,58 +699,81 @@ export default function LayBets() {
                       {isBest && (
                         <span className="absolute -top-3 right-4 rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white shadow-sm">★ Best</span>
                       )}
-                      <div>
-                        <div className="pr-14 text-sm font-semibold text-gray-500">{filters.legs}-leg · combined odds</div>
-                        <div className="mt-0.5 text-3xl font-extrabold text-gray-900 dark:text-white">{p.combinedBackOdds.toFixed(2)}</div>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-500">{filters.legs}-leg · combined odds</div>
+                          <div className="text-3xl font-extrabold text-gray-900 dark:text-white">{p.combinedBackOdds.toFixed(2)}</div>
+                        </div>
+                        <div className="shrink-0 rounded-lg bg-purple-50 px-2.5 py-1.5 text-right text-xs leading-5 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
+                          <div className="font-semibold">Free bet £{stakeVal}</div>
+                          <div className="text-purple-500/80 dark:text-purple-400/80">stake not returned</div>
+                        </div>
                       </div>
-                      <div className="mt-3 rounded-xl bg-green-50 p-3 dark:bg-green-950/30">
-                        <div className="text-[11px] font-medium uppercase tracking-wide text-green-600 dark:text-green-400">Guaranteed retained profit</div>
-                        <div className="mt-0.5 text-2xl font-extrabold text-green-700 dark:text-green-300">+{money(p.retainedProfit)}</div>
-                        <div className="text-xs text-green-600/80 dark:text-green-400/80">Same if the bet wins or any leg loses</div>
-                      </div>
-                      <div className="mt-3">
+
+                      {/* Per-leg rows — the primary information, one exact outcome per row */}
+                      <div className="mt-4">
                         <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Legs — lay in this order</div>
                         <div className="mt-2 space-y-2">
                           {c.legs.map((leg, i) => {
                             const lp = p.legs[i];
+                            const phrase = outcomePhrase(leg.outcome.name, leg.match.home, leg.match.away);
                             return (
-                              <div key={i} className="rounded-lg border border-gray-100 p-2.5 dark:border-gray-800">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <div className="truncate text-xs text-gray-500">
-                                      <span className="font-semibold text-gray-400">{i + 1}.</span> {leg.match.home} v {leg.match.away}
-                                    </div>
-                                    <div className="mt-0.5 flex items-center gap-1.5 text-sm">
-                                      <span>{getIcon(leg.outcome.name, leg.match.home, leg.match.away)}</span>
-                                      <span className="font-semibold text-gray-800 dark:text-gray-100">{leg.outcome.name}</span>
-                                    </div>
+                              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 dark:border-gray-700 dark:bg-gray-900/60">
+                                <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                  <span className="text-gray-400">{i + 1}.</span>
+                                  <span>{phrase}</span>
+                                </div>
+                                <div className="mt-0.5 truncate text-xs text-gray-400">
+                                  {getIcon(leg.outcome.name, leg.match.home, leg.match.away)} {leg.match.home} v {leg.match.away} · {leg.match.time}
+                                </div>
+                                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                                  <div className="rounded-md bg-white px-2 py-1.5 dark:bg-gray-900">
+                                    <div className="text-gray-400">Back <span className="font-semibold text-gray-800 dark:text-gray-100">{leg.outcome.odds.toFixed(2)}</span></div>
+                                    <div className="truncate text-gray-400">@ {leg.outcome.bookmaker}</div>
                                   </div>
-                                  <div className="shrink-0 text-right text-xs leading-5">
-                                    <div className="text-gray-600 dark:text-gray-300">Back <span className="font-semibold">{leg.outcome.odds.toFixed(2)}</span></div>
-                                    <div className="text-purple-600 dark:text-purple-400">Lay <span className="font-semibold">{lp.layOdds.toFixed(2)}</span></div>
+                                  <div className="rounded-md bg-purple-50 px-2 py-1.5 dark:bg-purple-950/40">
+                                    <div className="text-purple-500">Lay <span className="font-semibold text-purple-700 dark:text-purple-300">{lp.layOdds.toFixed(2)}</span></div>
+                                    <div className="truncate text-purple-500">@ {leg.outcome.laySource ?? "exchange"}</div>
                                   </div>
                                 </div>
-                                <div className="mt-1.5 flex justify-between border-t border-gray-50 pt-1.5 text-xs text-gray-500 dark:border-gray-800">
-                                  <span>Lay stake {money(lp.layStake)}</span>
-                                  <span>Liability {money(lp.liability)}</span>
+                                <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                                  <span>Lay stake <span className="font-semibold text-gray-700 dark:text-gray-200">{money(lp.layStake)}</span></span>
+                                  <span>Liability <span className="font-semibold text-gray-700 dark:text-gray-200">{money(lp.liability)}</span></span>
+                                </div>
+                                <div className="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                                  If {phrase.toLowerCase()} fails: exchange lay wins {money(lp.layWin)}, bookmaker acca dead — retained {money(p.retainedProfit)}.
                                 </div>
                               </div>
                             );
                           })}
                         </div>
                       </div>
-                      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
-                        <div>
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Bet return</div>
-                          <div className="mt-0.5 font-semibold text-gray-800 dark:text-gray-100">{money(p.grossReturn)}</div>
+
+                      {/* Roll-up — confirmation underneath the per-leg rows */}
+                      <div className="mt-4 rounded-xl bg-green-50 p-3 dark:bg-green-950/30">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600 dark:text-green-400">Guaranteed retained profit</div>
+                            <div className="text-2xl font-extrabold text-green-700 dark:text-green-300">+{money(p.retainedProfit)}</div>
+                            <div className="text-xs text-green-600/80 dark:text-green-400/80">Same if the bet wins or any leg loses</div>
+                          </div>
+                          <div className="rounded-md bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-300">
+                            Retain {retentionPct}%
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Liability</div>
-                          <div className="mt-0.5 font-semibold text-gray-800 dark:text-gray-100">{money(p.totalLiability)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Retain</div>
-                          <div className="mt-0.5 font-semibold text-green-600 dark:text-green-400">{retentionPct}%</div>
+                        <div className="mt-2 grid grid-cols-3 gap-2 border-t border-green-100 pt-2 dark:border-green-900">
+                          <div>
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Bet return</div>
+                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.grossReturn)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Total liability</div>
+                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.totalLiability)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Lay leg 1</div>
+                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.legs[0].layStake)}</div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -737,7 +781,10 @@ export default function LayBets() {
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing the top {results.accas.length} of {results.total} matching multi-leg bets (from {results.considered} fixtures with exchange lay prices). Ranked by guaranteed retained profit. Lay each leg <strong>in order</strong>, only after the previous leg settles.
+                Showing the top {results.accas.length} of {results.total} matching multi-leg bets (from {results.considered} fixtures with exchange lay prices), ranked by guaranteed retained profit. Lay each leg <strong>in order</strong>, only after the previous leg settles.
+                {results.noLayExcluded > 0 && (
+                  <> {results.noLayExcluded} outcome{results.noLayExcluded === 1 ? "" : "s"} skipped — no exchange lay price.</>
+                )}
               </p>
             </>
           )}
