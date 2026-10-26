@@ -4,13 +4,11 @@ import {
   calcLay,
   calcFreeBetProfit,
   layGap,
-  qualifiesForLay,
   round2,
   COMMISSION,
   type LayCalc,
   type FreeBetType,
 } from "../lib/odds";
-import { sequentialLayPlan, type AccaPlan } from "../lib/acca";
 import {
   getMatches,
   getOddsAgeMs,
@@ -20,36 +18,20 @@ import {
 import Paywall from "../components/Paywall";
 import Markdown from "../components/Markdown";
 import layGuide from "../content/lay-betting-guide.md?raw";
-import accaGuide from "../content/acca-betting-guide.md?raw";
+import {
+  sportCategory,
+  sportLabel,
+  isIceHockey,
+  getIcon,
+  money,
+  formatAge,
+} from "../lib/laybets-common";
 
-const BACK_STAKE = 20; // cash qualifying back stake (singles' lay stake/liability)
-const DEFAULT_FREE_STAKE = "10"; // free-bet stake default (singles + accas)
-const TOP_N = 10;
-const MAX_MATCHES = 24; // soonest matches considered — bounds the acca search
+const DEFAULT_BACK_STAKE = "20"; // cash qualifying back stake (user-editable)
+const DEFAULT_FREE_STAKE = "10"; // free-bet stake default
+const MAX_SINGLE_GAP = 0.2; // owner: all back odds with lay gap < 0.2 (negative gap = value)
 
-const LS_FILTERS_KEY = "eaw_laybets_filters_v1";
-const LS_FREE_KEY = "eaw_laybets_free_v1";
-
-// Acca leg-quality guard: realistic back odds + a real, close exchange lay price.
-const MIN_LEG_ODDS = 1.1;
-const MAX_BACK_ODDS = 6.0;
-const MIN_LAY_GAP = -0.05;
-const MAX_LAY_GAP = 0.2;
-
-// Display labels for sport categories (the prefix of the raw sport_key).
-// Anything not listed falls back to a capitalised slug — never invented.
-const SPORT_LABELS: Record<string, string> = {
-  soccer: "Football",
-  baseball: "Baseball",
-  basketball: "Basketball",
-  cricket: "Cricket",
-  icehockey: "Ice Hockey",
-  tennis: "Tennis",
-  rugby: "Rugby",
-  americanfootball: "American Football",
-  aussierules: "Aussie Rules",
-  golf: "Golf",
-};
+const LS_KEY = "eaw_laybets_singles_v1";
 
 interface LayOpportunity {
   match: Match;
@@ -58,38 +40,39 @@ interface LayOpportunity {
   gap: number;
 }
 
-interface LegPick {
-  match: Match;
-  outcome: MatchOutcome;
-}
-
-interface AccaCandidate {
-  legs: LegPick[];
-  plan: AccaPlan;
-}
-
-interface MatchWithLegs {
-  match: Match;
-  outcomes: MatchOutcome[];
-}
-
 interface Filters {
-  legs: number;
   category: string;
   bookmaker: string;
   minOdds: number;
 }
 
-// Draft state keeps min-odds as RAW TEXT (empty allowed) so the owner can clear
-// the field and type a fresh number; it is parsed/clamped only on Run or blur.
-interface DraftFilters {
-  legs: number;
+// Draft keeps min-odds as RAW TEXT so the owner can clear it and type a fresh
+// number; it is parsed/clamped only on Run or blur.
+interface Draft {
   category: string;
   bookmaker: string;
   minOdds: string;
 }
 
-const DEFAULT_FILTERS: DraftFilters = { legs: 1, category: "all", bookmaker: "all", minOdds: "1.5" };
+interface Persisted extends Draft {
+  backStake: string;
+  freeStake: string;
+  freeType: FreeBetType;
+}
+
+const DEFAULT_DRAFT: Draft = { category: "all", bookmaker: "all", minOdds: "1.5" };
+const DEFAULT_PERSISTED: Persisted = {
+  ...DEFAULT_DRAFT,
+  backStake: DEFAULT_BACK_STAKE,
+  freeStake: DEFAULT_FREE_STAKE,
+  freeType: "snr",
+};
+
+/** Parse a positive stake amount (empty/invalid → fallback). */
+function parseAmount(raw: string, fallback: number): number {
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
 
 /** Parse the min-odds text, clamping to ≥ 1.0 (empty/invalid → 1). */
 function parseMinOdds(raw: string): number {
@@ -97,155 +80,40 @@ function parseMinOdds(raw: string): number {
   return Number.isFinite(n) && n >= 1 ? n : 1;
 }
 
-/** Parse the free-bet stake text (empty/invalid → default £10). */
-function parseStake(raw: string): number {
-  const n = parseFloat(raw);
-  return Number.isFinite(n) && n > 0 ? n : 10;
-}
-
-/** Convert a draft (raw min-odds text) into applied filters. */
-function toFilters(d: DraftFilters): Filters {
+function toFilters(d: Draft): Filters {
   return {
-    legs: d.legs,
     category: d.category,
     bookmaker: d.bookmaker,
     minOdds: parseMinOdds(d.minOdds),
   };
 }
 
-/** Last-used controls, so the page can auto-run on open (zero-click). */
-function loadFilters(): DraftFilters {
+function loadPersisted(): Persisted {
   try {
-    const raw = localStorage.getItem(LS_FILTERS_KEY);
+    const raw = localStorage.getItem(LS_KEY);
     if (raw) {
-      const p = JSON.parse(raw) as Partial<DraftFilters>;
-      if (p && typeof p.legs === "number") {
-        return {
-          legs: p.legs,
-          category: typeof p.category === "string" ? p.category : "all",
-          bookmaker: typeof p.bookmaker === "string" ? p.bookmaker : "all",
-          minOdds: typeof p.minOdds === "string" ? p.minOdds : DEFAULT_FILTERS.minOdds,
-        };
-      }
+      const p = JSON.parse(raw) as Partial<Persisted>;
+      return {
+        category: typeof p.category === "string" ? p.category : "all",
+        bookmaker: typeof p.bookmaker === "string" ? p.bookmaker : "all",
+        minOdds: typeof p.minOdds === "string" ? p.minOdds : DEFAULT_DRAFT.minOdds,
+        backStake: typeof p.backStake === "string" && p.backStake.length > 0 ? p.backStake : DEFAULT_BACK_STAKE,
+        freeStake: typeof p.freeStake === "string" && p.freeStake.length > 0 ? p.freeStake : DEFAULT_FREE_STAKE,
+        freeType: p.freeType === "sr" ? "sr" : "snr",
+      };
     }
   } catch {
     /* corrupted/stale — fall back to defaults */
   }
-  return DEFAULT_FILTERS;
+  return DEFAULT_PERSISTED;
 }
 
-function persistFilters(d: DraftFilters): void {
+function persist(p: Persisted): void {
   try {
-    localStorage.setItem(LS_FILTERS_KEY, JSON.stringify(d));
+    localStorage.setItem(LS_KEY, JSON.stringify(p));
   } catch {
     /* localStorage can throw in private mode — non-fatal */
   }
-}
-
-/** Last-used free-bet stake + type. */
-function loadFree(): { stake: string; type: FreeBetType } {
-  try {
-    const raw = localStorage.getItem(LS_FREE_KEY);
-    if (raw) {
-      const p = JSON.parse(raw) as { stake?: string; type?: FreeBetType };
-      return {
-        stake: typeof p.stake === "string" && p.stake.length > 0 ? p.stake : DEFAULT_FREE_STAKE,
-        type: p.type === "sr" ? "sr" : "snr",
-      };
-    }
-  } catch {
-    /* fall through */
-  }
-  return { stake: DEFAULT_FREE_STAKE, type: "snr" };
-}
-
-function persistFree(v: { stake: string; type: FreeBetType }): void {
-  try {
-    localStorage.setItem(LS_FREE_KEY, JSON.stringify(v));
-  } catch {
-    /* non-fatal */
-  }
-}
-
-function sportCategory(sportKey: string): string {
-  return sportKey.split("_")[0];
-}
-
-function sportLabel(cat: string): string {
-  return SPORT_LABELS[cat] || cat.charAt(0).toUpperCase() + cat.slice(1);
-}
-
-function getIcon(name: string, home: string, away: string): string {
-  const lower = name.toLowerCase();
-  if (lower === home.toLowerCase()) return "⬆️";
-  if (lower === away.toLowerCase()) return "⬇️";
-  return "➡️";
-}
-
-/** Exact outcome in plain language — match result only (Home/Draw/Away in h2h). */
-function outcomePhrase(name: string, home: string, away: string): string {
-  const lower = name.toLowerCase();
-  if (lower === home.toLowerCase()) return `${home} to beat ${away}`;
-  if (lower === away.toLowerCase()) return `${away} to beat ${home}`;
-  if (lower === "draw" || lower === "tie") return "Draw";
-  return name;
-}
-
-function money(n: number): string {
-  return `£${n.toFixed(2)}`;
-}
-
-function formatAge(ms: number): string {
-  if (ms < 60_000) return "just now";
-  const m = Math.floor(ms / 60_000);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m ago`;
-}
-
-/** Outcomes usable as an acca leg (real, close lay price within the guard). */
-function usableLegs(m: Match): MatchOutcome[] {
-  return m.outcomes.filter((o) => {
-    if (o.layOdds == null || o.layOdds <= COMMISSION) return false;
-    if (o.odds < MIN_LEG_ODDS || o.odds > MAX_BACK_ODDS) return false;
-    const gap = o.layOdds - o.odds;
-    return gap >= MIN_LAY_GAP && gap <= MAX_LAY_GAP;
-  });
-}
-
-/** Build cross-match multi-leg bets (each leg from a different match, laid in order). */
-function buildAccas(
-  matchesWithLegs: MatchWithLegs[],
-  legCount: number,
-  freeStake: number
-): AccaCandidate[] {
-  const out: AccaCandidate[] = [];
-  const current: LegPick[] = [];
-
-  function recurse(startIdx: number) {
-    if (current.length === legCount) {
-      const plan = sequentialLayPlan(
-        current.map((l) => ({ backOdds: l.outcome.odds, layOdds: l.outcome.layOdds! })),
-        freeStake
-      );
-      if (plan) {
-        out.push({ legs: [...current], plan });
-      }
-      return;
-    }
-    const remaining = legCount - current.length;
-    for (let i = startIdx; i <= matchesWithLegs.length - remaining; i++) {
-      const mwl = matchesWithLegs[i];
-      for (const oc of mwl.outcomes) {
-        current.push({ match: mwl.match, outcome: oc });
-        recurse(i + 1);
-        current.pop();
-      }
-    }
-  }
-
-  recurse(0);
-  return out;
 }
 
 export default function LayBets() {
@@ -253,35 +121,32 @@ export default function LayBets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Instant-on-open: load last-used controls and apply them immediately so
-  // results are visible with zero clicks (once the cached odds arrive).
-  const [draft, setDraft] = useState<DraftFilters>(loadFilters);
-  const [filters, setFilters] = useState<Filters>(() => toFilters(loadFilters()));
+  // Instant-on-open: load last-used controls and apply immediately (zero clicks).
+  const [draft, setDraft] = useState<Draft>(() => {
+    const p = loadPersisted();
+    return { category: p.category, bookmaker: p.bookmaker, minOdds: p.minOdds };
+  });
+  const [filters, setFilters] = useState<Filters>(() => toFilters({ ...loadPersisted() }));
+  const [backStake, setBackStake] = useState<string>(() => loadPersisted().backStake);
+  const [freeStake, setFreeStake] = useState<string>(() => loadPersisted().freeStake);
+  const [freeType, setFreeType] = useState<FreeBetType>(() => loadPersisted().freeType);
 
-  // Free-bet mode: stake (£) + type. Singles use both; accas switch their stake
-  // to this value (always SNR — the sequential-lay engine is SNR-only).
-  const [free, setFree] = useState<{ stake: string; type: FreeBetType }>(loadFree);
-  const stakeVal = parseStake(free.stake);
+  const backStakeVal = parseAmount(backStake, 20);
+  const freeStakeVal = parseAmount(freeStake, 10);
 
-  // Apply a draft as the active filters (parsing the min-odds text) and persist
-  // it — used by control changes so the power flow auto-re-runs (no API cost).
-  const apply = (next: DraftFilters) => {
+  const apply = (next: Draft) => {
     setDraft(next);
     setFilters(toFilters(next));
   };
 
-  // Run button: normalise the min-odds text, then apply.
   const run = () => {
     apply({ ...draft, minOdds: String(parseMinOdds(draft.minOdds)) });
   };
 
-  // Persist last-used controls + free-bet settings across visits.
+  // Persist last-used controls across visits.
   useEffect(() => {
-    persistFilters(draft);
-  }, [draft]);
-  useEffect(() => {
-    persistFree(free);
-  }, [free]);
+    persist({ ...draft, backStake, freeStake, freeType });
+  }, [draft, backStake, freeStake, freeType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -305,34 +170,24 @@ export default function LayBets() {
     };
   }, []);
 
-  // Age of the cached odds, for the "Odds updated Xm ago" stamp.
   const oddsAgeMs = useMemo(() => getOddsAgeMs("upcoming"), [matches]);
 
-  // Categories + bookmakers actually present in the loaded data (never invented).
   const categories = useMemo(() => {
     const set = new Set<string>();
-    for (const m of matches) set.add(sportCategory(m.sportKey));
+    for (const m of matches) if (!isIceHockey(m.sportKey)) set.add(sportCategory(m.sportKey));
     return [...set].sort();
   }, [matches]);
 
   const bookmakers = useMemo(() => {
     const set = new Set<string>();
-    for (const m of matches) for (const o of m.outcomes) set.add(o.bookmaker);
+    for (const m of matches) if (!isIceHockey(m.sportKey)) for (const o of m.outcomes) set.add(o.bookmaker);
     return [...set].sort();
   }, [matches]);
 
   const results = useMemo(() => {
-    const empty = {
-      singles: [] as LayOpportunity[],
-      accas: [] as AccaCandidate[],
-      considered: 0,
-      total: 0,
-      feedMatches: matches.length,
-      qualifiedOutcomes: 0,
-      qualifiedFixtures: 0,
-      noLayExcluded: 0,
-    };
-    if (!filters || matches.length === 0) return empty;
+    if (!filters || matches.length === 0) {
+      return { singles: [] as LayOpportunity[], feedMatches: matches.length, qualifiedOutcomes: 0 };
+    }
 
     const byCategory = (m: Match) =>
       filters.category === "all" || sportCategory(m.sportKey) === filters.category;
@@ -343,78 +198,33 @@ export default function LayBets() {
       (a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime()
     );
 
-    // ── Singles (legs = 1): today's/upcoming close-lay opportunities ──
-    if (filters.legs === 1) {
-      const rows: LayOpportunity[] = [];
-      for (const m of sorted) {
-        if (!byCategory(m)) continue;
-        for (const o of m.outcomes) {
-          if (!byBookmaker(o)) continue;
-          if (o.odds < filters.minOdds) continue;
-          if (!qualifiesForLay(o.odds, o.layOdds)) continue;
-          const lay = calcLay(o.odds, o.layOdds, BACK_STAKE);
-          if (!lay) continue;
-          rows.push({ match: m, outcome: o, lay, gap: layGap(o.odds, o.layOdds!) });
-        }
-      }
-      rows.sort((a, b) => {
-        const d = round2(b.lay.profitLoss) - round2(a.lay.profitLoss);
-        if (d !== 0) return d;
-        return a.gap - b.gap;
-      });
-      return {
-        singles: rows,
-        accas: [],
-        considered: rows.length,
-        total: rows.length,
-        feedMatches: matches.length,
-        qualifiedOutcomes: rows.length,
-        qualifiedFixtures: rows.length,
-        noLayExcluded: 0,
-      };
-    }
-
-    // ── Multi-leg bets (legs = 2–4): cross-match, laid leg-by-leg ──
-    const matchesWithLegs: MatchWithLegs[] = [];
-    let legOutcomes = 0;
-    let noLayExcluded = 0;
+    const rows: LayOpportunity[] = [];
     for (const m of sorted) {
+      // Ice hockey is excluded: back odds are regulation-time, lay odds are
+      // overtime-inclusive — they never line up, so never show them.
+      if (isIceHockey(m.sportKey)) continue;
       if (!byCategory(m)) continue;
-      // Outcomes with no exchange lay price can never be a leg (we never
-      // fabricate one) — count them so the user sees they were excluded,
-      // not silently dropped.
       for (const o of m.outcomes) {
-        if (byBookmaker(o) && (o.layOdds == null || o.layOdds <= COMMISSION)) {
-          noLayExcluded += 1;
-        }
+        if (!byBookmaker(o)) continue;
+        if (o.odds < filters.minOdds) continue;
+        if (o.layOdds == null || o.layOdds <= COMMISSION) continue;
+        // Owner: all back odds, lay gap < 0.2 (negative gap = value).
+        if (layGap(o.odds, o.layOdds) >= MAX_SINGLE_GAP) continue;
+        const lay = calcLay(o.odds, o.layOdds, backStakeVal);
+        if (!lay) continue;
+        rows.push({ match: m, outcome: o, lay, gap: layGap(o.odds, o.layOdds!) });
       }
-      const outcomes = usableLegs(m)
-        .filter(byBookmaker)
-        .filter((o) => o.odds >= filters.minOdds);
-      if (outcomes.length > 0) {
-        matchesWithLegs.push({ match: m, outcomes });
-        legOutcomes += outcomes.length;
-      }
-      if (matchesWithLegs.length >= MAX_MATCHES) break;
     }
-    const all = buildAccas(matchesWithLegs, filters.legs, stakeVal);
-    all.sort((a, b) => b.plan.retainedProfit - a.plan.retainedProfit);
-    return {
-      singles: [],
-      accas: all.slice(0, TOP_N),
-      considered: matchesWithLegs.length,
-      total: all.length,
-      feedMatches: matches.length,
-      qualifiedOutcomes: legOutcomes,
-      qualifiedFixtures: matchesWithLegs.length,
-      noLayExcluded,
-    };
-  }, [matches, filters, stakeVal]);
+    rows.sort((a, b) => {
+      const d = round2(b.lay.profitLoss) - round2(a.lay.profitLoss);
+      if (d !== 0) return d;
+      return a.gap - b.gap;
+    });
+    return { singles: rows, feedMatches: matches.length, qualifiedOutcomes: rows.length };
+  }, [matches, filters, backStakeVal]);
 
   const bestProfit =
-    filters?.legs === 1 && results.singles.length > 0
-      ? round2(results.singles[0].lay.profitLoss)
-      : 0;
+    results.singles.length > 0 ? round2(results.singles[0].lay.profitLoss) : 0;
 
   const controlClass =
     "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200";
@@ -429,6 +239,7 @@ export default function LayBets() {
               <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
             </Link>
             <div className="flex items-center gap-4">
+              <Link to="/bet-builder" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400">🧮 Bet Builder</Link>
               <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400">Best Odds</Link>
               <Link to="/dashboard" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">Dashboard →</Link>
             </div>
@@ -438,10 +249,10 @@ export default function LayBets() {
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
           <h1 className="text-3xl font-bold tracking-tight">Lay Bet Finder</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Back an outcome at the bookmaker, lay it on the exchange — and lock in the result. Find close, profitable single lays or build a 2–4-leg bet with a done-for-you lay plan.
+            Back an outcome at the bookmaker, lay it on the exchange — and lock in the result. Every close single lay, ranked by what it returns on your stake.
           </p>
 
-          {/* Free-bet mode (power user): stake + type, persisted across visits */}
+          {/* Free-bet mode: stake + type, persisted across visits */}
           <div className="mt-5 flex flex-wrap items-end gap-4 rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-900 dark:bg-purple-950/30">
             <div className="text-sm font-semibold text-purple-700 dark:text-purple-300">🎁 Free bet</div>
             <label className="block">
@@ -451,9 +262,9 @@ export default function LayBets() {
                 <input
                   type="text"
                   inputMode="decimal"
-                  value={free.stake}
-                  onChange={(e) => setFree({ ...free, stake: e.target.value })}
-                  onBlur={() => setFree({ ...free, stake: String(parseStake(free.stake)) })}
+                  value={freeStake}
+                  onChange={(e) => setFreeStake(e.target.value)}
+                  onBlur={() => setFreeStake(String(parseAmount(freeStake, 10)))}
                   className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
                 />
               </div>
@@ -461,8 +272,8 @@ export default function LayBets() {
             <label className="block">
               <span className="text-xs font-medium text-gray-500">Type</span>
               <select
-                value={free.type}
-                onChange={(e) => setFree({ ...free, type: e.target.value as FreeBetType })}
+                value={freeType}
+                onChange={(e) => setFreeType(e.target.value as FreeBetType)}
                 className="mt-1 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
               >
                 <option value="snr">SNR — stake not returned</option>
@@ -470,24 +281,25 @@ export default function LayBets() {
               </select>
             </label>
             <p className="min-w-0 flex-1 text-xs text-purple-600/80 dark:text-purple-400/80">
-              Singles show what this free bet retains; multi-leg bets use this stake (SNR). Last-used stake is remembered.
+              Each row shows what this free bet would retain on that outcome. Last-used stake is remembered.
             </p>
           </div>
 
-          {/* Controls */}
+          {/* Controls: back stake / sport / bookmaker / min odds / run */}
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <label className="block">
-              <span className="text-xs font-medium text-gray-500">Legs</span>
-              <select
-                value={draft.legs}
-                onChange={(e) => apply({ ...draft, legs: Number(e.target.value) })}
-                className={controlClass}
-              >
-                <option value={1}>1 leg — singles</option>
-                <option value={2}>2 legs</option>
-                <option value={3}>3 legs</option>
-                <option value={4}>4 legs</option>
-              </select>
+              <span className="text-xs font-medium text-gray-500">Back stake</span>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">£</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={backStake}
+                  onChange={(e) => setBackStake(e.target.value)}
+                  onBlur={() => setBackStake(String(parseAmount(backStake, 20)))}
+                  className={controlClass}
+                />
+              </div>
             </label>
 
             <label className="block">
@@ -519,9 +331,7 @@ export default function LayBets() {
             </label>
 
             <label className="block">
-              <span className="text-xs font-medium text-gray-500">
-                {draft.legs === 1 ? "Minimum back odds" : "Minimum leg odds"}
-              </span>
+              <span className="text-xs font-medium text-gray-500">Minimum back odds</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -545,18 +355,12 @@ export default function LayBets() {
 
           {/* Honesty rails + freshness */}
           <p className="mt-3 text-xs text-gray-400">
-            {draft.legs === 1
-              ? `Singles show only rows with back odds under 2.8 and a lay gap under 0.1, on a £20 cash back stake, including 5% exchange commission. The free-bet line uses your entered stake (£${stakeVal}) and type.`
-              : `Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20). Figures use a £${stakeVal} stake-not-returned free bet and 5% exchange commission.`}
-            {" "}Run searches the freshest cached odds — it never costs an API call.
+            Singles show every outcome with a lay gap under 0.20 (negative gap = better than break-even), on your £{backStakeVal} cash back stake, including 5% exchange commission. Ice hockey is excluded — bookmaker back odds are regulation-time but exchange lays include overtime, so they never match. Run searches the freshest cached odds — it never costs an API call.
           </p>
-
           <p className="mt-1 text-xs text-gray-400">Pre-match odds — refresh every 10 minutes.</p>
 
           {oddsAgeMs != null && (
-            <p className="mt-1 text-xs font-medium text-gray-500">
-              🕒 Odds updated {formatAge(oddsAgeMs)}
-            </p>
+            <p className="mt-1 text-xs font-medium text-gray-500">🕒 Odds updated {formatAge(oddsAgeMs)}</p>
           )}
 
           {loading && (
@@ -583,24 +387,16 @@ export default function LayBets() {
             </div>
           )}
 
-          {!loading && !error && results.singles.length === 0 && results.accas.length === 0 && (
+          {!loading && !error && results.singles.length === 0 && (
             <div className="mt-8 rounded-xl border border-gray-200 bg-white p-8 text-left dark:border-gray-800 dark:bg-gray-950">
               <div className="flex items-start gap-3">
                 <span className="text-4xl">🔍</span>
                 <div>
-                  <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-                    {filters.legs === 1 ? "No close lays match these settings" : "No multi-leg bets match these settings"}
-                  </p>
+                  <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">No close lays match these settings</p>
                   <p className="mt-1 text-sm text-gray-500">
                     The cached feed holds <strong>{results.feedMatches}</strong> match{results.feedMatches === 1 ? "" : "es"}.
-                    {filters.legs === 1 ? (
-                      <> <strong>{results.qualifiedOutcomes}</strong> outcome{results.qualifiedOutcomes === 1 ? "" : "s"} passed the close-lay guard at these settings.</>
-                    ) : (
-                      <> <strong>{results.qualifiedFixtures}</strong> fixture{results.qualifiedFixtures === 1 ? "" : "s"} have a qualifying leg (of {results.qualifiedOutcomes} total qualifying legs), but {filters.legs} legs need {filters.legs} different matches.</>
-                    )}
                   </p>
                   <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-500">
-                    {filters.legs > 2 && <li>Try fewer legs (e.g. 2 legs).</li>}
                     {filters.minOdds > 1 && <li>Lower the minimum odds.</li>}
                     {filters.category !== "all" && <li>Set Sport back to “All sports”.</li>}
                     {filters.bookmaker !== "all" && <li>Set Bookmaker back to “All bookmakers”.</li>}
@@ -611,15 +407,14 @@ export default function LayBets() {
             </div>
           )}
 
-          {/* Singles results */}
-          {!loading && !error && filters?.legs === 1 && results.singles.length > 0 && (
+          {!loading && !error && results.singles.length > 0 && (
             <>
               <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {results.singles.map((op) => {
                   const profitable = op.lay.profitLoss >= 0;
                   const isBest = profitable && round2(op.lay.profitLoss) === bestProfit;
-                  const freeBetProfit = calcFreeBetProfit(op.outcome.odds, op.outcome.layOdds, stakeVal, COMMISSION, free.type);
-                  const retentionPct = freeBetProfit != null ? Math.round((freeBetProfit / stakeVal) * 100) : 0;
+                  const freeBetProfit = calcFreeBetProfit(op.outcome.odds, op.outcome.layOdds, freeStakeVal, COMMISSION, freeType);
+                  const retentionPct = freeBetProfit != null ? Math.round((freeBetProfit / freeStakeVal) * 100) : 0;
                   return (
                     <div
                       key={`${op.match.matchId}-${op.outcome.name}`}
@@ -669,8 +464,8 @@ export default function LayBets() {
                         </div>
                       </div>
                       {freeBetProfit != null && (
-                        <div className={`mt-3 rounded-lg px-3 py-1.5 text-xs ${freeBetProfit > stakeVal ? "bg-green-50 font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300" : "bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
-                          Free bet £{stakeVal} ({free.type === "sr" ? "stake returned" : "SNR"}) → {money(freeBetProfit)} ({retentionPct}%)
+                        <div className={`mt-3 rounded-lg px-3 py-1.5 text-xs ${freeBetProfit > freeStakeVal ? "bg-green-50 font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300" : "bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                          Free bet £{freeStakeVal} ({freeType === "sr" ? "stake returned" : "SNR"}) → {money(freeBetProfit)} ({retentionPct}%)
                         </div>
                       )}
                     </div>
@@ -678,116 +473,22 @@ export default function LayBets() {
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair). Figures use a £20 back stake and include 5% exchange commission. The free-bet line shows what your entered free bet (£{stakeVal}, {free.type === "sr" ? "stake returned" : "stake not returned"}) on that outcome would retain — not a claim you hold one.
+                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair). Figures use your £{backStakeVal} back stake and include 5% exchange commission. The free-bet line shows what your entered free bet (£{freeStakeVal}, {freeType === "sr" ? "stake returned" : "stake not returned"}) would retain — not a claim you hold one.
               </p>
             </>
           )}
 
-          {/* Acca results */}
-          {!loading && !error && filters && filters.legs >= 2 && results.accas.length > 0 && (
-            <>
-              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {results.accas.map((c, idx) => {
-                  const p = c.plan;
-                  const retentionPct = Math.round(p.retention * 100);
-                  const isBest = idx === 0;
-                  return (
-                    <div
-                      key={c.legs.map((l) => l.match.matchId + l.outcome.name).join("|")}
-                      className="relative rounded-2xl border-2 border-green-300 bg-white p-5 shadow-sm transition-shadow hover:shadow-md dark:border-green-800 dark:bg-gray-950"
-                    >
-                      {isBest && (
-                        <span className="absolute -top-3 right-4 rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white shadow-sm">★ Best</span>
-                      )}
-                      <div className="flex items-baseline justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-semibold text-gray-500">{filters.legs}-leg · combined odds</div>
-                          <div className="text-3xl font-extrabold text-gray-900 dark:text-white">{p.combinedBackOdds.toFixed(2)}</div>
-                        </div>
-                        <div className="shrink-0 rounded-lg bg-purple-50 px-2.5 py-1.5 text-right text-xs leading-5 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
-                          <div className="font-semibold">Free bet £{stakeVal}</div>
-                          <div className="text-purple-500/80 dark:text-purple-400/80">stake not returned</div>
-                        </div>
-                      </div>
-
-                      {/* Per-leg rows — the primary information, one exact outcome per row */}
-                      <div className="mt-4">
-                        <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Legs — lay in this order</div>
-                        <div className="mt-2 space-y-2">
-                          {c.legs.map((leg, i) => {
-                            const lp = p.legs[i];
-                            const phrase = outcomePhrase(leg.outcome.name, leg.match.home, leg.match.away);
-                            return (
-                              <div key={i} className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 dark:border-gray-700 dark:bg-gray-900/60">
-                                <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                  <span className="text-gray-400">{i + 1}.</span>
-                                  <span>{phrase}</span>
-                                </div>
-                                <div className="mt-0.5 truncate text-xs text-gray-400">
-                                  {getIcon(leg.outcome.name, leg.match.home, leg.match.away)} {leg.match.home} v {leg.match.away} · {leg.match.time}
-                                </div>
-                                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                                  <div className="rounded-md bg-white px-2 py-1.5 dark:bg-gray-900">
-                                    <div className="text-gray-400">Back <span className="font-semibold text-gray-800 dark:text-gray-100">{leg.outcome.odds.toFixed(2)}</span></div>
-                                    <div className="truncate text-gray-400">@ {leg.outcome.bookmaker}</div>
-                                  </div>
-                                  <div className="rounded-md bg-purple-50 px-2 py-1.5 dark:bg-purple-950/40">
-                                    <div className="text-purple-500">Lay <span className="font-semibold text-purple-700 dark:text-purple-300">{lp.layOdds.toFixed(2)}</span></div>
-                                    <div className="truncate text-purple-500">@ {leg.outcome.laySource ?? "exchange"}</div>
-                                  </div>
-                                </div>
-                                <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                                  <span>Lay stake <span className="font-semibold text-gray-700 dark:text-gray-200">{money(lp.layStake)}</span></span>
-                                  <span>Liability <span className="font-semibold text-gray-700 dark:text-gray-200">{money(lp.liability)}</span></span>
-                                </div>
-                                <div className="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                                  If {phrase.toLowerCase()} fails: exchange lay wins {money(lp.layWin)}, bookmaker acca dead — retained {money(p.retainedProfit)}.
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Roll-up — confirmation underneath the per-leg rows */}
-                      <div className="mt-4 rounded-xl bg-green-50 p-3 dark:bg-green-950/30">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600 dark:text-green-400">Guaranteed retained profit</div>
-                            <div className="text-2xl font-extrabold text-green-700 dark:text-green-300">+{money(p.retainedProfit)}</div>
-                            <div className="text-xs text-green-600/80 dark:text-green-400/80">Same if the bet wins or any leg loses</div>
-                          </div>
-                          <div className="rounded-md bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-300">
-                            Retain {retentionPct}%
-                          </div>
-                        </div>
-                        <div className="mt-2 grid grid-cols-3 gap-2 border-t border-green-100 pt-2 dark:border-green-900">
-                          <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Bet return</div>
-                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.grossReturn)}</div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Total liability</div>
-                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.totalLiability)}</div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Lay leg 1</div>
-                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.legs[0].layStake)}</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="mt-4 text-xs text-gray-400">
-                Showing the top {results.accas.length} of {results.total} matching multi-leg bets (from {results.considered} fixtures with exchange lay prices), ranked by guaranteed retained profit. Lay each leg <strong>in order</strong>, only after the previous leg settles.
-                {results.noLayExcluded > 0 && (
-                  <> {results.noLayExcluded} outcome{results.noLayExcluded === 1 ? "" : "s"} skipped — no exchange lay price.</>
-                )}
-              </p>
-            </>
-          )}
+          <div className="mt-10 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center dark:border-gray-800 dark:bg-gray-900/50">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Want to combine two or more legs into one bet with a done-for-you lay plan?
+            </p>
+            <Link
+              to="/bet-builder"
+              className="mt-3 inline-block rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
+            >
+              Open the Bet Builder →
+            </Link>
+          </div>
 
           <section className="mt-16 border-t border-gray-200 pt-10 dark:border-gray-800">
             <details open className="group">
@@ -796,16 +497,6 @@ export default function LayBets() {
                 <svg className="h-5 w-5 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </summary>
               <div className="mt-4"><Markdown source={layGuide} /></div>
-            </details>
-          </section>
-
-          <section className="mt-10 border-t border-gray-200 pt-10 dark:border-gray-800">
-            <details className="group">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-                <h2 className="text-2xl font-bold tracking-tight">How accas and lay plans work</h2>
-                <svg className="h-5 w-5 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </summary>
-              <div className="mt-4"><Markdown source={accaGuide} /></div>
             </details>
           </section>
         </div>

@@ -98,7 +98,8 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
                 <span className="text-sm text-gray-500">/mo</span>
               </div>
               <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li>• Lay Bet Finder — singles to 4-leg accas</li>
+                <li>• Lay Bet Finder — close single lays</li>
+                <li>• Bet Builder — 2–4-leg lay plans</li>
                 <li>• Everything in Starter</li>
                 <li>• Advanced oddsmatcher</li>
               </ul>
@@ -115,7 +116,8 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
               </div>
               <p className="mt-1 text-xs text-gray-500">Save £40 vs monthly</p>
               <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li>• Lay Bet Finder — singles to 4-leg accas</li>
+                <li>• Lay Bet Finder — close single lays</li>
+                <li>• Bet Builder — 2–4-leg lay plans</li>
                 <li>• Everything in Pro</li>
                 <li>• 2 months free</li>
               </ul>
