@@ -10,19 +10,11 @@ interface User {
   plan: Plan | null;     // which tier they're on
 }
 
-interface UserRecord {
-  name: string;
-  email: string;
-  password: string;
-  subscription: boolean;
-  plan: Plan | null;
-  token: string;
-}
-
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => boolean;
-  signup: (name: string, email: string, password: string) => boolean;
+  /** Resolve to `null` on success, or a user-facing error message on failure. */
+  login: (email: string, password: string) => Promise<string | null>;
+  signup: (name: string, email: string, password: string) => Promise<string | null>;
   logout: () => void;
   activateSubscription: (plan: Plan) => void;
   checkAuth: () => boolean;
@@ -30,31 +22,37 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function getUsers(): Record<string, UserRecord> {
-  try {
-    return JSON.parse(localStorage.getItem("eaw_users") || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveUsers(users: Record<string, UserRecord>) {
-  localStorage.setItem("eaw_users", JSON.stringify(users));
-}
-
-function generateToken(): string {
-  return "tok_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
-
 /** True when a plan grants access to Pro-only features (Lay Bet Finder). */
 export function isProPlan(plan: Plan | null | undefined): boolean {
   return plan === "pro" || plan === "annual";
 }
 
+/** POST JSON to a server endpoint; returns the parsed body (never throws). */
+async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let data: unknown = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  return data as T;
+}
+
+interface AuthResponse {
+  ok: boolean;
+  user?: User;
+  error?: string;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
-  // Restore session on mount
+  // Restore the session on mount (the user record + token, no password).
   useEffect(() => {
     try {
       const stored = localStorage.getItem("eaw_session");
@@ -80,36 +78,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = (email: string, password: string): boolean => {
-    const users = getUsers();
-    const record = users[email.toLowerCase()];
-    if (!record || record.password !== password) return false;
-
-    const u: User = {
-      email: record.email,
-      name: record.name,
-      token: record.token,
-      subscription: record.subscription,
-      plan: record.plan ?? (record.subscription ? "starter" : null),
-    };
-    setUser(u);
-    localStorage.setItem("eaw_session", JSON.stringify(u));
-    return true;
+  const login = async (email: string, password: string): Promise<string | null> => {
+    try {
+      const res = await apiPost<AuthResponse>("/api/login", { email, password });
+      if (res?.ok && res.user) {
+        setUser(res.user);
+        localStorage.setItem("eaw_session", JSON.stringify(res.user));
+        return null;
+      }
+      return res?.error || "Invalid email or password.";
+    } catch {
+      return "Couldn't reach the server. Please try again.";
+    }
   };
 
-  const signup = (name: string, email: string, password: string): boolean => {
-    const users = getUsers();
-    const key = email.toLowerCase();
-    if (users[key]) return false; // already exists
-
-    const token = generateToken();
-    users[key] = { name, email, password, subscription: false, plan: null, token };
-    saveUsers(users);
-
-    const u: User = { email, name, token, subscription: false, plan: null };
-    setUser(u);
-    localStorage.setItem("eaw_session", JSON.stringify(u));
-    return true;
+  const signup = async (name: string, email: string, password: string): Promise<string | null> => {
+    try {
+      const res = await apiPost<AuthResponse>("/api/signup", { name, email, password });
+      if (res?.ok && res.user) {
+        setUser(res.user);
+        localStorage.setItem("eaw_session", JSON.stringify(res.user));
+        return null;
+      }
+      return res?.error || "Could not create your account.";
+    } catch {
+      return "Couldn't reach the server. Please try again.";
+    }
   };
 
   const logout = () => {
@@ -122,15 +116,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const updated: User = { ...user, subscription: true, plan };
     setUser(updated);
     localStorage.setItem("eaw_session", JSON.stringify(updated));
-
-    // Also update the users store
-    const users = getUsers();
-    const key = user.email.toLowerCase();
-    if (users[key]) {
-      users[key].subscription = true;
-      users[key].plan = plan;
-      saveUsers(users);
-    }
   };
 
   return (

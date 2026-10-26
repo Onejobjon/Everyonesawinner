@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./lib/auth";
 import Home from "./pages/Home";
+import FreeBets from "./pages/FreeBets";
 import Calculator from "./pages/Calculator";
 import Oddsmatcher from "./pages/Oddsmatcher";
 import LayBets from "./pages/LayBets";
@@ -18,6 +19,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/free-bets" element={<FreeBets />} />
         <Route path="/calculator" element={<Calculator />} />
         <Route path="/oddsmatcher" element={<Oddsmatcher />} />
         <Route path="/lay-bets" element={<LayBets />} />

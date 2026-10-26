@@ -9,17 +9,20 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!name || !email || !password) {
       setError("All fields are required.");
       return;
     }
-    const ok = signup(name, email, password);
-    if (!ok) {
-      setError("An account with this email already exists.");
+    setSubmitting(true);
+    const err = await signup(name, email, password);
+    setSubmitting(false);
+    if (err) {
+      setError(err);
       return;
     }
     // After signup, redirect to /subscribe
@@ -61,9 +64,9 @@ export default function Signup() {
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-900" placeholder="At least 6 characters" minLength={6} />
           </div>
-          <button type="submit"
-            className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">
-            Create account
+          <button type="submit" disabled={submitting}
+            className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all disabled:opacity-60">
+            {submitting ? "Creating account…" : "Create account"}
           </button>
         </form>
 

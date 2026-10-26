@@ -9,19 +9,22 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const redirect = searchParams.get("redirect") || "/";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) {
       setError("Email and password are required.");
       return;
     }
-    const ok = login(email, password);
-    if (!ok) {
-      setError("Invalid email or password.");
+    setSubmitting(true);
+    const err = await login(email, password);
+    setSubmitting(false);
+    if (err) {
+      setError(err);
       return;
     }
     // After login: if subscribed → dashboard, else → pricing
@@ -71,9 +74,9 @@ export default function Login() {
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-900" placeholder="Your password" />
           </div>
-          <button type="submit"
-            className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">
-            Sign in
+          <button type="submit" disabled={submitting}
+            className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all disabled:opacity-60">
+            {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
 

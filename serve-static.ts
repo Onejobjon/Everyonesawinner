@@ -6,6 +6,8 @@
 import { join, extname } from "node:path";
 import { startAlertWorker, runAlertCheck, alertStatus } from "./src/server/alerts";
 import { ODDS_API_KEY } from "./src/server/odds-key";
+import { storeLead } from "./src/server/leads";
+import { registerUser, authenticateUser } from "./src/server/users";
 
 const PORT = 3000;
 const HOST = "0.0.0.0";
@@ -111,6 +113,100 @@ const server = Bun.serve({
     // Non-secret alert-config status (channel presence + schedule only).
     if (url.pathname === "/api/alert-status") {
       return Response.json(alertStatus());
+    }
+
+    // Lead capture — persists name/email/source/date to a durable JSON file
+    // (src/server/leads.ts). POST only; body { name, email, source }.
+    if (url.pathname === "/api/leads") {
+      if (req.method !== "POST") {
+        return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
+      }
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+      }
+      const { name, email, source } = (body ?? {}) as {
+        name?: unknown;
+        email?: unknown;
+        source?: unknown;
+      };
+      try {
+        const record = storeLead({
+          name: typeof name === "string" ? name : "",
+          email: typeof email === "string" ? email : "",
+          source: typeof source === "string" ? source : "free-bets-page",
+        });
+        return Response.json({ ok: true, record });
+      } catch (e) {
+        return Response.json(
+          { ok: false, error: e instanceof Error ? e.message : "Invalid lead" },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Account signup — persists name/email + scrypt-hashed password to a
+    // durable JSON file (src/server/users.ts). POST { name, email, password }.
+    if (url.pathname === "/api/signup") {
+      if (req.method !== "POST") {
+        return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
+      }
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+      }
+      const { name, email, password } = (body ?? {}) as {
+        name?: unknown;
+        email?: unknown;
+        password?: unknown;
+      };
+      try {
+        const user = registerUser(
+          typeof name === "string" ? name : "",
+          typeof email === "string" ? email : "",
+          typeof password === "string" ? password : "",
+        );
+        return Response.json({ ok: true, user });
+      } catch (e) {
+        return Response.json(
+          { ok: false, error: e instanceof Error ? e.message : "Could not create account" },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Account login — verifies credentials against the users store.
+    // POST { email, password }.
+    if (url.pathname === "/api/login") {
+      if (req.method !== "POST") {
+        return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
+      }
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+      }
+      const { email, password } = (body ?? {}) as {
+        email?: unknown;
+        password?: unknown;
+      };
+      try {
+        const user = authenticateUser(
+          typeof email === "string" ? email : "",
+          typeof password === "string" ? password : "",
+        );
+        return Response.json({ ok: true, user });
+      } catch (e) {
+        return Response.json(
+          { ok: false, error: e instanceof Error ? e.message : "Invalid credentials" },
+          { status: 401 },
+        );
+      }
     }
 
     // Guarded one-shot alert check: runs the lay-bets scanner and delivers

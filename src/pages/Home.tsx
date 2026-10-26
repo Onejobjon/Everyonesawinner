@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getMatches, type Match } from "../lib/odds-api";
 import { calcDutch, calcDutchFreeBet } from "../lib/odds";
-import FreeBetsOffers from "../components/FreeBetsOffers";
+import EmailCapture from "../components/EmailCapture";
 
 function FeaturedPicks() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -157,6 +157,7 @@ function Nav() {
         </Link>
         <div className="hidden md:flex items-center gap-8">
           <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Features</a>
+          <Link to="/free-bets" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">🎁 Free Bets</Link>
           <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Best Odds</Link>
           <Link to="/lay-bets" className="text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 transition-colors">⚡ Lay Bets</Link>
           <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Sign in</Link>
@@ -169,6 +170,7 @@ function Nav() {
       {menuOpen && (
         <div className="md:hidden border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4 flex flex-col gap-4">
           <a href="#features" className="text-sm font-medium text-gray-600 dark:text-gray-400">Features</a>
+          <Link to="/free-bets" className="text-sm font-medium text-gray-600 dark:text-gray-400">🎁 Free Bets</Link>
           <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 dark:text-gray-400">Best Odds</Link>
           <Link to="/lay-bets" className="text-sm font-medium text-purple-600 dark:text-purple-400">⚡ Lay Bets</Link>
           <Link to="/login" className="text-sm font-medium text-gray-600 dark:text-gray-400">Sign in</Link>
@@ -256,9 +258,26 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="py-20 md:py-28">
-        <div className="mx-auto max-w-5xl px-6">
-          <FreeBetsOffers />
+      {/* Free bets banner → offers page */}
+      <section className="py-12 md:py-16">
+        <div className="mx-auto max-w-7xl px-6">
+          <Link
+            to="/free-bets"
+            className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-8 sm:flex-row sm:px-10 dark:border-indigo-900 dark:from-indigo-950 dark:to-purple-950 hover:shadow-md transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">🎁</span>
+              <div>
+                <p className="text-lg font-bold">Free Bet Offers</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  UK, Irish &amp; global welcome offers — with the maths done so you know what each one is worth.
+                </p>
+              </div>
+            </div>
+            <span className="rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm whitespace-nowrap">
+              Browse offers →
+            </span>
+          </Link>
         </div>
       </section>
 
@@ -369,6 +388,7 @@ export default function Home() {
         </div>
       </section>
 
+      <EmailCapture source="homepage" />
       <Footer />
     </div>
   );
