@@ -405,52 +405,57 @@ async function responseText(res: Response): Promise<string> {
 }
 
 async function deliver(o: Opportunity): Promise<void> {
-  // A — webhook with HMAC-SHA256 signature. Throws on failure so the
-  // opportunity is NOT marked seen and is retried on the next scan.
+  // A — webhook with HMAC-SHA256 signature. BEST-EFFORT: a secondary-channel
+  // failure must never block Telegram, the primary alert channel.
   if (WEBHOOK_URL && WEBHOOK_SECRET) {
-    const body = JSON.stringify(payloadFor(o));
-    const sig = await hmacSha256Hex(WEBHOOK_SECRET, body);
-    const res = await fetch(WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-signature-256": `sha256=${sig}`,
-        "x-eaw-timestamp": o.detectedAt,
-      },
-      body,
-    });
-    if (!res.ok) {
-      throw new Error(`webhook ${res.status}: ${await responseText(res)}`);
+    try {
+      const body = JSON.stringify(payloadFor(o));
+      const sig = await hmacSha256Hex(WEBHOOK_SECRET, body);
+      const res = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-signature-256": `sha256=${sig}`,
+          "x-eaw-timestamp": o.detectedAt,
+        },
+        body,
+      });
+      if (!res.ok) log(`webhook returned HTTP ${res.status}`);
+    } catch (e) {
+      log(`webhook failed: ${String(e)}`);
     }
   } else if (WEBHOOK_URL && !WEBHOOK_SECRET) {
     log("ALERT_WEBHOOK_URL set but ALERT_WEBHOOK_SECRET missing — webhook skipped");
   }
 
-  // B — email. Throws on failure (same retry semantics).
+  // B — email. BEST-EFFORT (same rationale as webhook).
   if (EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM) {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${EMAIL_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: EMAIL_FROM,
-        to: [EMAIL_TO],
-        subject: o.type === "cash"
-          ? `GREEN CASH: ${o.match} — ${o.outcome}`
-          : `FREE BET 100%+: ${o.match} — ${o.outcome}`,
-        text: emailText(o),
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`email ${res.status}: ${await responseText(res)}`);
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${EMAIL_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: EMAIL_FROM,
+          to: [EMAIL_TO],
+          subject: o.type === "cash"
+            ? `GREEN CASH: ${o.match} — ${o.outcome}`
+            : `FREE BET 100%+: ${o.match} — ${o.outcome}`,
+          text: emailText(o),
+        }),
+      });
+      if (!res.ok) log(`email returned HTTP ${res.status}`);
+    } catch (e) {
+      log(`email failed: ${String(e)}`);
     }
   } else if (EMAIL_TO && !(EMAIL_API_KEY && EMAIL_FROM)) {
     log("ALERT_EMAIL_TO set but ALERT_EMAIL_API_KEY/ALERT_EMAIL_FROM missing — email skipped");
   }
 
-  // C — Telegram. Throws on failure (same retry semantics).
+  // C — Telegram (critical). Throws on failure so the caller does NOT mark the
+  // opportunity seen, and it is retried on the next scan.
   await postTelegram(telegramText(o));
 }
 
