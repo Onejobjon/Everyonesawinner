@@ -1,10 +1,11 @@
 /**
  * Opportunity alert worker — server-side (Bun runtime only).
  *
- * Watches for profitable lay-bet opportunities. The cash rule uses a tighter
- * close-lay guard (back odds < 2.8, lay gap < 0.1 — see qualifiesForLay) than
- * the /lay-bets finder's now-wider range (all odds, lay gap < 0.2), and only
- * fires an alert when the opportunity is genuinely PROFITABLE (expectedProfit > 0).
+ * Watches for profitable lay-bet opportunities. The cash rule uses the SAME
+ * close-lay guard as the /lay-bets finder — all odds with a lay gap under 0.2
+ * (see qualifiesForLay) — and only fires an alert when the opportunity is
+ * genuinely PROFITABLE (expectedProfit > 0). Ice hockey is excluded at the
+ * data layer (its lay odds are nulled in transformMatches).
  *
  * Delivery channels (each independent, all disabled until configured):
  *   A. Webhook — POST JSON to ALERT_WEBHOOK_URL with an HMAC-SHA256 signature
@@ -254,7 +255,8 @@ export function findOpportunities(
         detectedAt: new Date().toISOString(),
       };
 
-      // GREEN CASH — existing close-lay qualifying profit (back < 2.8, gap < 0.1).
+      // GREEN CASH — close-lay qualifying profit on all odds with gap < 0.2
+      // (qualifiesForLay no longer caps back odds).
       if (qualifiesForLay(back, lay)) {
         const c = calcLay(back, lay, BACK_STAKE);
         if (c && c.profitLoss > 0) {
@@ -392,58 +394,63 @@ export function telegramText(o: Opportunity): string {
   return conciseText(o);
 }
 
+/** Read a response body as text (bounded), for logging failures. */
+async function responseText(res: Response): Promise<string> {
+  try {
+    const t = await res.text();
+    return t ? t.slice(0, 300) : "(empty body)";
+  } catch {
+    return "(no body)";
+  }
+}
+
 async function deliver(o: Opportunity): Promise<void> {
-  // A — webhook with HMAC-SHA256 signature (best-effort: a webhook failure must
-  // not block the other channels).
+  // A — webhook with HMAC-SHA256 signature. Throws on failure so the
+  // opportunity is NOT marked seen and is retried on the next scan.
   if (WEBHOOK_URL && WEBHOOK_SECRET) {
-    try {
-      const body = JSON.stringify(payloadFor(o));
-      const sig = await hmacSha256Hex(WEBHOOK_SECRET, body);
-      const res = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-signature-256": `sha256=${sig}`,
-          "x-eaw-timestamp": o.detectedAt,
-        },
-        body,
-      });
-      if (!res.ok) log(`webhook returned HTTP ${res.status}`);
-    } catch (e) {
-      log(`webhook failed: ${String(e)}`);
+    const body = JSON.stringify(payloadFor(o));
+    const sig = await hmacSha256Hex(WEBHOOK_SECRET, body);
+    const res = await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-signature-256": `sha256=${sig}`,
+        "x-eaw-timestamp": o.detectedAt,
+      },
+      body,
+    });
+    if (!res.ok) {
+      throw new Error(`webhook ${res.status}: ${await responseText(res)}`);
     }
   } else if (WEBHOOK_URL && !WEBHOOK_SECRET) {
     log("ALERT_WEBHOOK_URL set but ALERT_WEBHOOK_SECRET missing — webhook skipped");
   }
 
-  // B — email (best-effort).
+  // B — email. Throws on failure (same retry semantics).
   if (EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM) {
-    try {
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${EMAIL_API_KEY}`,
-        },
-        body: JSON.stringify({
-          from: EMAIL_FROM,
-          to: [EMAIL_TO],
-          subject: o.type === "cash"
-            ? `GREEN CASH: ${o.match} — ${o.outcome}`
-            : `FREE BET 100%+: ${o.match} — ${o.outcome}`,
-          text: emailText(o),
-        }),
-      });
-      if (!res.ok) log(`email returned HTTP ${res.status}`);
-    } catch (e) {
-      log(`email failed: ${String(e)}`);
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${EMAIL_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: [EMAIL_TO],
+        subject: o.type === "cash"
+          ? `GREEN CASH: ${o.match} — ${o.outcome}`
+          : `FREE BET 100%+: ${o.match} — ${o.outcome}`,
+        text: emailText(o),
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`email ${res.status}: ${await responseText(res)}`);
     }
   } else if (EMAIL_TO && !(EMAIL_API_KEY && EMAIL_FROM)) {
     log("ALERT_EMAIL_TO set but ALERT_EMAIL_API_KEY/ALERT_EMAIL_FROM missing — email skipped");
   }
 
-  // C — Telegram (critical). Throws on failure so the caller does NOT mark the
-  // opportunity seen, and it is retried on the next scan.
+  // C — Telegram. Throws on failure (same retry semantics).
   await postTelegram(telegramText(o));
 }
 
@@ -453,24 +460,25 @@ interface TelegramResponse {
   ok?: boolean;
   description?: string;
   parameters?: { retry_after?: number };
+  result?: { message_id?: number };
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// Throttle: at least ~1.1s between Telegram sends. A burst of alerts was the
-// root cause of "only 1 message arrived" — Telegram rate-limits (429) rapid
-// sends, and the old code ignored the 429 and marked everything seen anyway.
+// Throttle: ~300ms between Telegram sends, so a burst of alerts never trips
+// Telegram's per-chat rate limit (the root cause of "only 1 message arrived").
 let lastTelegramSendAt = 0;
-const TG_MIN_INTERVAL_MS = 1100;
+const TG_MIN_INTERVAL_MS = 300;
 
 /**
  * Send a Telegram message. Checks BOTH the HTTP status and Telegram's `ok`
  * field (Telegram returns HTTP 200 for logical errors like a 429 rate-limit).
- * Transient failures (429 / 5xx) are retried, respecting `retry_after`; a
- * permanent failure throws so the caller leaves the opportunity unseen and
- * retries it on the next scan. No-op unless the channel is configured.
+ * Logs success with message_id and failure with status + body. Transient
+ * failures (429 / 5xx) are retried, respecting `retry_after`; a permanent
+ * failure throws so the caller leaves the opportunity unseen and retries it on
+ * the next scan. No-op unless the channel is configured.
  */
 async function postTelegram(text: string): Promise<void> {
   if (!TG_TOKEN || !TG_CHAT_ID) return;
@@ -491,15 +499,20 @@ async function postTelegram(text: string): Promise<void> {
       body: JSON.stringify({ chat_id: TG_CHAT_ID, text }),
     });
 
+    const rawBody = await responseText(res);
     let data: TelegramResponse | null = null;
     try {
-      data = (await res.json()) as TelegramResponse;
+      data = JSON.parse(rawBody) as TelegramResponse;
     } catch {
       data = null; // non-JSON body
     }
 
     const ok = res.ok && !!data && data.ok === true;
-    if (ok) return;
+    if (ok) {
+      const msgId = data?.result?.message_id;
+      log(`telegram ok${msgId != null ? ` msg_id=${msgId}` : ""}`);
+      return;
+    }
 
     const desc = data?.description || `HTTP ${res.status}`;
     const retryAfter = data?.parameters?.retry_after;
@@ -507,6 +520,7 @@ async function postTelegram(text: string): Promise<void> {
       res.status === 429 || res.status >= 500 || (retryAfter != null && retryAfter > 0);
 
     if (!retriable || attempt === maxRetries) {
+      log(`telegram FAILED (${desc}) — body: ${rawBody}`);
       throw new Error(
         `telegram send failed: ${desc}${retryAfter != null && retryAfter > 0 ? ` (retry after ${retryAfter}s)` : ""}`
       );

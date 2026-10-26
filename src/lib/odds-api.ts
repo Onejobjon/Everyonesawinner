@@ -405,6 +405,12 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
     if (new Date(apiMatch.commence_time).getTime() <= now) continue;
     if (!apiMatch.bookmakers || apiMatch.bookmakers.length === 0) continue;
 
+    // Ice hockey is excluded from lay data entirely: bookmaker back odds are
+    // regulation-time while exchange lay odds are overtime-inclusive, so the
+    // two never settle on the same result. Nulling layOdds makes BOTH the
+    // Lay Bet Finder and the alert worker skip it automatically.
+    const isIceHockeyMatch = apiMatch.sport_key.startsWith("icehockey");
+
     const allOutcomes: ApiOutcome[] = [];
     for (const bm of apiMatch.bookmakers) {
       const market = bm.markets.find((m) => m.key === "h2h");
@@ -461,7 +467,7 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       commenceTime: apiMatch.commence_time,
       hasLayCoverage: layCoveredLeagues.has(apiMatch.sport_key),
       outcomes: sorted.map((o) => {
-        const lay = findLayOdds(o.outcome, apiMatch.bookmakers);
+        const lay = isIceHockeyMatch ? null : findLayOdds(o.outcome, apiMatch.bookmakers);
         return {
           name: o.outcome,
           bookmaker: o.bookmaker,

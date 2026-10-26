@@ -323,15 +323,15 @@ export function matchLayMetrics(
 }
 
 /**
- * Lay Bet Finder eligibility (owner-defined):
- * a row qualifies only when BOTH hold —
- *   (a) back odds < 2.8
- *   (b) (lay odds − back odds) < 0.1
- * Values are rounded to 2dp before the gap comparison to avoid float noise
- * (e.g. 2.82 − 2.76 is not exactly 0.06 in IEEE-754).
+ * Lay Bet Finder eligibility (owner-defined, 2026-10-26):
+ * a row qualifies when it has a usable exchange lay price AND a lay gap under
+ * 0.2 — i.e. (lay odds − back odds) < 0.2. There is NO back-odds ceiling: all
+ * odds qualify. A negative gap means the lay sits below the back, which is
+ * better than break-even (arb-grade). Values are rounded to 2dp before the gap
+ * comparison to avoid float noise (e.g. 2.82 − 2.76 is not exactly 0.06 in
+ * IEEE-754).
  */
-export const MAX_BACK_ODDS = 2.8;
-export const MAX_LAY_GAP = 0.1;
+export const MAX_LAY_GAP = 0.2;
 
 /** Round to 2 decimal places (for display and float-safe comparisons). */
 export function round2(n: number): number {
@@ -346,5 +346,5 @@ export function layGap(backOdds: number, layOdds: number): number {
 /** Whether a back/lay pair is close enough to show in the Lay Bet Finder. */
 export function qualifiesForLay(backOdds: number, layOdds: number | null): boolean {
   if (!layOdds || layOdds <= COMMISSION) return false;
-  return backOdds < MAX_BACK_ODDS && layGap(backOdds, layOdds) < MAX_LAY_GAP;
+  return layGap(backOdds, layOdds) < MAX_LAY_GAP;
 }

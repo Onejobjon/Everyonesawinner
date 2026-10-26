@@ -2,12 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   calcLay,
-  calcFreeBetProfit,
   layGap,
   round2,
-  COMMISSION,
+  qualifiesForLay,
   type LayCalc,
-  type FreeBetType,
 } from "../lib/odds";
 import {
   getMatches,
@@ -27,9 +25,7 @@ import {
   formatAge,
 } from "../lib/laybets-common";
 
-const DEFAULT_BACK_STAKE = "20"; // cash qualifying back stake (user-editable)
-const DEFAULT_FREE_STAKE = "10"; // free-bet stake default
-const MAX_SINGLE_GAP = 0.2; // owner: all back odds with lay gap < 0.2 (negative gap = value)
+const DEFAULT_STAKE = "20"; // cash qualifying back stake (user-editable)
 
 const LS_KEY = "eaw_laybets_singles_v1";
 
@@ -42,7 +38,6 @@ interface LayOpportunity {
 
 interface Filters {
   category: string;
-  bookmaker: string;
   minOdds: number;
 }
 
@@ -50,23 +45,15 @@ interface Filters {
 // number; it is parsed/clamped only on Run or blur.
 interface Draft {
   category: string;
-  bookmaker: string;
   minOdds: string;
 }
 
 interface Persisted extends Draft {
-  backStake: string;
-  freeStake: string;
-  freeType: FreeBetType;
+  stake: string;
 }
 
-const DEFAULT_DRAFT: Draft = { category: "all", bookmaker: "all", minOdds: "1.5" };
-const DEFAULT_PERSISTED: Persisted = {
-  ...DEFAULT_DRAFT,
-  backStake: DEFAULT_BACK_STAKE,
-  freeStake: DEFAULT_FREE_STAKE,
-  freeType: "snr",
-};
+const DEFAULT_DRAFT: Draft = { category: "all", minOdds: "1.5" };
+const DEFAULT_PERSISTED: Persisted = { ...DEFAULT_DRAFT, stake: DEFAULT_STAKE };
 
 /** Parse a positive stake amount (empty/invalid → fallback). */
 function parseAmount(raw: string, fallback: number): number {
@@ -83,7 +70,6 @@ function parseMinOdds(raw: string): number {
 function toFilters(d: Draft): Filters {
   return {
     category: d.category,
-    bookmaker: d.bookmaker,
     minOdds: parseMinOdds(d.minOdds),
   };
 }
@@ -95,11 +81,8 @@ function loadPersisted(): Persisted {
       const p = JSON.parse(raw) as Partial<Persisted>;
       return {
         category: typeof p.category === "string" ? p.category : "all",
-        bookmaker: typeof p.bookmaker === "string" ? p.bookmaker : "all",
         minOdds: typeof p.minOdds === "string" ? p.minOdds : DEFAULT_DRAFT.minOdds,
-        backStake: typeof p.backStake === "string" && p.backStake.length > 0 ? p.backStake : DEFAULT_BACK_STAKE,
-        freeStake: typeof p.freeStake === "string" && p.freeStake.length > 0 ? p.freeStake : DEFAULT_FREE_STAKE,
-        freeType: p.freeType === "sr" ? "sr" : "snr",
+        stake: typeof p.stake === "string" && p.stake.length > 0 ? p.stake : DEFAULT_STAKE,
       };
     }
   } catch {
@@ -124,15 +107,11 @@ export default function LayBets() {
   // Instant-on-open: load last-used controls and apply immediately (zero clicks).
   const [draft, setDraft] = useState<Draft>(() => {
     const p = loadPersisted();
-    return { category: p.category, bookmaker: p.bookmaker, minOdds: p.minOdds };
+    return { category: p.category, minOdds: p.minOdds };
   });
   const [filters, setFilters] = useState<Filters>(() => toFilters({ ...loadPersisted() }));
-  const [backStake, setBackStake] = useState<string>(() => loadPersisted().backStake);
-  const [freeStake, setFreeStake] = useState<string>(() => loadPersisted().freeStake);
-  const [freeType, setFreeType] = useState<FreeBetType>(() => loadPersisted().freeType);
-
-  const backStakeVal = parseAmount(backStake, 20);
-  const freeStakeVal = parseAmount(freeStake, 10);
+  const [stake, setStake] = useState<string>(() => loadPersisted().stake);
+  const stakeVal = parseAmount(stake, 20);
 
   const apply = (next: Draft) => {
     setDraft(next);
@@ -145,8 +124,8 @@ export default function LayBets() {
 
   // Persist last-used controls across visits.
   useEffect(() => {
-    persist({ ...draft, backStake, freeStake, freeType });
-  }, [draft, backStake, freeStake, freeType]);
+    persist({ ...draft, stake });
+  }, [draft, stake]);
 
   useEffect(() => {
     let cancelled = false;
@@ -172,27 +151,21 @@ export default function LayBets() {
 
   const oddsAgeMs = useMemo(() => getOddsAgeMs("upcoming"), [matches]);
 
+  // Sport dropdown excludes ice hockey (its lay odds are nulled at the data
+  // layer, so it could never produce a row).
   const categories = useMemo(() => {
     const set = new Set<string>();
     for (const m of matches) if (!isIceHockey(m.sportKey)) set.add(sportCategory(m.sportKey));
     return [...set].sort();
   }, [matches]);
 
-  const bookmakers = useMemo(() => {
-    const set = new Set<string>();
-    for (const m of matches) if (!isIceHockey(m.sportKey)) for (const o of m.outcomes) set.add(o.bookmaker);
-    return [...set].sort();
-  }, [matches]);
-
   const results = useMemo(() => {
     if (!filters || matches.length === 0) {
-      return { singles: [] as LayOpportunity[], feedMatches: matches.length, qualifiedOutcomes: 0 };
+      return { singles: [] as LayOpportunity[], feedMatches: matches.length };
     }
 
     const byCategory = (m: Match) =>
       filters.category === "all" || sportCategory(m.sportKey) === filters.category;
-    const byBookmaker = (o: MatchOutcome) =>
-      filters.bookmaker === "all" || o.bookmaker === filters.bookmaker;
 
     const sorted = [...matches].sort(
       (a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime()
@@ -200,17 +173,14 @@ export default function LayBets() {
 
     const rows: LayOpportunity[] = [];
     for (const m of sorted) {
-      // Ice hockey is excluded: back odds are regulation-time, lay odds are
-      // overtime-inclusive — they never line up, so never show them.
-      if (isIceHockey(m.sportKey)) continue;
       if (!byCategory(m)) continue;
       for (const o of m.outcomes) {
-        if (!byBookmaker(o)) continue;
         if (o.odds < filters.minOdds) continue;
-        if (o.layOdds == null || o.layOdds <= COMMISSION) continue;
-        // Owner: all back odds, lay gap < 0.2 (negative gap = value).
-        if (layGap(o.odds, o.layOdds) >= MAX_SINGLE_GAP) continue;
-        const lay = calcLay(o.odds, o.layOdds, backStakeVal);
+        // All odds with a lay gap < 0.2 (no back-odds ceiling). Ice hockey is
+        // already excluded at the data layer (layOdds = null), so qualifiesForLay
+        // returns false for it automatically.
+        if (!qualifiesForLay(o.odds, o.layOdds)) continue;
+        const lay = calcLay(o.odds, o.layOdds, stakeVal);
         if (!lay) continue;
         rows.push({ match: m, outcome: o, lay, gap: layGap(o.odds, o.layOdds!) });
       }
@@ -220,8 +190,8 @@ export default function LayBets() {
       if (d !== 0) return d;
       return a.gap - b.gap;
     });
-    return { singles: rows, feedMatches: matches.length, qualifiedOutcomes: rows.length };
-  }, [matches, filters, backStakeVal]);
+    return { singles: rows, feedMatches: matches.length };
+  }, [matches, filters, stakeVal]);
 
   const bestProfit =
     results.singles.length > 0 ? round2(results.singles[0].lay.profitLoss) : 0;
@@ -252,9 +222,8 @@ export default function LayBets() {
             Back an outcome at the bookmaker, lay it on the exchange — and lock in the result. Every close single lay, ranked by what it returns on your stake.
           </p>
 
-          {/* Free-bet mode: stake + type, persisted across visits */}
-          <div className="mt-5 flex flex-wrap items-end gap-4 rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-900 dark:bg-purple-950/30">
-            <div className="text-sm font-semibold text-purple-700 dark:text-purple-300">🎁 Free bet</div>
+          {/* Controls: stake / sport / min odds / run */}
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="block">
               <span className="text-xs font-medium text-gray-500">Stake</span>
               <div className="mt-1 flex items-center gap-1.5">
@@ -262,41 +231,9 @@ export default function LayBets() {
                 <input
                   type="text"
                   inputMode="decimal"
-                  value={freeStake}
-                  onChange={(e) => setFreeStake(e.target.value)}
-                  onBlur={() => setFreeStake(String(parseAmount(freeStake, 10)))}
-                  className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
-                />
-              </div>
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-gray-500">Type</span>
-              <select
-                value={freeType}
-                onChange={(e) => setFreeType(e.target.value as FreeBetType)}
-                className="mt-1 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
-              >
-                <option value="snr">SNR — stake not returned</option>
-                <option value="sr">Stake returned</option>
-              </select>
-            </label>
-            <p className="min-w-0 flex-1 text-xs text-purple-600/80 dark:text-purple-400/80">
-              Each row shows what this free bet would retain on that outcome. Last-used stake is remembered.
-            </p>
-          </div>
-
-          {/* Controls: back stake / sport / bookmaker / min odds / run */}
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <label className="block">
-              <span className="text-xs font-medium text-gray-500">Back stake</span>
-              <div className="mt-1 flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">£</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={backStake}
-                  onChange={(e) => setBackStake(e.target.value)}
-                  onBlur={() => setBackStake(String(parseAmount(backStake, 20)))}
+                  value={stake}
+                  onChange={(e) => setStake(e.target.value)}
+                  onBlur={() => setStake(String(parseAmount(stake, 20)))}
                   className={controlClass}
                 />
               </div>
@@ -312,20 +249,6 @@ export default function LayBets() {
                 <option value="all">All sports</option>
                 {categories.map((c) => (
                   <option key={c} value={c}>{sportLabel(c)}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-medium text-gray-500">Bookmaker</span>
-              <select
-                value={draft.bookmaker}
-                onChange={(e) => apply({ ...draft, bookmaker: e.target.value })}
-                className={controlClass}
-              >
-                <option value="all">All bookmakers</option>
-                {bookmakers.map((b) => (
-                  <option key={b} value={b}>{b}</option>
                 ))}
               </select>
             </label>
@@ -355,7 +278,7 @@ export default function LayBets() {
 
           {/* Honesty rails + freshness */}
           <p className="mt-3 text-xs text-gray-400">
-            Singles show every outcome with a lay gap under 0.20 (negative gap = better than break-even), on your £{backStakeVal} cash back stake, including 5% exchange commission. Ice hockey is excluded — bookmaker back odds are regulation-time but exchange lays include overtime, so they never match. Run searches the freshest cached odds — it never costs an API call.
+            Singles show every outcome with a lay gap under 0.20 (negative gap = better than break-even), on your £{stakeVal} cash back stake, including 5% exchange commission. Ice hockey is excluded — bookmaker back odds are regulation-time but exchange lays include overtime, so they never match. Run searches the freshest cached odds — it never costs an API call.
           </p>
           <p className="mt-1 text-xs text-gray-400">Pre-match odds — refresh every 10 minutes.</p>
 
@@ -399,7 +322,6 @@ export default function LayBets() {
                   <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-500">
                     {filters.minOdds > 1 && <li>Lower the minimum odds.</li>}
                     {filters.category !== "all" && <li>Set Sport back to “All sports”.</li>}
-                    {filters.bookmaker !== "all" && <li>Set Bookmaker back to “All bookmakers”.</li>}
                     <li>Odds refresh about every 10 minutes — check back later.</li>
                   </ul>
                 </div>
@@ -413,8 +335,6 @@ export default function LayBets() {
                 {results.singles.map((op) => {
                   const profitable = op.lay.profitLoss >= 0;
                   const isBest = profitable && round2(op.lay.profitLoss) === bestProfit;
-                  const freeBetProfit = calcFreeBetProfit(op.outcome.odds, op.outcome.layOdds, freeStakeVal, COMMISSION, freeType);
-                  const retentionPct = freeBetProfit != null ? Math.round((freeBetProfit / freeStakeVal) * 100) : 0;
                   return (
                     <div
                       key={`${op.match.matchId}-${op.outcome.name}`}
@@ -463,17 +383,12 @@ export default function LayBets() {
                           </div>
                         </div>
                       </div>
-                      {freeBetProfit != null && (
-                        <div className={`mt-3 rounded-lg px-3 py-1.5 text-xs ${freeBetProfit > freeStakeVal ? "bg-green-50 font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300" : "bg-gray-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
-                          Free bet £{freeStakeVal} ({freeType === "sr" ? "stake returned" : "SNR"}) → {money(freeBetProfit)} ({retentionPct}%)
-                        </div>
-                      )}
                     </div>
                   );
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair). Figures use your £{backStakeVal} back stake and include 5% exchange commission. The free-bet line shows what your entered free bet (£{freeStakeVal}, {freeType === "sr" ? "stake returned" : "stake not returned"}) would retain — not a claim you hold one.
+                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair). Figures use your £{stakeVal} back stake and include 5% exchange commission.
               </p>
             </>
           )}
