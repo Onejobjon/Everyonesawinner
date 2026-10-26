@@ -122,3 +122,69 @@ export function sequentialLayPlan(
     totalLiability: round2(totalLiability),
   };
 }
+
+/**
+ * Build the sequential-lay plan for a PAID (real-money) accumulator — the
+ * user's own back stake is at risk, so the locked-in figure is a qualifying
+ * profit/loss (usually a small negative cost), not a retained free-bet profit.
+ *
+ * Back the acca with your own money S at combined odds B, then lay each leg in
+ * order. Lay stakes are sized so the net result is identical whether the acca
+ * wins or any leg loses:
+ *
+ *   γ₁ = 1,  γₖ = γₖ₋₁ · (lₖ₋₁ − c) / (1 − c)
+ *   R  = Σ γₖ · (lₖ − 1)
+ *   locked-in P = S · [(B−1)(1−c) − R] / [(1−c) + R]
+ *   lay stake Lₖ = γₖ · (P + S) / (1 − c)
+ *
+ * `retainedProfit` in the returned plan is this locked-in P (negative when the
+ * lay is tight = a qualifying cost). Returns null when any leg has no usable
+ * lay price (we never fabricate one).
+ */
+export function sequentialLayPlanPaid(
+  legs: AccaLeg[],
+  backStake: number,
+  commission: number = COMMISSION
+): AccaPlan | null {
+  if (legs.length === 0) return null;
+  if (backStake <= 0) return null;
+  for (const l of legs) {
+    if (l.backOdds <= 1) return null;
+    if (!l.layOdds || l.layOdds <= commission) return null;
+  }
+  const B = combinedBackOdds(legs);
+  const c = commission;
+  // Forward coefficients γₖ — lay stakes scale with (P + S).
+  const gamma: number[] = [];
+  for (let i = 0; i < legs.length; i++) {
+    if (i === 0) {
+      gamma.push(1);
+    } else {
+      gamma.push(gamma[i - 1] * (legs[i - 1].layOdds - c) / (1 - c));
+    }
+  }
+  const R = legs.reduce((sum, l, i) => sum + gamma[i] * (l.layOdds - 1), 0);
+  const grossReturn = backStake * (B - 1); // back profit if the acca wins
+  const lockedIn = (backStake * ((B - 1) * (1 - c) - R)) / ((1 - c) + R);
+  const base = (lockedIn + backStake) / (1 - c); // = L₁ since γ₁ = 1
+  const legPlans: AccaLegPlan[] = legs.map((l, i) => {
+    const layStake = gamma[i] * base;
+    const liability = layStake * (l.layOdds - 1);
+    const layWin = layStake * (1 - c);
+    return { backOdds: l.backOdds, layOdds: l.layOdds, layStake, liability, layWin };
+  });
+  const totalLiability = legPlans.reduce((sum, lp) => sum + lp.liability, 0);
+  return {
+    combinedBackOdds: round2(B),
+    grossReturn: round2(grossReturn),
+    retainedProfit: round2(lockedIn),
+    retention: grossReturn > 0 ? lockedIn / grossReturn : 0, // negative when a cost
+    legs: legPlans.map((lp) => ({
+      ...lp,
+      layStake: round2(lp.layStake),
+      liability: round2(lp.liability),
+      layWin: round2(lp.layWin),
+    })),
+    totalLiability: round2(totalLiability),
+  };
+}

@@ -4,7 +4,7 @@ import {
   COMMISSION,
   round2,
 } from "../lib/odds";
-import { sequentialLayPlan, type AccaPlan } from "../lib/acca";
+import { sequentialLayPlan, sequentialLayPlanPaid, type AccaPlan } from "../lib/acca";
 import {
   getMatches,
   getOddsAgeMs,
@@ -24,7 +24,8 @@ import {
   formatAge,
 } from "../lib/laybets-common";
 
-const DEFAULT_FREE_STAKE = "10"; // sequential-lay engine is SNR-only
+const DEFAULT_FREE_STAKE = "10"; // free-bet (SNR) stake
+const DEFAULT_PAID_STAKE = "20"; // paid (own money) back stake
 const TOP_N = 10;
 const MAX_MATCHES = 24; // soonest matches considered — bounds the acca search
 
@@ -66,12 +67,16 @@ interface Draft {
   minOdds: string;
 }
 
+type BetMode = "free" | "paid";
+
 interface Persisted extends Draft {
+  mode: BetMode;
   freeStake: string;
+  paidStake: string;
 }
 
 const DEFAULT_DRAFT: Draft = { legs: 2, category: "all", bookmaker: "all", minOdds: "1.5" };
-const DEFAULT_PERSISTED: Persisted = { ...DEFAULT_DRAFT, freeStake: DEFAULT_FREE_STAKE };
+const DEFAULT_PERSISTED: Persisted = { ...DEFAULT_DRAFT, mode: "free", freeStake: DEFAULT_FREE_STAKE, paidStake: DEFAULT_PAID_STAKE };
 
 function parseAmount(raw: string, fallback: number): number {
   const n = parseFloat(raw);
@@ -102,7 +107,9 @@ function loadPersisted(): Persisted {
         category: typeof p.category === "string" ? p.category : "all",
         bookmaker: typeof p.bookmaker === "string" ? p.bookmaker : "all",
         minOdds: typeof p.minOdds === "string" ? p.minOdds : DEFAULT_DRAFT.minOdds,
+        mode: p.mode === "paid" ? "paid" : "free",
         freeStake: typeof p.freeStake === "string" && p.freeStake.length > 0 ? p.freeStake : DEFAULT_FREE_STAKE,
+        paidStake: typeof p.paidStake === "string" && p.paidStake.length > 0 ? p.paidStake : DEFAULT_PAID_STAKE,
       };
     }
   } catch {
@@ -133,17 +140,16 @@ function usableLegs(m: Match): MatchOutcome[] {
 function buildAccas(
   matchesWithLegs: MatchWithLegs[],
   legCount: number,
-  freeStake: number
+  mode: BetMode,
+  stake: number
 ): AccaCandidate[] {
   const out: AccaCandidate[] = [];
   const current: LegPick[] = [];
 
   function recurse(startIdx: number) {
     if (current.length === legCount) {
-      const plan = sequentialLayPlan(
-        current.map((l) => ({ backOdds: l.outcome.odds, layOdds: l.outcome.layOdds! })),
-        freeStake
-      );
+      const legs = current.map((l) => ({ backOdds: l.outcome.odds, layOdds: l.outcome.layOdds! }));
+      const plan = mode === "paid" ? sequentialLayPlanPaid(legs, stake) : sequentialLayPlan(legs, stake);
       if (plan) {
         out.push({ legs: [...current], plan });
       }
@@ -174,8 +180,12 @@ export default function BetBuilder() {
     return { legs: p.legs, category: p.category, bookmaker: p.bookmaker, minOdds: p.minOdds };
   });
   const [filters, setFilters] = useState<Filters>(() => toFilters({ ...loadPersisted() }));
+  const [mode, setMode] = useState<BetMode>(() => loadPersisted().mode);
   const [freeStake, setFreeStake] = useState<string>(() => loadPersisted().freeStake);
+  const [paidStake, setPaidStake] = useState<string>(() => loadPersisted().paidStake);
   const freeStakeVal = parseAmount(freeStake, 10);
+  const paidStakeVal = parseAmount(paidStake, 20);
+  const activeStakeVal = mode === "paid" ? paidStakeVal : freeStakeVal;
 
   const apply = (next: Draft) => {
     setDraft(next);
@@ -187,8 +197,8 @@ export default function BetBuilder() {
   };
 
   useEffect(() => {
-    persist({ ...draft, freeStake });
-  }, [draft, freeStake]);
+    persist({ ...draft, mode, freeStake, paidStake });
+  }, [draft, mode, freeStake, paidStake]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,7 +279,7 @@ export default function BetBuilder() {
       if (matchesWithLegs.length >= MAX_MATCHES) break;
     }
 
-    const all = buildAccas(matchesWithLegs, filters.legs, freeStakeVal);
+    const all = buildAccas(matchesWithLegs, filters.legs, mode, activeStakeVal);
     all.sort((a, b) => b.plan.retainedProfit - a.plan.retainedProfit);
     return {
       accas: all.slice(0, TOP_N),
@@ -280,7 +290,7 @@ export default function BetBuilder() {
       qualifiedFixtures: matchesWithLegs.length,
       noLayExcluded,
     };
-  }, [matches, filters, freeStakeVal]);
+  }, [matches, filters, mode, activeStakeVal]);
 
   const controlClass =
     "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200";
@@ -308,25 +318,44 @@ export default function BetBuilder() {
             Combine 2–4 legs from different matches into one bet, with a done-for-you sequential lay plan that locks in the same profit whether the bet wins or any leg loses.
           </p>
 
-          {/* Free-bet stake (SNR — the sequential-lay engine is stake-not-returned) */}
-          <div className="mt-5 flex flex-wrap items-end gap-4 rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-900 dark:bg-purple-950/30">
-            <div className="text-sm font-semibold text-purple-700 dark:text-purple-300">🎁 Free bet</div>
-            <label className="block">
-              <span className="text-xs font-medium text-gray-500">Stake (stake not returned)</span>
-              <div className="mt-1 flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">£</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={freeStake}
-                  onChange={(e) => setFreeStake(e.target.value)}
-                  onBlur={() => setFreeStake(String(parseAmount(freeStake, 10)))}
-                  className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
-                />
+          {/* Bet mode toggle: free bet (SNR) or paid (own money) */}
+          <div className="mt-5 rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-900 dark:bg-purple-950/30">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex rounded-lg bg-white p-1 shadow-sm dark:bg-gray-900">
+                <button
+                  type="button"
+                  onClick={() => setMode("free")}
+                  className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${mode === "free" ? "bg-purple-600 text-white" : "text-gray-600 hover:text-gray-900 dark:text-gray-400"}`}
+                >
+                  🎁 Free bet
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("paid")}
+                  className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${mode === "paid" ? "bg-purple-600 text-white" : "text-gray-600 hover:text-gray-900 dark:text-gray-400"}`}
+                >
+                  💰 Paid bet
+                </button>
               </div>
-            </label>
-            <p className="min-w-0 flex-1 text-xs text-purple-600/80 dark:text-purple-400/80">
-              Figures use a stake-not-returned free bet and 5% exchange commission. Last-used stake is remembered.
+              <label className="ml-auto flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-500">{mode === "paid" ? "Back stake" : "Free-bet stake"}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">£</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={mode === "paid" ? paidStake : freeStake}
+                    onChange={(e) => (mode === "paid" ? setPaidStake(e.target.value) : setFreeStake(e.target.value))}
+                    onBlur={() => (mode === "paid" ? setPaidStake(String(parseAmount(paidStake, 20))) : setFreeStake(String(parseAmount(freeStake, 10))))}
+                    className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                  />
+                </div>
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-purple-600/80 dark:text-purple-400/80">
+              {mode === "paid"
+                ? "Paid mode: your own money is at risk, so the plan locks in a qualifying profit/loss (usually a small cost). 5% exchange commission included."
+                : "Free-bet mode: figures use a stake-not-returned free bet and 5% exchange commission."}
             </p>
           </div>
 
@@ -398,7 +427,7 @@ export default function BetBuilder() {
 
           {/* Honesty rails + freshness */}
           <p className="mt-3 text-xs text-gray-400">
-            Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20); ice hockey is excluded (regulation-time back vs overtime lay). Figures use a £{freeStakeVal} stake-not-returned free bet and 5% exchange commission. Run searches the freshest cached odds — it never costs an API call.
+            Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20); ice hockey is excluded (regulation-time back vs overtime lay). {mode === "paid" ? <>Figures use your £{paidStakeVal} back stake (your own money) and 5% exchange commission — a small locked-in loss is the normal qualifying cost, never a guaranteed profit.</> : <>Figures use a £{freeStakeVal} stake-not-returned free bet and 5% exchange commission.</>} Run searches the freshest cached odds — it never costs an API call.
           </p>
           <p className="mt-1 text-xs text-gray-400">Pre-match odds — refresh every 10 minutes.</p>
 
@@ -472,8 +501,8 @@ export default function BetBuilder() {
                           <div className="text-3xl font-extrabold text-gray-900 dark:text-white">{p.combinedBackOdds.toFixed(2)}</div>
                         </div>
                         <div className="shrink-0 rounded-lg bg-purple-50 px-2.5 py-1.5 text-right text-xs leading-5 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
-                          <div className="font-semibold">Free bet £{freeStakeVal}</div>
-                          <div className="text-purple-500/80 dark:text-purple-400/80">stake not returned</div>
+                          <div className="font-semibold">{mode === "paid" ? "Paid bet" : "Free bet"} £{mode === "paid" ? paidStakeVal : freeStakeVal}</div>
+                          <div className="text-purple-500/80 dark:text-purple-400/80">{mode === "paid" ? "your own money" : "stake not returned"}</div>
                         </div>
                       </div>
 
@@ -508,7 +537,7 @@ export default function BetBuilder() {
                                   <span>Liability <span className="font-semibold text-gray-700 dark:text-gray-200">{money(lp.liability)}</span></span>
                                 </div>
                                 <div className="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                                  If {phrase.toLowerCase()} fails: exchange lay wins {money(lp.layWin)}, bookmaker bet dead — retained {money(p.retainedProfit)}.
+                                  If {phrase.toLowerCase()} fails: exchange lay wins {money(lp.layWin)}, bookmaker bet dead — {mode === "paid" ? "locked in" : "retained"} {mode === "paid" ? (p.retainedProfit < 0 ? "−" : "+") : ""}{money(Math.abs(p.retainedProfit))}.
                                 </div>
                               </div>
                             );
@@ -517,29 +546,37 @@ export default function BetBuilder() {
                       </div>
 
                       {/* Roll-up */}
-                      <div className="mt-4 rounded-xl bg-green-50 p-3 dark:bg-green-950/30">
+                      <div className={`mt-4 rounded-xl p-3 ${mode === "paid" ? "bg-amber-50 dark:bg-amber-950/30" : "bg-green-50 dark:bg-green-950/30"}`}>
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600 dark:text-green-400">Guaranteed retained profit</div>
-                            <div className="text-2xl font-extrabold text-green-700 dark:text-green-300">+{money(p.retainedProfit)}</div>
-                            <div className="text-xs text-green-600/80 dark:text-green-400/80">Same if the bet wins or any leg loses</div>
+                            <div className={`text-[11px] font-medium uppercase tracking-wide ${mode === "paid" ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}`}>
+                              {mode === "paid" ? "Locked-in profit / loss" : "Guaranteed retained profit"}
+                            </div>
+                            <div className={`text-2xl font-extrabold ${mode === "paid" ? "text-amber-700 dark:text-amber-300" : "text-green-700 dark:text-green-300"}`}>
+                              {p.retainedProfit < 0 ? "−" : "+"}{money(Math.abs(p.retainedProfit))}
+                            </div>
+                            <div className={`text-xs ${mode === "paid" ? "text-amber-600/80 dark:text-amber-400/80" : "text-green-600/80 dark:text-green-400/80"}`}>
+                              Same if the bet wins or any leg loses{mode === "paid" ? " — a loss is your qualifying cost" : ""}
+                            </div>
                           </div>
-                          <div className="rounded-md bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-300">
-                            Retain {retentionPct}%
-                          </div>
+                          {mode === "free" && (
+                            <div className="rounded-md bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-300">
+                              Retain {retentionPct}%
+                            </div>
+                          )}
                         </div>
-                        <div className="mt-2 grid grid-cols-3 gap-2 border-t border-green-100 pt-2 dark:border-green-900">
+                        <div className="mt-2 grid grid-cols-3 gap-2 border-t border-gray-100 pt-2 dark:border-gray-800">
                           <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Bet return</div>
-                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.grossReturn)}</div>
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Bet return</div>
+                            <div className="mt-0.5 font-semibold text-gray-800 dark:text-gray-200">{money(p.grossReturn)}</div>
                           </div>
                           <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Total liability</div>
-                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.totalLiability)}</div>
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Total liability</div>
+                            <div className="mt-0.5 font-semibold text-gray-800 dark:text-gray-200">{money(p.totalLiability)}</div>
                           </div>
                           <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-green-600/70 dark:text-green-400/70">Lay leg 1</div>
-                            <div className="mt-0.5 font-semibold text-green-800 dark:text-green-200">{money(p.legs[0].layStake)}</div>
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Lay leg 1</div>
+                            <div className="mt-0.5 font-semibold text-gray-800 dark:text-gray-200">{money(p.legs[0].layStake)}</div>
                           </div>
                         </div>
                       </div>
