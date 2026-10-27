@@ -29,6 +29,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { transformMatches, type Match, type MatchOutcome } from "../lib/odds-api";
 import { ODDS_API_KEY } from "./odds-key";
 import { calcLay, calcFreeBetProfit, qualifiesForLay, layGap, round2 } from "../lib/odds";
+import { checkBackLayPair } from "../lib/odds-sanity";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
@@ -210,11 +211,13 @@ export function findOpportunities(
 ): {
   opps: Opportunity[];
   skippedSuspects: number;
+  skippedInsane: number;
   skippedStarted: number;
   skippedTooSoon: number;
 } {
   const opps: Opportunity[] = [];
   let skippedSuspects = 0;
+  let skippedInsane = 0;
   let skippedStarted = 0;
   let skippedTooSoon = 0;
   const now = Date.now();
@@ -238,6 +241,15 @@ export function findOpportunities(
       const back = o.odds;
       const lay = o.layOdds;
       if (!lay) continue;
+
+      // Back/lay sanity check, defence-in-depth: the data layer already
+      // withholds sentinel and cross-coverage lay prices, but this worker's
+      // on-disk cache can still hold matches transformed by an older build.
+      // A row like SHL "back 5.50 / lay 2.56" must never alert.
+      if (checkBackLayPair(back, lay).suspect) {
+        skippedInsane++;
+        continue;
+      }
 
       const base = {
         matchId: m.matchId,
@@ -299,7 +311,7 @@ export function findOpportunities(
     }
     return (b as FreebetOpportunity).freeBetProfit - (a as FreebetOpportunity).freeBetProfit;
   });
-  return { opps, skippedSuspects, skippedStarted, skippedTooSoon };
+  return { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon };
 }
 
 // ── Dedup (persisted) ──────────────────────────────────────────────────────
@@ -595,6 +607,7 @@ export async function runAlertCheck(): Promise<{
   checked: number;
   alerted: number;
   skippedSuspects: number;
+  skippedInsane: number;
   skippedStarted: number;
   skippedTooSoon: number;
 }> {
@@ -604,7 +617,8 @@ export async function runAlertCheck(): Promise<{
     log(`health check failed: ${String(e)}`);
   }
   const matches = await getMatches();
-  const { opps, skippedSuspects, skippedStarted, skippedTooSoon } = findOpportunities(matches);
+  const { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon } =
+    findOpportunities(matches);
   const seen = loadSeen();
 
   let alerted = 0;
@@ -623,9 +637,16 @@ export async function runAlertCheck(): Promise<{
   const cash = opps.filter((o) => o.type === "cash").length;
   const freebet = opps.length - cash;
   log(
-    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} suspect rows skipped, skipped started: ${skippedStarted}, too-soon: ${skippedTooSoon}`
+    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} stale rows skipped, ${skippedInsane} insane back/lay rows skipped, skipped started: ${skippedStarted}, too-soon: ${skippedTooSoon}`
   );
-  return { checked: opps.length, alerted, skippedSuspects, skippedStarted, skippedTooSoon };
+  return {
+    checked: opps.length,
+    alerted,
+    skippedSuspects,
+    skippedInsane,
+    skippedStarted,
+    skippedTooSoon,
+  };
 }
 
 export function hasAlertChannel(): boolean {

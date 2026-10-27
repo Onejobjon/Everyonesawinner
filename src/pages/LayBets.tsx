@@ -161,7 +161,11 @@ export default function LayBets() {
 
   const results = useMemo(() => {
     if (!filters || matches.length === 0) {
-      return { singles: [] as LayOpportunity[], feedMatches: matches.length };
+      return {
+        singles: [] as LayOpportunity[],
+        feedMatches: matches.length,
+        withheld: 0,
+      };
     }
 
     const byCategory = (m: Match) =>
@@ -172,10 +176,15 @@ export default function LayBets() {
     );
 
     const rows: LayOpportunity[] = [];
+    // Rows where the feed quoted a lay price but the back/lay sanity check
+    // withheld it (sentinel value, or a lay >10% below the back = two different
+    // markets). Counted so the page can say so instead of silently hiding them.
+    let withheld = 0;
     for (const m of sorted) {
       if (!byCategory(m)) continue;
       for (const o of m.outcomes) {
         if (o.odds < filters.minOdds) continue;
+        if (o.laySuspect) withheld++;
         // All odds with a lay gap < 0.2 (no back-odds ceiling). Ice hockey is
         // already excluded at the data layer (layOdds = null), so qualifiesForLay
         // returns false for it automatically.
@@ -190,7 +199,7 @@ export default function LayBets() {
       if (d !== 0) return d;
       return a.gap - b.gap;
     });
-    return { singles: rows, feedMatches: matches.length };
+    return { singles: rows, feedMatches: matches.length, withheld };
   }, [matches, filters, stakeVal]);
 
   const bestProfit =
@@ -280,7 +289,15 @@ export default function LayBets() {
           <p className="mt-3 text-xs text-gray-400">
             Singles show every outcome with a lay gap under 0.20 (negative gap = better than break-even), on your £{stakeVal} cash back stake, including 5% exchange commission. Ice hockey is excluded — bookmaker back odds are regulation-time but exchange lays include overtime, so they never match. Run searches the freshest cached odds — it never costs an API call.
           </p>
-          <p className="mt-1 text-xs text-gray-400">Pre-match odds — refresh every 10 minutes.</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Pre-match odds — refresh every 10 minutes. Prices the feed reports as unavailable (1.00 / 451) are removed, and a lay price more than 10% below the bookmaker price is withheld — those rows are two different markets, not an opportunity.
+          </p>
+
+          {results.withheld > 0 && (
+            <p className="mt-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+              ⚠️ {results.withheld} row{results.withheld === 1 ? "" : "s"} hidden — the exchange lay price was more than 10% below the bookmaker price, so it can't actually be matched.
+            </p>
+          )}
 
           {oddsAgeMs != null && (
             <p className="mt-1 text-xs font-medium text-gray-500">🕒 Odds updated {formatAge(oddsAgeMs)}</p>

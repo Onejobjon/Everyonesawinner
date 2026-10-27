@@ -51,6 +51,9 @@ export default function Oddsmatcher() {
         <div className="mx-auto max-w-5xl px-6 py-8">
           <h1 className="text-3xl font-bold tracking-tight">Best Odds Finder</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">Odds updated every 10 minutes.</p>
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+            Prices the feed reports as unavailable (1.00 / 451) are removed before any profit is calculated, and a match missing an outcome is never shown as an opportunity.
+          </p>
 
           <div className="mt-6 flex flex-wrap gap-2">
             {filterOptions.map((f) => (
@@ -110,11 +113,19 @@ export default function Oddsmatcher() {
               <div className="mt-6 grid grid-cols-1 gap-4">
               {filtered.map((m) => {
                 const oddsArr = m.outcomes.map((o) => o.odds);
-                const dutch = freeBetMode ? calcDutchFreeBet(oddsArr) : calcDutch(oddsArr);
+                // A match missing outcomes (sentinel prices dropped by the data
+                // layer) can't be dutched — any "profit" would just be the
+                // missing leg. Show no verdict rather than a fake one.
+                const incomplete = (m.outcomesWithheld ?? 0) > 0;
+                const dutch = incomplete
+                  ? null
+                  : freeBetMode
+                    ? calcDutchFreeBet(oddsArr)
+                    : calcDutch(oddsArr);
                 return (
                   <div key={m.matchId}
                     className={`rounded-xl border-2 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md ${
-                      dutch.isArbitrage ? "border-green-500" : "border-gray-200 dark:border-gray-800"
+                      dutch?.isArbitrage ? "border-green-500" : "border-gray-200 dark:border-gray-800"
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -130,20 +141,23 @@ export default function Oddsmatcher() {
                         <div key={i} className="flex items-center gap-2 text-sm">
                           <span className="text-lg">{getIcon(o.name, m.home, m.away)}</span>
                           <span className="font-medium">
-                            {freeBetMode && i === (dutch as any).freeBetIndex && <span className="text-purple-500 mr-1">🎟️</span>}
-                            {!freeBetMode && i === (dutch as any).favIndex && <span className="text-amber-500 mr-1">⭐</span>}
+                            {dutch && freeBetMode && i === (dutch as any).freeBetIndex && <span className="text-purple-500 mr-1">🎟️</span>}
+                            {dutch && !freeBetMode && i === (dutch as any).favIndex && <span className="text-amber-500 mr-1">⭐</span>}
                             <strong>{o.name}</strong> at <strong>{o.bookmaker}</strong> ({o.odds.toFixed(2)})
                           </span>
                           <span className="font-medium text-indigo-700 dark:text-indigo-400">
-                            {freeBetMode && i === (dutch as any).freeBetIndex
+                            {dutch && freeBetMode && i === (dutch as any).freeBetIndex
                               ? <span className="text-purple-600 dark:text-purple-400">— FREE BET <strong>£10</strong></span>
-                              : `— stake £${dutch.stakes[i].toFixed(2)}`
+                              : dutch
+                                ? `— stake £${dutch.stakes[i].toFixed(2)}`
+                                : "—"
                             }
                           </span>
                         </div>
                       ))}
                     </div>
 
+                    {dutch ? (
                     <div className="mt-4 flex items-center gap-2">
                       <span className="text-lg">{dutch.isArbitrage ? "💰" : "⚠️"}</span>
                       <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -160,6 +174,11 @@ export default function Oddsmatcher() {
                         <span className="text-gray-400 dark:text-gray-500"> (overround: {dutch.overroundPct.toFixed(1)}%)</span>
                       </span>
                     </div>
+                    ) : (
+                      <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                        ⚠️ This match is missing {m.outcomesWithheld} outcome{m.outcomesWithheld === 1 ? "" : "s"} — the feed reported no usable price, so no profit is shown.
+                      </div>
+                    )}
                     {m.warning && (
                       <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                         ⚠️ {m.warning}

@@ -5,6 +5,7 @@
  */
 
 import { calcDutchFreeBet } from "./odds";
+import { checkBackLayPair, isPlausiblePrice } from "./odds-sanity";
 
 // The Odds API key is held server-side only (src/server/odds-key.ts) and is
 // never shipped in the client bundle. The client fetches through our own
@@ -87,6 +88,16 @@ export interface MatchOutcome {
   layLastUpdate: string | null;
   /** Full per-bookmaker back-odds matrix for this outcome (for 2up and similar) */
   bookmakerOdds: OutcomeBookmakerOdds[];
+  /**
+   * True when the feed DID quote a lay price for this outcome but it failed the
+   * back/lay sanity check (sentinel value, or so far below the back price that
+   * the two are describing different markets). `layOdds` is withheld (null) so
+   * no surface can present it as an opportunity — this flag exists only so the
+   * UI can say honestly that a price was withheld.
+   */
+  laySuspect?: boolean;
+  /** Why the lay price was withheld — shown in the UI / written to logs. */
+  laySuspectReason?: string;
 }
 
 export interface Match {
@@ -107,6 +118,15 @@ export interface Match {
   hasLayCoverage: boolean;
   /** Warning message if bookmaker availability is limited */
   warning?: string;
+  /**
+   * How many outcomes were dropped because no bookmaker quoted a usable back
+   * price (sentinel/absurd prices only — see odds-sanity.ts). When > 0 the
+   * back market is incomplete, so a dutching/arb profit calculated across the
+   * remaining outcomes is meaningless and must not be shown.
+   */
+  outcomesWithheld?: number;
+  /** How many outcome rows had a lay price withheld by the sanity check. */
+  laysWithheld?: number;
 }
 
 // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -211,6 +231,10 @@ function bestUniqueBookmakerOdds(
           (o) => o.name.toLowerCase() === name.toLowerCase()
         );
         if (!outcome) continue;
+        // Sentinel ("no price") / absurd prices must never be treated as the
+        // best available back price — a 1.00 or 451 here would poison the
+        // dutching maths on this match. See odds-sanity.ts.
+        if (!isPlausiblePrice(outcome.price)) continue;
         options.push({ bookmaker: bm.title, odds: outcome.price });
       }
       return { outcome: name, options };
@@ -344,7 +368,7 @@ function findLayOdds(
     const outcome = market.outcomes.find(
       (o) => o.name.toLowerCase() === outcomeName.toLowerCase()
     );
-    if (outcome && outcome.price > 0) {
+    if (outcome && isPlausiblePrice(outcome.price)) {
       return {
         layOdds: outcome.price,
         laySource: bm.title,
@@ -392,7 +416,7 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
     if (
       apiMatch.bookmakers?.some((bm) =>
         LAY_SOURCES.includes(bm.key) &&
-        bm.markets.some((m) => m.key === "h2h_lay" && m.outcomes.some((o) => o.price > 0))
+        bm.markets.some((m) => m.key === "h2h_lay" && m.outcomes.some((o) => isPlausiblePrice(o.price)))
       )
     ) {
       layCoveredLeagues.add(apiMatch.sport_key);
@@ -411,27 +435,44 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
     // Lay Bet Finder and the alert worker skip it automatically.
     const isIceHockeyMatch = apiMatch.sport_key.startsWith("icehockey");
 
+    // Count of rows on this match whose lay price was withheld by the sanity check.
+    let laysWithheld = 0;
+
     const allOutcomes: ApiOutcome[] = [];
+    const allOutcomeNames = new Set<string>();
     for (const bm of apiMatch.bookmakers) {
       const market = bm.markets.find((m) => m.key === "h2h");
-      if (market) {
-        for (const outcome of market.outcomes) {
-          if (!allOutcomes.some((o) => o.name === outcome.name)) {
-            allOutcomes.push(outcome);
-          }
+      if (!market) continue;
+      for (const outcome of market.outcomes) {
+        allOutcomeNames.add(outcome.name.toLowerCase());
+        // Sentinel / absurd back prices are not odds — skip them so they can
+        // never win "best price" and invent a profit. See odds-sanity.ts.
+        if (!isPlausiblePrice(outcome.price)) continue;
+        if (!allOutcomes.some((o) => o.name === outcome.name)) {
+          allOutcomes.push(outcome);
         }
       }
     }
 
     if (allOutcomes.length === 0) continue;
+    // A market showing fewer than two outcomes can't be dutched or laid as a
+    // pair — drop the fixture rather than show half a market.
+    if (allOutcomes.length < 2) continue;
+
+    // Outcomes the feed listed but for which nobody quoted a usable back price.
+    const outcomesWithheld = [...allOutcomeNames].filter(
+      (n) => !allOutcomes.some((o) => o.name.toLowerCase() === n)
+    ).length;
 
     // Build the full per-outcome bookmaker back-odds matrix (kept for the
-    // 2up feature and other offer-eligibility lookups downstream).
+    // 2up feature and other offer-eligibility lookups downstream). Sentinel
+    // prices are excluded here too — a 451 must never surface as a back price.
     const matrix = new Map<string, OutcomeBookmakerOdds[]>();
     for (const bm of apiMatch.bookmakers) {
       const market = bm.markets.find((m) => m.key === "h2h");
       if (!market) continue;
       for (const outcome of market.outcomes) {
+        if (!isPlausiblePrice(outcome.price)) continue;
         const key = outcome.name.toLowerCase();
         if (!matrix.has(key)) matrix.set(key, []);
         matrix.get(key)!.push({ key: bm.key, title: bm.title, odds: outcome.price });
@@ -468,20 +509,33 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       hasLayCoverage: layCoveredLeagues.has(apiMatch.sport_key),
       outcomes: sorted.map((o) => {
         const lay = isIceHockeyMatch ? null : findLayOdds(o.outcome, apiMatch.bookmakers);
+        // Back/lay sanity check (see odds-sanity.ts). A lay price that is a
+        // feed sentinel, or that sits far below the bookmaker's back price,
+        // describes a different market — withhold it so no surface (Lay Bet
+        // Finder, Bet Builder, alerts) can present it as an opportunity, and
+        // mark the row so the UI can be honest about the omission.
+        const pair = checkBackLayPair(o.backOdds, lay ? lay.layOdds : null);
+        const layWithheld = Boolean(lay) && pair.suspect;
+        if (layWithheld) laysWithheld++;
         return {
           name: o.outcome,
           bookmaker: o.bookmaker,
           odds: o.backOdds,
           return20: Math.round(20 * o.backOdds * 100) / 100,
-          layOdds: lay ? lay.layOdds : null,
-          laySource: lay ? lay.laySource : null,
-          layBookmakerKey: lay ? lay.layBookmakerKey : null,
+          layOdds: lay && !pair.suspect ? lay.layOdds : null,
+          laySource: lay && !pair.suspect ? lay.laySource : null,
+          layBookmakerKey: lay && !pair.suspect ? lay.layBookmakerKey : null,
           backLastUpdate: getBackLastUpdate(o.bookmaker, apiMatch.bookmakers),
-          layLastUpdate: lay ? lay.layLastUpdate : null,
+          layLastUpdate: lay && !pair.suspect ? lay.layLastUpdate : null,
           bookmakerOdds: matrix.get(o.outcome.toLowerCase()) || [],
+          ...(layWithheld
+            ? { laySuspect: true, laySuspectReason: pair.reason ?? undefined }
+            : {}),
         };
       }),
       ...(hasWarning ? { warning: "Bookmaker availability limited — some outcomes may share the same bookmaker" } : {}),
+      ...(outcomesWithheld > 0 ? { outcomesWithheld } : {}),
+      ...(laysWithheld > 0 ? { laysWithheld } : {}),
     });
   }
 
