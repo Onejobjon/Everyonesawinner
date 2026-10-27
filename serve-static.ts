@@ -9,7 +9,9 @@ import { ODDS_API_KEY } from "./src/server/odds-key";
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser } from "./src/server/users";
 
-const PORT = 3000;
+// Port is configurable: the platform now runs its own dev server on 3000, so
+// the alert host runs alongside it on PORT (default 3000 for the VPS recipe).
+const PORT = Number(process.env.PORT || 3000);
 const HOST = "0.0.0.0";
 const DIST = join(import.meta.dir, "dist");
 
