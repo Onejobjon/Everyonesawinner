@@ -65,10 +65,12 @@ function FeaturedPicks() {
                   {dutch.isArbitrage ? (
                     <span className="text-sm font-semibold text-green-600 dark:text-green-400 block">
                       Profit: <strong>£{dutch.netProfit.toFixed(2)}</strong>
+                      <span className="text-xs font-normal text-gray-500 dark:text-gray-400"> on a £10 free bet</span>
                     </span>
                   ) : (
                     <span className="text-sm font-semibold text-red-600 dark:text-red-400 block">
                       Loss: <strong>£{Math.abs(dutch.netProfit).toFixed(2)}</strong>
+                      <span className="text-xs font-normal text-gray-500 dark:text-gray-400"> on a £10 free bet</span>
                     </span>
                   )}
                   <span className="text-xs text-gray-400">({dutch.overroundPct.toFixed(1)}% overround)</span>
@@ -238,7 +240,7 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-6 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300 mb-8">
             <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-            Legal • Low-risk • Tax-free
+            Legal • Tax-free • Fully hedged
           </div>
           <h1 className="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl">
             Turn <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Free Bets</span> Into Cash
@@ -253,7 +255,7 @@ export default function Home() {
           <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-3 border-y border-gray-200 dark:border-gray-800 py-8">
             <div><p className="text-3xl font-bold text-indigo-600">£20</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">See exactly what £20 returns on any outcome</p></div>
             <div><p className="text-3xl font-bold text-indigo-600">10 min</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Odds refreshed every 10 minutes</p></div>
-            <div><p className="text-3xl font-bold text-indigo-600">20</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">UK bookmakers and exchanges, side by side</p></div>
+            <div><p className="text-3xl font-bold text-indigo-600">20+</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">UK bookmakers and exchanges, side by side</p></div>
           </div>
         </div>
       </section>
