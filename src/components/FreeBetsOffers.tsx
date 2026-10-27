@@ -225,8 +225,8 @@ export default function FreeBetsOffers({
                           </a>
                           {licence.checkedOn ? ` · checked ${licence.checkedOn}` : ""}
                           <span className="italic">
-                            {" "}— a licence is not a terms check: see this row's status above for whether the offer
-                            itself was confirmed.
+                            {" "}— a licence is not a terms check and it is not evidence this offer is live: the row's
+                            status above says whether the offer itself was confirmed.
                           </span>
                         </p>
                       ) : (
@@ -275,8 +275,8 @@ export default function FreeBetsOffers({
               and hold their account number; the row then names the licensee, links to the register and gives the
               date we checked. {withEvidence === 0
                 ? "No row on this page carries that evidence today"
-                : `${withEvidence} of ${OFFERS.length} rows carry it`}. “licence not recorded” means we could not
-              check — not that the operator is unlicensed. A licence says nothing about whether an offer is
+                : `${withEvidence} of ${OFFERS.length} rows carry it`}. Where we could not check an operator, the row
+              says so and makes no licence claim — which is not a statement that the operator is unlicensed.
               running: that is what each row's status shows.{" "}
               <a href="/how-we-check-offers" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
                 How we check these offers

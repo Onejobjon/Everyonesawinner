@@ -160,7 +160,7 @@ const fallbackHtml = renderToStaticMarkup(
 );
 check(
   "a row without licenceStatus renders as not recorded",
-  fallbackHtml.includes("licence not recorded") && !fallbackHtml.includes('data-testid="offers-row-licence"'),
+  (fallbackHtml.match(/data-testid="offers-row-licence-unknown"/g) || []).length === 1,
   String((fallbackHtml.match(/licence not recorded/g) || []).length),
 );
 check(
