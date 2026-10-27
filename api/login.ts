@@ -1,50 +1,53 @@
 // Vercel serverless function: POST /api/login — account login.
-// Mirrors the Bun server's `/api/login` route and reuses `authenticateUser`.
-// Local store is imported lazily: a static import of ../src/** broke the
-// deployed function at load time (opaque 500 before any handler code ran).
-import { needsPlatformForward, forwardToPlatform, send, withErrorJson } from "./_forward";
+//
+// SELF-CONTAINED: no relative imports (see the note in api/signup.ts — a
+// relative import crashed the deployed function at load time). On Vercel the
+// filesystem is read-only, so this forwards to the platform deployment, which
+// holds the account store, and returns its exact status and body (a wrong
+// password must come back as a clean 401, never a 500).
+const PLATFORM_API_URL =
+  process.env.PLATFORM_API_URL || "https://515136800b641762e9aace79427eb7c4.ctonew.app";
 
-function respond(res: any, status: number, body: unknown): void {
+function send(res: any, status: number, body: string): void {
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
   res.setHeader("cache-control", "no-store");
-  res.end(JSON.stringify(body));
+  res.end(body);
 }
 
-async function handlerInner(req: any, res: any): Promise<void> {
-  if (req.method !== "POST") {
-    respond(res, 405, { ok: false, error: "Method not allowed" });
-    return;
-  }
-  let body: unknown;
+export default async function handler(req: any, res: any): Promise<void> {
   try {
-    body = JSON.parse(req.body || "{}");
-  } catch {
-    respond(res, 400, { ok: false, error: "Invalid JSON body" });
-    return;
-  }
-  const { email, password } = (body ?? {}) as {
-    email?: unknown;
-    password?: unknown;
-  };
-  try {
-    if (needsPlatformForward()) {
-      const out = await forwardToPlatform("/api/login", "POST", JSON.stringify({ email, password }));
-      send(res, out.status, out.body, out.contentType);
+    if (req.method !== "POST") {
+      send(res, 405, JSON.stringify({ ok: false, error: "Method not allowed" }));
       return;
     }
-    const { authenticateUser } = await import("../src/server/users");
-    const user = authenticateUser(
-      typeof email === "string" ? email : "",
-      typeof password === "string" ? password : "",
-    );
-    respond(res, 200, { ok: true, user });
-  } catch (e) {
-    respond(res, 401, {
-      ok: false,
-      error: e instanceof Error ? e.message : "Invalid credentials",
+    let body: any;
+    try {
+      body = JSON.parse(req.body || "{}");
+    } catch {
+      send(res, 400, JSON.stringify({ ok: false, error: "Invalid JSON body" }));
+      return;
+    }
+    const payload = {
+      email: typeof body?.email === "string" ? body.email : "",
+      password: typeof body?.password === "string" ? body.password : "",
+    };
+    const upstream = await fetch(`${PLATFORM_API_URL}/api/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(payload),
     });
+    send(res, upstream.status, await upstream.text());
+  } catch (e) {
+    console.error(`[api-login] ${String(e)}`);
+    send(
+      res,
+      503,
+      JSON.stringify({
+        ok: false,
+        error:
+          "Sign-in is temporarily unavailable. Nothing was changed on your account — please try again in a minute.",
+      }),
+    );
   }
 }
-
-export default withErrorJson(handlerInner);

@@ -1,62 +1,52 @@
-// Vercel serverless function: POST /api/leads — lead capture.
+// Vercel serverless function: POST /api/leads — lead capture (funnel email list).
 //
-// ⚠️ RULE (locked in after the 2026-10-20 domain incident): on the custom domain
-// (Vercel), the ONLY way a server route exists is an `api/*.ts` function like
-// this one. Keep every new domain route in `api/`.
-//
-// Storage note: this mirrors the Bun server's `/api/leads` route and reuses the
-// same `storeLead` module. On Vercel the function filesystem is ephemeral, so a
-// file write is NOT durable across cold starts — production-grade Vercel lead
-// capture needs a Postgres `leads` table (src/db.ts) once DATABASE_URL is
-// connected. The platform URL (Bun server, serve-static.ts) uses the same module
-// and IS durable (its `.run/leads.json` lives on the shared site disk).
-// Local store is imported lazily: a static import of ../src/** broke the
-// deployed function at load time (opaque 500 before any handler code ran).
-import { needsPlatformForward, forwardToPlatform, send, withErrorJson } from "./_forward";
+// SELF-CONTAINED: no relative imports (see api/signup.ts). On Vercel the
+// filesystem is read-only, so this forwards to the platform deployment, which
+// owns the durable lead store — the funnel's email capture was silently broken
+// by the same file-write crash.
+const PLATFORM_API_URL =
+  process.env.PLATFORM_API_URL || "https://515136800b641762e9aace79427eb7c4.ctonew.app";
 
-function respond(res: any, status: number, body: unknown): void {
+function send(res: any, status: number, body: string): void {
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
   res.setHeader("cache-control", "no-store");
-  res.end(JSON.stringify(body));
+  res.end(body);
 }
 
-async function handlerInner(req: any, res: any): Promise<void> {
-  if (req.method !== "POST") {
-    respond(res, 405, { ok: false, error: "Method not allowed" });
-    return;
-  }
-
-  let body: unknown;
+export default async function handler(req: any, res: any): Promise<void> {
   try {
-    body = JSON.parse(req.body || "{}");
-  } catch {
-    respond(res, 400, { ok: false, error: "Invalid JSON body" });
-    return;
-  }
-
-  const { name, email, source } = (body ?? {}) as {
-    name?: unknown;
-    email?: unknown;
-    source?: unknown;
-  };
-
-  try {
-    if (needsPlatformForward()) {
-      const out = await forwardToPlatform("/api/leads", "POST", JSON.stringify({ name, email, source }));
-      send(res, out.status, out.body, out.contentType);
+    if (req.method !== "POST") {
+      send(res, 405, JSON.stringify({ ok: false, error: "Method not allowed" }));
       return;
     }
-    const { storeLead } = await import("../src/server/leads");
-    const record = storeLead({
-      name: typeof name === "string" ? name : "",
-      email: typeof email === "string" ? email : "",
-      source: typeof source === "string" ? source : "free-bets-page",
+    let body: any;
+    try {
+      body = JSON.parse(req.body || "{}");
+    } catch {
+      send(res, 400, JSON.stringify({ ok: false, error: "Invalid JSON body" }));
+      return;
+    }
+    const payload = {
+      name: typeof body?.name === "string" ? body.name : "",
+      email: typeof body?.email === "string" ? body.email : "",
+      source: typeof body?.source === "string" ? body.source : "free-bets-page",
+    };
+    const upstream = await fetch(`${PLATFORM_API_URL}/api/leads`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(payload),
     });
-    respond(res, 200, { ok: true, record });
+    send(res, upstream.status, await upstream.text());
   } catch (e) {
-    respond(res, 400, { ok: false, error: e instanceof Error ? e.message : "Invalid lead" });
+    console.error(`[api-leads] ${String(e)}`);
+    send(
+      res,
+      503,
+      JSON.stringify({
+        ok: false,
+        error: "Could not save your email just now — please try again in a minute.",
+      }),
+    );
   }
 }
-
-export default withErrorJson(handlerInner);
