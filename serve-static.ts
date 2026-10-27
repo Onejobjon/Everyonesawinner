@@ -9,6 +9,7 @@ import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./src/server/odds
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser, findByEmail } from "./src/server/users";
 import { resolveSession, revokeSession } from "./src/server/sessions";
+import { handleStripeEvent, verifyStripeSignature } from "./src/server/stripe-webhook";
 
 // Port is configurable: the platform now runs its own dev server on 3000, so
 // the alert host runs alongside it on PORT (default 3000 for the VPS recipe).
@@ -224,6 +225,32 @@ const server = Bun.serve({
       }
     }
 
+    // Stripe webhook — the ONLY way a customer's plan changes.
+    // Fails closed: with no STRIPE_WEBHOOK_SECRET we refuse the request (503)
+    // rather than trust an unauthenticated caller to grant a paid plan.
+    if (url.pathname === "/api/stripe-webhook") {
+      if (req.method !== "POST") {
+        return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
+      }
+      const secret = process.env.STRIPE_WEBHOOK_SECRET;
+      if (!secret) {
+        console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set — refusing the event");
+        return Response.json({ ok: false, error: "Webhook not configured" }, { status: 503 });
+      }
+      const raw = await req.text();
+      if (!verifyStripeSignature(raw, req.headers.get("stripe-signature"), secret)) {
+        return Response.json({ ok: false, error: "Bad signature" }, { status: 400 });
+      }
+      try {
+        const event = JSON.parse(raw);
+        const note = await handleStripeEvent(event);
+        console.log(`[stripe-webhook] ${note}`);
+        return Response.json({ ok: true, note });
+      } catch (e) {
+        console.error(`[stripe-webhook] failed: ${String(e)}`);
+        return Response.json({ ok: false, error: "Could not apply event" }, { status: 500 });
+      }
+    }
     // Session check — the ONLY source of truth for the paywall.
     // GET /api/me with `Authorization: Bearer <token>`.
     // 200 { ok, user } | 401 unknown/expired token | 503 account service down.
