@@ -3,6 +3,7 @@ import offersData from "../content/free-bets-offers.json";
 import {
   keptOffers,
   licenceEvidence,
+  licenceLine,
   profitText,
   statusLabel,
   type FreeBetOffer,
@@ -154,11 +155,8 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
                 const status = statusLabel(o.status);
                 const profit = profitText(o);
                 return (
-                  <a
+                  <div
                     key={o.bookmaker}
-                    href={o.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     data-bookmaker={o.bookmaker}
                     data-testid="offers-row"
                     data-licence-evidence={licence.ok ? "yes" : "no"}
@@ -166,7 +164,14 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
                   >
                     <div>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">{o.bookmaker}</span>
+                        <a
+                          href={o.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-gray-900 hover:text-indigo-600 hover:underline dark:text-gray-100 dark:hover:text-indigo-400"
+                        >
+                          {o.bookmaker}
+                        </a>
                         {licence.ok ? (
                           <span
                             data-testid="offers-row-uk-tick"
@@ -178,10 +183,10 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
                         ) : (
                           <span
                             data-testid="offers-row-no-licence"
-                            title="We do not hold this operator's licensee and Gambling Commission register account on file, so we make no licence claim here. Check the Gambling Commission register before depositing."
+                            title="We could not re-confirm this operator on the Gambling Commission register, so we make no licence claim here — that is not a statement that they are unlicensed."
                             className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
                           >
-                            licence not recorded
+                            licence not re-confirmed
                           </span>
                         )}
                         <span
@@ -196,6 +201,32 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
                       <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
                         {o.jurisdiction ? `${o.jurisdiction} · ` : ""}checked {o.checked_on}
                         {o.verified_on ? ` · terms read ${o.verified_on}` : ""}
+                      </p>
+                      {/* Licence line: the operator's licence only — never a claim that the offer is running. */}
+                      <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                        {licence.ok ? (
+                          <span data-testid="offers-row-licence">
+                            Licensed by the Gambling Commission:{" "}
+                            {licence.registerUrl ? (
+                              <a
+                                href={licence.registerUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline decoration-dotted hover:text-indigo-600 dark:hover:text-indigo-400"
+                              >
+                                {licence.licensee}, account {licence.registerAccount}
+                              </a>
+                            ) : (
+                              <>
+                                {licence.licensee}, account {licence.registerAccount}
+                              </>
+                            )}
+                            {licence.checkedOn ? ` — checked ${licence.checkedOn}` : ""}
+                            <span className="italic"> (the licence is the operator's; it is not evidence this offer is live)</span>
+                          </span>
+                        ) : (
+                          <span data-testid="offers-row-licence-unknown">{licenceLine(o)}</span>
+                        )}
                       </p>
                     </div>
                     <div className="text-right">
@@ -225,7 +256,7 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
                       <span className="text-xs text-gray-400">UK/GBP</span>
                       <p className="font-medium">{o.ukGbp === "✅" ? "GBP" : "verify"}</p>
                     </div>
-                  </a>
+                  </div>
                 );
               })
             )}
@@ -234,11 +265,13 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
           {/* Footer */}
           <div className="border-t border-gray-100 px-6 py-3 dark:border-gray-800">
             <p className="text-xs text-gray-400 text-center">
-              “✅ UK licensed” appears only where the row carries the operator's licensee and Gambling Commission
-              register account. {withEvidence === 0
-                ? "We hold that evidence for none of the rows shown"
-                : `We hold it for ${withEvidence} of ${OFFERS.length} rows`} — where a row says “licence not
-              recorded”, check the register yourself before depositing.
+              “✅ UK licensed” appears only where we re-confirmed the operator on the Gambling Commission register
+              and hold their account number; the row then names the licensee, links to the register and gives the
+              date we checked. {withEvidence === 0
+                ? "No row on this page carries that evidence today"
+                : `${withEvidence} of ${OFFERS.length} rows carry it`}. “licence not re-confirmed” means we could not
+              check — not that the operator is unlicensed. A licence says nothing about whether an offer is
+              running: that is what each row's status shows.
             </p>
             <p className="text-xs text-gray-400 text-center mt-1">
               “unverified” = we could not read this offer on the bookmaker's own page; “re-checked” = we did, and

@@ -348,8 +348,9 @@ export default function FreeBets() {
           </div>
 
           <p className="mt-4 text-center text-xs text-gray-400">
-            ✅ UK licensed appears only where we hold the operator's licensee and Gambling Commission register
-            account; “licence not recorded” means we do not, so check the register yourself · 18+ · begambleaware.org
+            ✅ UK licensed appears only where we re-confirmed the operator on the Gambling Commission register and
+            hold their account number; “licence not re-confirmed” means we could not check — not that the operator
+            is unlicensed · 18+ · begambleaware.org
           </p>
         </div>
       </section>

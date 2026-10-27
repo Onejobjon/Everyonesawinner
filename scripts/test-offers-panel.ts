@@ -10,7 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import FreeBetsOffers from "../src/components/FreeBetsOffers";
 import offersData from "../src/content/free-bets-offers.json";
-import { licenceEvidence, NOT_QUOTED, type FreeBetOffer } from "../src/lib/free-bets";
+import { licenceEvidence, licenceLine, NOT_QUOTED, type FreeBetOffer } from "../src/lib/free-bets";
 
 const ROWS = offersData.offers as FreeBetOffer[];
 const html = renderToStaticMarkup(createElement(FreeBetsOffers, { defaultOpen: true }));
@@ -72,9 +72,65 @@ check("re-checked rows are labelled as such", statusCount("re-checked — terms 
 check("unverified rows are labelled as such", statusCount("unverified") === unverifiable, String(statusCount("unverified")));
 const checkedDates = new Set(ROWS.map((o) => o.checked_on));
 check(
-  "each row shows the date it was checked",
-  [...checkedDates].every((d) => count(`checked ${d}`) === ROWS.length),
+  "each row shows the date it was checked (audit line + licence line)",
+  [...checkedDates].every((d) => count(`checked ${d}`) >= ROWS.length),
   [...checkedDates].join(", "),
+);
+
+console.log("\nlicence evidence");
+const verified = ROWS.filter((o) => o.licenceStatus === "verified");
+check(
+  "a tick appears only for rows whose licence was verified",
+  count('data-testid="offers-row-uk-tick"') === verified.length,
+  `${count('data-testid="offers-row-uk-tick"')} ticks vs ${verified.length} verified rows`,
+);
+check(
+  "every verified row names its licensee, register account and check date",
+  verified.every(
+    (o) =>
+      html.includes(`account ${o.registerAccount}`) &&
+      html.includes(o.licensee || "\u0000") &&
+      html.includes(`checked ${o.licenceCheckedOn}`),
+  ),
+);
+check(
+  "the licensee links to the public register",
+  verified.every((o) => !o.registerUrl || html.includes(`href="${o.registerUrl}"`)),
+);
+check(
+  "the licence line says it is not evidence the offer is live",
+  html.includes("it is not evidence this offer is live"),
+);
+check(
+  "no row claims an operator is unlicensed",
+  !/unlicen[sc]ed (operator|bookmaker)/i.test(html),
+);
+
+// Absence must read as "we don't know", never as confirmation either way.
+const synthetic = (patch: Partial<FreeBetOffer>): FreeBetOffer => ({
+  ...(ROWS[0] as FreeBetOffer),
+  ...patch,
+});
+check(
+  "licenceStatus 'verified' + licensee + account earns the tick",
+  licenceEvidence(synthetic({ licenceStatus: "verified" })).ok,
+);
+check(
+  "licenceStatus 'unverified' earns no tick even with a licensee on file",
+  !licenceEvidence(synthetic({ licenceStatus: "unverified" })).ok,
+);
+check(
+  "a missing licenceStatus earns no tick",
+  !licenceEvidence(synthetic({ licenceStatus: undefined })).ok,
+);
+check(
+  "a verified status with no register account earns no tick",
+  !licenceEvidence(synthetic({ licenceStatus: "verified", registerAccount: "" })).ok,
+);
+check(
+  "the unverified line says we could not check, not that they are unlicensed",
+  licenceLine(synthetic({ licenceStatus: "unverified" })).includes("could not check") &&
+    !/unlicen[sc]ed/i.test(licenceLine(synthetic({ licenceStatus: "unverified" }))),
 );
 
 console.log("\nsearch and section filters survive");

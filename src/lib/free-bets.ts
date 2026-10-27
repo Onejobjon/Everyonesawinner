@@ -39,28 +39,62 @@ export interface FreeBetOffer {
   licensed?: boolean | string;
   licensee?: string;
   registerAccount?: string;
+  // Licence evidence, as agreed with the researcher. `licenceStatus` is only
+  // ever "verified" or "unverified": "unverified" means we could not re-confirm
+  // it, NOT that the operator is unlicensed.
+  licenceStatus?: "verified" | "unverified" | (string & {});
+  licenceCheckedOn?: string;
+  registerUrl?: string;
 }
 
 export interface LicenceEvidence {
   ok: boolean;
   licensee?: string;
   registerAccount?: string;
+  registerUrl?: string;
+  checkedOn?: string;
+  status?: string;
 }
 
-/** A tick needs the evidence on the row itself, not a promise in a doc. */
+/**
+ * A tick needs the evidence on the row itself, not a promise in a doc.
+ *
+ * Absence must read as "we don't know": a row without `licenceStatus:
+ * "verified"` plus a licensee and a register account earns no tick and no
+ * licence line — never an assertion that the operator is unlicensed.
+ */
 export function licenceEvidence(o: {
   licensed?: boolean | string;
   licensee?: string;
   registerAccount?: string;
+  licenceStatus?: string;
+  licenceCheckedOn?: string;
+  registerUrl?: string;
 }): LicenceEvidence {
-  const licensed = o.licensed === true || o.licensed === "true";
   const licensee = (o.licensee || "").trim();
   const registerAccount = (o.registerAccount || "").trim();
+  const status = (o.licenceStatus || "").trim() || undefined;
+  // `licensed` is the older boolean; `licenceStatus` is the agreed field. Both
+  // are honoured, but nothing short of an explicit "verified" earns the tick.
+  const verified = status === "verified" || (status === undefined && (o.licensed === true || o.licensed === "true"));
   return {
-    ok: licensed && Boolean(licensee) && Boolean(registerAccount),
+    ok: verified && Boolean(licensee) && Boolean(registerAccount),
     licensee: licensee || undefined,
     registerAccount: registerAccount || undefined,
+    registerUrl: (o.registerUrl || "").trim() || undefined,
+    checkedOn: (o.licenceCheckedOn || "").trim() || undefined,
+    status,
   };
+}
+
+/** The licence sentence for a row. Verified rows name the evidence; the rest say we do not know. */
+export function licenceLine(o: Parameters<typeof licenceEvidence>[0]): string {
+  const e = licenceEvidence(o);
+  if (e.ok) {
+    const when = e.checkedOn ? ` — checked ${e.checkedOn}` : "";
+    return `Licensed by the Gambling Commission: ${e.licensee}, account ${e.registerAccount}${when}`;
+  }
+  return "Licence not re-confirmed — we could not check the Gambling Commission register for this operator, so we make no claim either way";
 }
 
 /** Shown wherever a profit figure used to be. */
