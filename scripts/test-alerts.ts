@@ -293,6 +293,24 @@ console.log("11) Match 2h from kick-off → alerts");
   assert(skippedTooSoon === 0, `0 too-soon skipped (got ${skippedTooSoon})`);
 }
 
+// ── credit instrumentation (scripts/test-credits.ts) ───────────────────────
+// Run in a child process: it must set ALERTS_RUN_DIR *before* importing the
+// worker, and it mocks fetch, so it can never spend a credit or touch the real
+// rollup. Kept here so `bun scripts/test-alerts.ts` covers the measurement too.
+console.log("\n12) credit instrumentation — spend is recorded, not estimated");
+{
+  const child = Bun.spawnSync([process.execPath, "scripts/test-credits.ts"], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const out = child.stdout.toString();
+  const err = child.stderr.toString();
+  const passed = (out.match(/^  ✓ /gm) || []).length;
+  assert(child.exitCode === 0, `credit-instrumentation checks pass (${passed} assertions, exit ${child.exitCode})`);
+  if (child.exitCode !== 0) console.error(out + err);
+}
+
 console.log("");
 if (failures > 0) {
   console.error(`✗ ${failures} assertion(s) failed`);

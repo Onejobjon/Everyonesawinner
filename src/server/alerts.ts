@@ -25,7 +25,7 @@
  */
 
 import { join } from "node:path";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
 import { transformMatches, type Match, type MatchOutcome } from "../lib/odds-api";
 import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./odds-key";
 import { calcLay, calcFreeBetProfit, qualifiesForLay, layGap, round2 } from "../lib/odds";
@@ -66,11 +66,14 @@ const EMAIL_TO = process.env.ALERT_EMAIL_TO || "";
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
-const RUN_DIR = join(import.meta.dir, "../../.run");
+// Overridable so tests can prove the instrumentation without touching real state.
+const RUN_DIR = process.env.ALERTS_RUN_DIR || join(import.meta.dir, "../../.run");
 const CACHE_FILE = join(RUN_DIR, "alerts-cache.json");
 const SEEN_FILE = join(RUN_DIR, "alerts-seen.json");
 const LOG_FILE = join(RUN_DIR, "alerts.log");
 const HEALTH_FILE = join(RUN_DIR, "alerts-health.json");
+// Append-only, one JSON object per scan: how spend is measured instead of guessed.
+const CREDITS_FILE = join(RUN_DIR, "credits.jsonl");
 const SEEN_MAX = 4000; // cap the persisted dedup set so it can't grow unbounded
 
 // Live surface to health-check. Must serve JSON odds for the site to be
@@ -143,6 +146,42 @@ type Opportunity = CashOpportunity | FreebetOpportunity;
 // Last x-requests-remaining value seen from the odds API (quota visibility).
 let lastRequestsRemaining: number | null = null;
 
+/**
+ * One scan's odds-API cost, as the API itself reports it.
+ *
+ * The Odds API bills PER REQUEST, not per event: `x-requests-last` is 1 for a
+ * 21-event league query and 1 for the generic feed. Reading both headers at the
+ * moment of the fetch is the only cost measurement that cannot drift from the
+ * shopkeeper's answer. A cache hit spends nothing and is recorded as last=0.
+ */
+interface ScanCredits {
+  last: number | null;
+  remaining: number | null;
+  events: number;
+  cache: "hit" | "miss";
+}
+let lastScanCredits: ScanCredits | null = null;
+
+/**
+ * Remaining quota as last seen by ANY process. A cache hit spends nothing and
+ * learns nothing, so without this it would log `remaining=unknown` on every
+ * warm scan; the rollup is the memory the worker keeps between restarts.
+ */
+function lastKnownRemaining(): number | null {
+  if (lastRequestsRemaining != null) return lastRequestsRemaining;
+  try {
+    if (!existsSync(CREDITS_FILE)) return null;
+    const rows = readFileSync(CREDITS_FILE, "utf8").trim().split("\n").reverse();
+    for (const row of rows) {
+      const parsed = JSON.parse(row) as { remaining?: number | null };
+      if (typeof parsed.remaining === "number") return parsed.remaining;
+    }
+  } catch {
+    /* no usable history — unknown is the honest answer */
+  }
+  return null;
+}
+
 async function fetchRawMatches(): Promise<unknown[]> {
   // No key anywhere → fail loudly. Previously this silently produced an empty
   // scan ("0 opportunities"), which reads like "nothing on today" instead of
@@ -157,12 +196,19 @@ async function fetchRawMatches(): Promise<unknown[]> {
       : "";
     throw new Error(`odds API ${res.status}${why}`);
   }
-  const remaining = res.headers.get("x-requests-remaining");
-  if (remaining != null && !Number.isNaN(Number(remaining))) {
-    lastRequestsRemaining = Number(remaining);
-    log(`odds API x-requests-remaining: ${remaining}`);
-  }
-  return (await res.json()) as unknown[];
+  const remainingHdr = res.headers.get("x-requests-remaining");
+  const lastHdr = res.headers.get("x-requests-last");
+  const remaining = remainingHdr != null && remainingHdr !== "" && !Number.isNaN(Number(remainingHdr))
+    ? Number(remainingHdr)
+    : null;
+  const last = lastHdr != null && lastHdr !== "" && !Number.isNaN(Number(lastHdr))
+    ? Number(lastHdr)
+    : null;
+  if (remaining != null) lastRequestsRemaining = remaining;
+  const raw = (await res.json()) as unknown[];
+  // Cost is recorded here, at the only place a request is actually made.
+  lastScanCredits = { last, remaining, events: Array.isArray(raw) ? raw.length : 0, cache: "miss" };
+  return raw;
 }
 
 async function getMatches(): Promise<Match[]> {
@@ -174,6 +220,13 @@ async function getMatches(): Promise<Match[]> {
         data: Match[];
       };
       if (Date.now() - cached.ts < CACHE_TTL_MIN * 60_000) {
+        // A cache hit issues no request, so it costs nothing: record it as 0.
+        lastScanCredits = {
+          last: 0,
+          remaining: lastKnownRemaining(),
+          events: cached.data.length,
+          cache: "hit",
+        };
         return cached.data;
       }
     }
@@ -633,6 +686,25 @@ async function checkSiteHealth(): Promise<void> {
   }
 }
 
+/**
+ * Record this scan's cost: one greppable log line plus one append-only JSONL
+ * row, so a month's burn is a `jq` sum rather than log archaeology.
+ */
+function recordCredits(c: ScanCredits): void {
+  const show = (n: number | null): string => (n == null ? "unknown" : String(n));
+  log(`credits: last=${show(c.last)} remaining=${show(c.remaining)} events=${c.events} cache=${c.cache}`);
+  try {
+    mkdirSync(RUN_DIR, { recursive: true });
+    appendFileSync(
+      CREDITS_FILE,
+      JSON.stringify({ ts: new Date().toISOString(), remaining: c.remaining, last: c.last, events: c.events, cache: c.cache }) + "\n",
+      "utf8",
+    );
+  } catch (e) {
+    log(`credits rollup write failed: ${String(e)}`);
+  }
+}
+
 // ── Orchestration ──────────────────────────────────────────────────────────
 
 export async function runAlertCheck(): Promise<{
@@ -649,6 +721,8 @@ export async function runAlertCheck(): Promise<{
     log(`health check failed: ${String(e)}`);
   }
   const matches = await getMatches();
+  // Exactly one credits line per scan — hit or miss.
+  if (lastScanCredits) recordCredits(lastScanCredits);
   const { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon } =
     findOpportunities(matches);
   const seen = loadSeen();
@@ -701,6 +775,7 @@ export function alertStatus() {
     cacheTtlMin: CACHE_TTL_MIN,
     oddsApiKey: Boolean(ODDS_API_KEY),
     requestsRemaining: lastRequestsRemaining,
+    lastScanCredits,
     rules: {
       cash: true, // GREEN CASH — cash qualifying profit > 0
       freebet: true, // FREE BET 100%+ — SNR free bet retains more than its stake
