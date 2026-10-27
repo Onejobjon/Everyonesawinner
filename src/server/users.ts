@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { ensureSchema, hasDatabase, query } from "./db-pg";
+import { issueSession } from "./sessions";
 
 /**
  * Server-side user store. Accounts persist to a JSON file (`.run/users.json`
@@ -87,6 +88,24 @@ export function ownerEmails(): string[] {
     .filter(Boolean);
   return Array.from(new Set([...fromEnv, ...DEFAULT_OWNER_EMAILS]));
 }
+/**
+ * True only when the submitted password equals the SERVER-HELD owner secret
+ * (process.env.OWNER_PASSWORD), compared in constant time.
+ *
+ * This is the gate for owner-seat provisioning. The old gate was
+ * `password.length >= 6`, which is no gate at all when there is no record to
+ * compare against: after every deploy the store is empty, so any stranger who
+ * typed the founder's email with any password became the founder. With no
+ * secret set we never provision — the request gets an ordinary 401 instead.
+ */
+function ownerSecretMatches(password: string | undefined): boolean {
+  const secret = process.env.OWNER_PASSWORD;
+  if (!secret || !password) return false;
+  const candidate = Buffer.from(hashPassword(password, secret), "hex");
+  const expected = Buffer.from(hashPassword(secret, secret), "hex");
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
+
 function isOwnerSeat(email: string): boolean {
   return ownerEmails().includes(email.trim().toLowerCase());
 }
@@ -125,6 +144,13 @@ function registerUserJson(name: string, email: string, password: string): Public
 
   const salt = randomBytes(16).toString("hex");
   const owner = isOwnerSeat(cleanEmail);
+  // An allow-listed owner address can only be created by whoever holds the
+  // server secret — otherwise /api/signup would be a second way to claim the
+  // founder's comped Pro seat. Same generic message as a duplicate, so the form
+  // reveals nothing about which addresses are owner seats.
+  if (owner && !ownerSecretMatches(password)) {
+    throw new Error("An account with that email already exists.");
+  }
   const record: StoredUser = {
     name: cleanName,
     email: cleanEmail,
@@ -147,13 +173,13 @@ function authenticateUserJson(email: string, password: string): PublicUser {
   const users = loadUsers();
   let record = users[cleanEmail];
 
-  // Self-provisioning owner seat. The store is ephemeral today (a redeploy wipes
-  // it), so an allow-listed address with no row is re-created from THIS login
-  // attempt: the supplied password is scrypt-hashed and stored, exactly like any
-  // other account. A wrong password can never create or overwrite a seat — the
-  // record is written once, on the first login that presents a valid password
-  // for an allow-listed address.
-  if (!record && isOwnerSeat(cleanEmail) && password && password.length >= 6) {
+  // Self-provisioning owner seat, gated on the SERVER-HELD secret. The store is
+  // ephemeral (a redeploy wipes it), so an allow-listed address with no row is
+  // re-created here — but only when the submitted password equals
+  // process.env.OWNER_PASSWORD. With no row there is nothing else to compare
+  // against, so any weaker gate lets a stranger claim the founder's Pro seat.
+  // Secret not set => no provisioning => ordinary 401 below.
+  if (!record && isOwnerSeat(cleanEmail) && ownerSecretMatches(password)) {
     const salt = randomBytes(16).toString("hex");
     record = {
       name: "Jon (owner)",
@@ -238,6 +264,9 @@ async function registerUserDb(name: string, email: string, password: string): Pr
     throw new Error("A valid email address is required.");
   }
   if (pw.length < 8) throw new Error("Password must be at least 8 characters.");
+  if (isOwnerSeat(cleanEmail) && !ownerSecretMatches(pw)) {
+    throw new Error("An account with that email already exists.");
+  }
   const salt = randomBytes(16).toString("hex");
   const rows = await query<UserRow>(
     `INSERT INTO users (email, name, password_hash, salt, plan)
@@ -260,7 +289,7 @@ async function authenticateUserDb(email: string, password: string): Promise<Publ
   );
   // Owner seat self-provisions (same rule as the JSON store): the first
   // successful login for an allow-listed address creates the record.
-  if (rows.length === 0 && cleanEmail && isOwnerSeat(cleanEmail) && pw.length >= 8) {
+  if (rows.length === 0 && cleanEmail && isOwnerSeat(cleanEmail) && ownerSecretMatches(pw)) {
     const salt = randomBytes(16).toString("hex");
     rows = await query<UserRow>(
       `INSERT INTO users (email, name, password_hash, salt, plan)
@@ -284,16 +313,20 @@ async function authenticateUserDb(email: string, password: string): Promise<Publ
 
 /** Create an account. Postgres when DATABASE_URL is set, JSON file otherwise. */
 export async function registerUser(name: string, email: string, password: string): Promise<PublicUser> {
-  if (hasDatabase()) return registerUserDb(name, email, password);
-  warnNonDurableOnce();
-  return registerUserJson(name, email, password);
+  const user = hasDatabase()
+    ? await registerUserDb(name, email, password)
+    : (warnNonDurableOnce(), registerUserJson(name, email, password));
+  // Real, server-persisted session token (see src/server/sessions.ts).
+  return { ...user, token: await issueSession(user.email) };
 }
 
 /** Verify credentials. Postgres when DATABASE_URL is set, JSON file otherwise. */
 export async function authenticateUser(email: string, password: string): Promise<PublicUser> {
-  if (hasDatabase()) return authenticateUserDb(email, password);
-  warnNonDurableOnce();
-  return authenticateUserJson(email, password);
+  const user = hasDatabase()
+    ? await authenticateUserDb(email, password)
+    : (warnNonDurableOnce(), authenticateUserJson(email, password));
+  // Real, server-persisted session token (see src/server/sessions.ts).
+  return { ...user, token: await issueSession(user.email) };
 }
 
 /** Record a plan change (Stripe webhook / manual comp). */

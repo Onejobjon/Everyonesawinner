@@ -27,22 +27,55 @@ function Nav() {
 }
 
 export default function Paywall({ children, title, tier = "any" }: PaywallProps) {
-  const { user, checkAuth } = useAuth();
+  const { user, sessionStatus, refresh } = useAuth();
   const navigate = useNavigate();
-  // SECURITY (2026-10-27): there is NO query-string bypass any more.
-  // `?preview=1` used to render every Pro tool with all auth checks skipped, so
-  // anyone could open /lay-bets?preview=1 and use the paid product for free.
-  // The paywall now fails CLOSED: no session → /login, no subscription → the
-  // subscribe screen. /preview is marketing copy only.
-  // Not logged in → redirect to /login
+  // SECURITY (2026-10-27):
+  //  - No query-string bypass: `?preview=1` used to render every Pro tool with
+  //    all auth checks skipped. /preview is marketing copy only now.
+  //  - The session is verified by the SERVER (GET /api/me). A hand-written
+  //    localStorage object with an invented token resolves to nothing, so it
+  //    gets the subscribe screen instead of the tool.
+  //  - Fails CLOSED: no/expired session → /login; account service unreachable →
+  //    "we can't verify you", never the paid tool.
   useEffect(() => {
-    if (!checkAuth()) {
+    if (sessionStatus === "anon") {
       navigate("/login?redirect=" + encodeURIComponent(window.location.pathname), { replace: true });
     }
-  }, []);
+  }, [sessionStatus, navigate]);
 
-  if (!checkAuth()) {
-    return null; // will redirect
+  if (sessionStatus === "checking") {
+    return (
+      <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
+        <Nav />
+        <div className="mx-auto max-w-3xl px-6 py-24 text-center text-gray-500">Checking your account…</div>
+      </div>
+    );
+  }
+
+  if (sessionStatus === "error") {
+    return (
+      <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
+        <Nav />
+        <div className="mx-auto max-w-3xl px-6 py-24 text-center">
+          <span className="text-6xl">🔒</span>
+          <h1 className="mt-6 text-3xl font-bold tracking-tight sm:text-4xl">We couldn't verify your account</h1>
+          <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
+            The account service isn't responding, so the tools stay locked rather than let anyone in
+            unchecked. Nothing is wrong with your subscription — please try again in a moment.
+          </p>
+          <button
+            onClick={() => void refresh()}
+            className="mt-8 rounded-xl bg-indigo-600 px-8 py-3 font-semibold text-white hover:bg-indigo-700"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (sessionStatus === "anon" || !user) {
+    return null; // redirecting to /login
   }
 
   // Logged in but no subscription → show paywall screen

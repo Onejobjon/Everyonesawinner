@@ -7,7 +7,8 @@ import { join, extname } from "node:path";
 import { startAlertWorker, runAlertCheck, alertStatus } from "./src/server/alerts";
 import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./src/server/odds-key";
 import { storeLead } from "./src/server/leads";
-import { registerUser, authenticateUser } from "./src/server/users";
+import { registerUser, authenticateUser, findByEmail } from "./src/server/users";
+import { resolveSession, revokeSession } from "./src/server/sessions";
 
 // Port is configurable: the platform now runs its own dev server on 3000, so
 // the alert host runs alongside it on PORT (default 3000 for the VPS recipe).
@@ -223,6 +224,68 @@ const server = Bun.serve({
       }
     }
 
+    // Session check — the ONLY source of truth for the paywall.
+    // GET /api/me with `Authorization: Bearer <token>`.
+    // 200 { ok, user } | 401 unknown/expired token | 503 account service down.
+    // A hand-written localStorage session cannot pass this: the token has to
+    // exist in the server-side session store (src/server/sessions.ts).
+    if (url.pathname === "/api/me") {
+      if (req.method !== "GET") {
+        return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
+      }
+      const authHeader = req.headers.get("authorization") || "";
+      const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+      const token = (bearer || url.searchParams.get("token") || "").trim();
+      if (!token) {
+        return Response.json({ ok: false, error: "Not signed in" }, { status: 401 });
+      }
+      try {
+        const session = await resolveSession(token);
+        if (!session) {
+          return Response.json({ ok: false, error: "Session expired" }, { status: 401 });
+        }
+        const found = await findByEmail(session.email);
+        if (!found) {
+          return Response.json({ ok: false, error: "Account not found" }, { status: 401 });
+        }
+        return Response.json({
+          ok: true,
+          user: {
+            name: found.name,
+            email: found.email,
+            subscription: found.subscription,
+            plan: found.plan,
+            token,
+          },
+        });
+      } catch (e) {
+        // Fail CLOSED: if we cannot verify the account, nobody gets the tools.
+        console.error(`[api/me] account store unavailable: ${String(e)}`);
+        return Response.json(
+          { ok: false, error: "Account service unavailable" },
+          { status: 503 },
+        );
+      }
+    }
+    // Logout — revoke the server-side session so a copied token stops working.
+    if (url.pathname === "/api/logout") {
+      if (req.method !== "POST") {
+        return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
+      }
+      const authHeader = req.headers.get("authorization") || "";
+      const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+      let token = (bearer || url.searchParams.get("token") || "").trim();
+      if (!token) {
+        try {
+          const body = (await req.json()) as { token?: unknown };
+          if (typeof body?.token === "string") token = body.token;
+        } catch {
+          /* no body */
+        }
+      }
+      await revokeSession(token);
+      return Response.json({ ok: true });
+    }
     // Guarded one-shot alert check: runs the lay-bets scanner and delivers
     // any new opportunities, if the caller knows GIT_SYNC_KEY. Useful for
     // verifying end-to-end delivery without waiting for the schedule.
