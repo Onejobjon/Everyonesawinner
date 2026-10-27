@@ -273,5 +273,37 @@ check(
   "no row on the page claims an operator is unlicensed",
   !/not licensed|unlicensed (?!\.)/i.test(pub.replace(/that is not a statement that the operator is unlicensed/g, "")),
 );
+
+// ── minimum odds: a figure keeps its "@", prose becomes a sentence ────────
+console.log("\nminimum odds wording");
+const sliceOf = (doc: string, name: string): string => {
+  const at = doc.indexOf(`data-bookmaker="${name}"`);
+  if (at < 0) return "";
+  const next = doc.indexOf('data-bookmaker="', at + 1);
+  return doc.slice(at, next < 0 ? doc.length : next);
+};
+const figures = ROWS.filter((o) => /^\d/.test((o.minOdds || "").trim()));
+const prose = ROWS.filter((o) => !/^\d/.test((o.minOdds || "").trim()));
+check(
+  `a numeric min odds still renders with its @ (${figures.length} rows)`,
+  figures.length > 0 && figures.every((o) => html.includes(`@ ${o.minOdds.trim()}`)),
+);
+check(
+  "the same holds on the public page",
+  figures.length > 0 && figures.every((o) => pub.includes(`@ ${o.minOdds.trim()}`)),
+);
+check(
+  `prose min odds renders as a sentence with no @ (${prose.length} rows)`,
+  prose.length > 0 &&
+    prose.every((o) => {
+      const a = sliceOf(html, o.bookmaker);
+      const b = sliceOf(pub, o.bookmaker);
+      return (
+        a.includes("minimum odds not stated") && !/@\s/.test(a) &&
+        b.includes("minimum odds not stated") && !/@\s/.test(b)
+      );
+    }),
+);
+check("no surface prints '@ not stated'", !/@\s*not stated/i.test(html) && !/@\s*not stated/i.test(pub));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

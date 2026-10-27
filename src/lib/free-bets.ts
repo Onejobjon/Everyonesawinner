@@ -97,6 +97,22 @@ export function licenceLine(o: Parameters<typeof licenceEvidence>[0]): string {
   return "Licence not recorded — we could not check the Gambling Commission register for this operator, so we make no claim either way";
 }
 
+/**
+ * How a minimum-odds value is printed.
+ *
+ * Some rows carry a real figure ("1.50"); some carry prose because the
+ * operator's page states none ("Not stated on the offer page"). Printing the
+ * prose behind an "@" produced "Min stake £10 @ Not stated on the offer page",
+ * which reads as broken. A figure keeps its "@"; prose becomes a sentence.
+ */
+export function minOddsLabel(value: string | undefined): { text: string; isFigure: boolean } {
+  const v = (value || "").trim();
+  if (/^\d/.test(v)) return { text: `@ ${v}`, isFigure: true };
+  if (!v) return { text: "minimum odds not stated", isFigure: false };
+  const prose = /not stated|unknown|n\/a/i.test(v) ? "minimum odds not stated" : v.charAt(0).toLowerCase() + v.slice(1);
+  return { text: prose, isFigure: false };
+}
+
 /** Shown wherever a profit figure used to be. */
 export const NOT_QUOTED = "not quoted — depends on the odds you match at";
 

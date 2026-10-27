@@ -4,6 +4,7 @@ import { LicenceLine } from "./LicenceLine";
 import {
   keptOffers,
   licenceEvidence,
+  minOddsLabel,
   profitText,
   statusLabel,
   type FreeBetOffer,
@@ -221,7 +222,7 @@ export default function FreeBetsOffers({
                     <div className="text-right">
                       <span className="text-xs text-gray-400">Min stake</span>
                       <p className="font-medium text-gray-700 dark:text-gray-300">{o.minStake}</p>
-                      <span className="text-[11px] text-gray-400">@ {o.minOdds}</span>
+                      <span className="text-[11px] text-gray-400">{minOddsLabel(o.minOdds).text}</span>
                     </div>
                     <div className="text-right">
                       <span className="text-xs text-gray-400">Free bets</span>

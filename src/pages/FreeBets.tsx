@@ -4,7 +4,7 @@ import { getMatches, type Match } from "../lib/odds-api";
 import { calcDutchFreeBet } from "../lib/odds";
 import EmailCapture from "../components/EmailCapture";
 import offersData from "../content/free-bets-offers.json";
-import { licenceEvidence, type FreeBetOffer } from "../lib/free-bets";
+import { licenceEvidence, minOddsLabel, type FreeBetOffer } from "../lib/free-bets";
 import { LicenceLine } from "../components/LicenceLine";
 
 // ── URL policy ─────────────────────────────────────────────────────────────
@@ -304,7 +304,7 @@ export default function FreeBets() {
                       <div className="text-sm">
                         <span className="block text-xs text-gray-400">Min stake</span>
                         <span className="font-medium text-gray-700 dark:text-gray-300">{o.minStake}</span>
-                        <span className="block text-[11px] text-gray-400">@ {o.minOdds}</span>
+                        <span className="block text-[11px] text-gray-400">{minOddsLabel(o.minOdds).text}</span>
                       </div>
                       <div className="text-sm">
                         <span className="block text-xs text-gray-400">Free bets</span>
