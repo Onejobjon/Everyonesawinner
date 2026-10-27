@@ -16,6 +16,9 @@ import {
 import Paywall from "../components/Paywall";
 import Markdown from "../components/Markdown";
 import layGuide from "../content/lay-betting-guide.md?raw";
+import TwoUpNoteTag from "../components/TwoUpNoteTag";
+import TwoUpGuideSection from "../components/TwoUpGuideSection";
+import { twoUpNoteForOutcome } from "../lib/two-up";
 import {
   sportCategory,
   sportLabel,
@@ -371,6 +374,13 @@ export default function LayBets() {
                       <div className="mt-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                         <span className="text-lg">{getIcon(op.outcome.name, op.match.home, op.match.away)}</span>
                         <span className="font-semibold">{op.outcome.name}</span>
+                        {/* Information only — never part of the numbers below. Derived
+                            from src/data/2up-verified-offers.json; renders nothing for
+                            any bookmaker not in that file. */}
+                        {(() => {
+                          const note = twoUpNoteForOutcome(op.outcome);
+                          return note ? <TwoUpNoteTag note={note} /> : null;
+                        })()}
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3">
                         <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-900">
@@ -429,6 +439,7 @@ export default function LayBets() {
                 <svg className="h-5 w-5 flex-shrink-0 text-gray-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </summary>
               <div className="mt-4"><Markdown source={layGuide} /></div>
+              <TwoUpGuideSection />
             </details>
           </section>
         </div>
