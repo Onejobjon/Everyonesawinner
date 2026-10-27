@@ -12,6 +12,7 @@
  * without touching them.
  */
 import { dirname, join } from "node:path";
+import { ensureSchema, hasDatabase, query } from "./db-pg";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 export interface LeadInput {
@@ -37,7 +38,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Validate and append a lead. Throws on invalid input; callers map errors to
  *  a 400 response. */
-export function storeLead(input: LeadInput): LeadRecord {
+function storeLeadJson(input: LeadInput): LeadRecord {
   const name = (input.name ?? "").trim();
   const email = (input.email ?? "").trim().toLowerCase();
   const source = (input.source ?? "unknown").trim();
@@ -72,3 +73,43 @@ export function storeLead(input: LeadInput): LeadRecord {
   writeFileSync(file, JSON.stringify(leads, null, 2));
   return record;
 }
+
+
+/** Validate the input the same way for both backends. */
+function validateLead(input: LeadInput): LeadInput {
+  const name = (input.name ?? "").trim();
+  const email = (input.email ?? "").trim().toLowerCase();
+  const source = (input.source ?? "unknown").trim();
+  if (!name || name.length > 120) throw new Error("A name is required.");
+  if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
+    throw new Error("A valid email address is required.");
+  }
+  return { name, email, source };
+}
+
+/** Postgres-backed lead capture. A repeat email updates the source instead of
+ *  failing — a person can hit the form twice without breaking the page. */
+async function storeLeadDb(input: LeadInput): Promise<LeadRecord> {
+  const { name, email, source } = validateLead(input);
+  await ensureSchema();
+  await query(
+    `INSERT INTO leads (email, name, source) VALUES ($1, $2, $3)
+     ON CONFLICT (lower(email)) DO UPDATE SET source = EXCLUDED.source`,
+    [email, name, source],
+  );
+  return { name, email, source, createdAt: new Date().toISOString() };
+}
+
+/** Store a lead. Postgres when DATABASE_URL is set, JSON file otherwise. */
+export async function storeLead(input: LeadInput): Promise<LeadRecord> {
+  if (hasDatabase()) return storeLeadDb(input);
+  if (!warnedNonDurableLeads) {
+    warnedNonDurableLeads = true;
+    console.warn(
+      "[leads] DATABASE_URL is not set — leads are stored in a JSON file that does NOT survive a redeploy.",
+    );
+  }
+  return storeLeadJson(input);
+}
+
+let warnedNonDurableLeads = false;

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { ensureSchema, hasDatabase, query } from "./db-pg";
 
 /**
  * Server-side user store. Accounts persist to a JSON file (`.run/users.json`
@@ -110,7 +111,7 @@ function toPublic(record: StoredUser): PublicUser {
 }
 
 /** Create a new account. Throws on invalid input or duplicate email. */
-export function registerUser(name: string, email: string, password: string): PublicUser {
+function registerUserJson(name: string, email: string, password: string): PublicUser {
   const cleanName = (name ?? "").trim();
   const cleanEmail = (email ?? "").trim().toLowerCase();
   if (!cleanName || cleanName.length > 120) throw new Error("A name is required.");
@@ -141,7 +142,7 @@ export function registerUser(name: string, email: string, password: string): Pub
 }
 
 /** Verify credentials and return the public user. Throws on failure. */
-export function authenticateUser(email: string, password: string): PublicUser {
+function authenticateUserJson(email: string, password: string): PublicUser {
   const cleanEmail = (email ?? "").trim().toLowerCase();
   const users = loadUsers();
   let record = users[cleanEmail];
@@ -186,4 +187,165 @@ export function authenticateUser(email: string, password: string): PublicUser {
     timingSafeEqual(candidateBuf, expectedBuf);
   if (!match) throw new Error("Invalid email or password.");
   return toPublic(record!);
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Backend switch: DATABASE_URL present => Postgres, absent => JSON file.
+ *
+ * The JSON path above is kept exactly as it was (it is what runs on the
+ * platform today). The Postgres path is the durable one: it survives a
+ * redeploy. Neither path ever returns success after a failed write.
+ * ------------------------------------------------------------------ */
+
+let warnedNonDurable = false;
+function warnNonDurableOnce(): void {
+  if (warnedNonDurable) return;
+  warnedNonDurable = true;
+  console.warn(
+    "[users] DATABASE_URL is not set — accounts are stored in a JSON file that does NOT survive a redeploy. Set DATABASE_URL to make accounts durable.",
+  );
+}
+
+interface UserRow {
+  email: string;
+  name: string;
+  password_hash: string;
+  salt: string;
+  plan: "starter" | "pro" | "annual" | null;
+  subscription_status: string | null;
+}
+
+function rowToStored(row: UserRow): StoredUser {
+  return {
+    name: row.name,
+    email: row.email,
+    salt: row.salt,
+    passwordHash: row.password_hash,
+    subscription: isOwnerSeat(row.email) || row.subscription_status === "active" || row.subscription_status === "trialing",
+    plan: isOwnerSeat(row.email) ? "pro" : row.plan,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function registerUserDb(name: string, email: string, password: string): Promise<PublicUser> {
+  await ensureSchema();
+  const cleanName = (name ?? "").trim();
+  const cleanEmail = (email ?? "").trim().toLowerCase();
+  const pw = password ?? "";
+  if (!cleanName || cleanName.length > 120) throw new Error("A name is required.");
+  if (!cleanEmail || cleanEmail.length > 254 || !EMAIL_RE.test(cleanEmail)) {
+    throw new Error("A valid email address is required.");
+  }
+  if (pw.length < 8) throw new Error("Password must be at least 8 characters.");
+  const salt = randomBytes(16).toString("hex");
+  const rows = await query<UserRow>(
+    `INSERT INTO users (email, name, password_hash, salt, plan)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (lower(email)) DO NOTHING
+     RETURNING email, name, password_hash, salt, plan, subscription_status`,
+    [cleanEmail, cleanName, hashPassword(pw, salt), salt, isOwnerSeat(cleanEmail) ? "pro" : null],
+  );
+  if (rows.length === 0) throw new Error("An account with that email already exists.");
+  return toPublic(rowToStored(rows[0]!));
+}
+
+async function authenticateUserDb(email: string, password: string): Promise<PublicUser> {
+  await ensureSchema();
+  const cleanEmail = (email ?? "").trim().toLowerCase();
+  const pw = password ?? "";
+  let rows = await query<UserRow>(
+    `SELECT email, name, password_hash, salt, plan, subscription_status FROM users WHERE lower(email) = $1`,
+    [cleanEmail],
+  );
+  // Owner seat self-provisions (same rule as the JSON store): the first
+  // successful login for an allow-listed address creates the record.
+  if (rows.length === 0 && cleanEmail && isOwnerSeat(cleanEmail) && pw.length >= 8) {
+    const salt = randomBytes(16).toString("hex");
+    rows = await query<UserRow>(
+      `INSERT INTO users (email, name, password_hash, salt, plan)
+       VALUES ($1, $2, $3, $4, 'pro')
+       ON CONFLICT (lower(email)) DO NOTHING
+       RETURNING email, name, password_hash, salt, plan, subscription_status`,
+      [cleanEmail, "Jon (owner)", hashPassword(pw, salt), salt],
+    );
+    console.log(`[users] owner seat provisioned in Postgres for ${cleanEmail}`);
+  }
+  const record = rows[0];
+  const dummySalt = "00000000000000000000000000000000";
+  const candidate = Buffer.from(hashPassword(pw, record?.salt || dummySalt), "hex");
+  const expected = Buffer.from(record?.password_hash || "", "hex");
+  const match =
+    record != null && expected.length === candidate.length && timingSafeEqual(candidate, expected);
+  if (!match) throw new Error("Invalid email or password.");
+  await query(`UPDATE users SET last_login_at = now() WHERE lower(email) = $1`, [cleanEmail]);
+  return toPublic(rowToStored(record));
+}
+
+/** Create an account. Postgres when DATABASE_URL is set, JSON file otherwise. */
+export async function registerUser(name: string, email: string, password: string): Promise<PublicUser> {
+  if (hasDatabase()) return registerUserDb(name, email, password);
+  warnNonDurableOnce();
+  return registerUserJson(name, email, password);
+}
+
+/** Verify credentials. Postgres when DATABASE_URL is set, JSON file otherwise. */
+export async function authenticateUser(email: string, password: string): Promise<PublicUser> {
+  if (hasDatabase()) return authenticateUserDb(email, password);
+  warnNonDurableOnce();
+  return authenticateUserJson(email, password);
+}
+
+/** Record a plan change (Stripe webhook / manual comp). */
+export async function setPlan(
+  email: string,
+  plan: "starter" | "pro" | "annual" | null,
+  subscriptionStatus: string | null = plan ? "active" : null,
+  stripeIds: { customerId?: string | null; subscriptionId?: string | null } = {},
+): Promise<void> {
+  const cleanEmail = (email ?? "").trim().toLowerCase();
+  if (hasDatabase()) {
+    await ensureSchema();
+    await query(
+      `UPDATE users SET plan = $2, subscription_status = $3,
+         stripe_customer_id = COALESCE($4, stripe_customer_id),
+         stripe_subscription_id = COALESCE($5, stripe_subscription_id)
+       WHERE lower(email) = $1`,
+      [cleanEmail, plan, subscriptionStatus, stripeIds.customerId ?? null, stripeIds.subscriptionId ?? null],
+    );
+    return;
+  }
+  warnNonDurableOnce();
+  const users = loadUsers();
+  const record = users[cleanEmail];
+  if (!record) return;
+  record.plan = plan;
+  record.subscription = subscriptionStatus === "active" || subscriptionStatus === "trialing";
+  users[cleanEmail] = record;
+  saveUsers(users);
+}
+
+/** Mark a login timestamp (Postgres only; the JSON store keeps createdAt). */
+export async function updateLastLogin(email: string): Promise<void> {
+  if (!hasDatabase()) return;
+  await ensureSchema();
+  await query(`UPDATE users SET last_login_at = now() WHERE lower(email) = $1`, [
+    (email ?? "").trim().toLowerCase(),
+  ]);
+}
+
+/** Look up a user without a password (Stripe webhooks, admin checks). */
+export async function findByEmail(email: string): Promise<PublicUser | null> {
+  const cleanEmail = (email ?? "").trim().toLowerCase();
+  if (hasDatabase()) {
+    await ensureSchema();
+    const rows = await query<UserRow>(
+      `SELECT email, name, password_hash, salt, plan, subscription_status FROM users WHERE lower(email) = $1`,
+      [cleanEmail],
+    );
+    return rows[0] ? toPublic(rowToStored(rows[0])) : null;
+  }
+  const users = loadUsers();
+  const record = users[cleanEmail];
+  return record ? toPublic(record) : null;
 }

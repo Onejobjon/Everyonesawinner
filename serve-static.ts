@@ -147,7 +147,7 @@ const server = Bun.serve({
         source?: unknown;
       };
       try {
-        const record = storeLead({
+        const record = await storeLead({
           name: typeof name === "string" ? name : "",
           email: typeof email === "string" ? email : "",
           source: typeof source === "string" ? source : "free-bets-page",
@@ -179,7 +179,7 @@ const server = Bun.serve({
         password?: unknown;
       };
       try {
-        const user = registerUser(
+        const user = await registerUser(
           typeof name === "string" ? name : "",
           typeof email === "string" ? email : "",
           typeof password === "string" ? password : "",
@@ -210,7 +210,7 @@ const server = Bun.serve({
         password?: unknown;
       };
       try {
-        const user = authenticateUser(
+        const user = await authenticateUser(
           typeof email === "string" ? email : "",
           typeof password === "string" ? password : "",
         );
