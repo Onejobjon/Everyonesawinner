@@ -133,6 +133,41 @@ check(
     !/unlicen[sc]ed/i.test(licenceLine(synthetic({ licenceStatus: "unverified" }))),
 );
 
+
+// ── the lead's integration assertions ──────────────────────────────────────
+console.log("\nlicence integration");
+const tickCount = count('data-testid="offers-row-uk-tick"');
+check("37 licence ticks on the real dataset", tickCount === 37, String(tickCount));
+check(
+  'the words "licence not recorded" appear zero times on the real dataset',
+  count("licence not recorded") === 0,
+  String(count("licence not recorded")),
+);
+const licenceHrefs = [...html.matchAll(/<a[^>]*data-testid="offers-row-licence"[^>]*>/g)].map((m) => {
+  const href = /href="([^"]+)"/.exec(m[0]);
+  return href ? href[1] : "";
+});
+const expectedHrefs = ROWS.map((o) => o.registerUrl || "");
+check(
+  "every rendered licence line links to that row's registerUrl",
+  licenceHrefs.length === ROWS.length && licenceHrefs.every((h, i) => h === expectedHrefs[i]),
+  `${licenceHrefs.length} links for ${ROWS.length} rows`,
+);
+// Fail-closed still proven end to end: drop licenceStatus from one row and render.
+const withoutStatus = ROWS.map((o, i) => (i === 0 ? { ...o, licenceStatus: undefined } : o));
+const fallbackHtml = renderToStaticMarkup(
+  createElement(FreeBetsOffers, { defaultOpen: true, offers: withoutStatus }),
+);
+check(
+  "a row without licenceStatus renders as not recorded",
+  fallbackHtml.includes("licence not recorded") && !fallbackHtml.includes('data-testid="offers-row-licence"'),
+  String((fallbackHtml.match(/licence not recorded/g) || []).length),
+);
+check(
+  "the other 36 rows still show their licence line",
+  (fallbackHtml.match(/data-testid="offers-row-licence"/g) || []).length === 36,
+);
+
 console.log("\nsearch and section filters survive");
 check("search box is present", html.includes('placeholder="Search bookmakers or offers..."'));
 check("All tab shows the row count", html.includes(`All (${ROWS.length})`));

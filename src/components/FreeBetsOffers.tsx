@@ -17,7 +17,7 @@ import {
  * shows about each row is described by src/lib/free-bets.ts, which the public
  * page uses too.
  */
-const OFFERS: FreeBetOffer[] = keptOffers(offersData.offers as FreeBetOffer[]);
+const DATASET: FreeBetOffer[] = keptOffers(offersData.offers as FreeBetOffer[]);
 const CHECKED_ON = (offersData.meta as { lastVerified?: string }).lastVerified || "";
 
 const TONE_CLASS: Record<string, string> = {
@@ -30,7 +30,15 @@ const TONE_CLASS: Record<string, string> = {
   withdrawn: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
-export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: boolean }) {
+export default function FreeBetsOffers({
+  defaultOpen = false,
+  offers,
+}: {
+  defaultOpen?: boolean;
+  /** Overridable so a test can prove the fail-closed path; defaults to the dataset. */
+  offers?: FreeBetOffer[];
+}) {
+  const OFFERS = useMemo(() => keptOffers(offers ?? DATASET), [offers]);
   const [open, setOpen] = useState(defaultOpen);
   const [search, setSearch] = useState("");
   const [section, setSection] = useState<"all" | "uk" | "global">("all");
@@ -46,7 +54,7 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
         (o.jurisdiction || "").toLowerCase().includes(q)
       );
     });
-  }, [search, section]);
+  }, [search, section, OFFERS]);
 
   const ukCount = OFFERS.filter((o) => o.section === "uk").length;
   const globalCount = OFFERS.filter((o) => o.section === "global").length;
@@ -183,10 +191,10 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
                         ) : (
                           <span
                             data-testid="offers-row-no-licence"
-                            title="We could not re-confirm this operator on the Gambling Commission register, so we make no licence claim here — that is not a statement that they are unlicensed."
+                            title="We could not check this operator on the Gambling Commission register, so we record no licence here — that is not a statement that they are unlicensed."
                             className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
                           >
-                            licence not re-confirmed
+                            licence not recorded
                           </span>
                         )}
                         <span
@@ -203,31 +211,29 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
                         {o.verified_on ? ` · terms read ${o.verified_on}` : ""}
                       </p>
                       {/* Licence line: the operator's licence only — never a claim that the offer is running. */}
-                      <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
-                        {licence.ok ? (
-                          <span data-testid="offers-row-licence">
-                            Licensed by the Gambling Commission:{" "}
-                            {licence.registerUrl ? (
-                              <a
-                                href={licence.registerUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline decoration-dotted hover:text-indigo-600 dark:hover:text-indigo-400"
-                              >
-                                {licence.licensee}, account {licence.registerAccount}
-                              </a>
-                            ) : (
-                              <>
-                                {licence.licensee}, account {licence.registerAccount}
-                              </>
-                            )}
-                            {licence.checkedOn ? ` — checked ${licence.checkedOn}` : ""}
-                            <span className="italic"> (the licence is the operator's; it is not evidence this offer is live)</span>
+                      {licence.ok ? (
+                        <p className="mt-1.5 border-l-2 border-emerald-300 pl-2 text-[11px] leading-5 text-gray-500 dark:border-emerald-800 dark:text-gray-400">
+                          <a
+                            data-testid="offers-row-licence"
+                            href={licence.registerUrl || undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline decoration-dotted hover:text-indigo-600 dark:hover:text-indigo-400"
+                          >
+                            Licensed by the Gambling Commission — {licence.licensee}, account{" "}
+                            {licence.registerAccount}
+                          </a>
+                          {licence.checkedOn ? ` · checked ${licence.checkedOn}` : ""}
+                          <span className="italic">
+                            {" "}— a licence is not a terms check: see this row's status above for whether the offer
+                            itself was confirmed.
                           </span>
-                        ) : (
+                        </p>
+                      ) : (
+                        <p className="mt-1.5 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
                           <span data-testid="offers-row-licence-unknown">{licenceLine(o)}</span>
-                        )}
-                      </p>
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
                       <span className="text-xs text-gray-400">Min stake</span>
@@ -269,9 +275,12 @@ export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: 
               and hold their account number; the row then names the licensee, links to the register and gives the
               date we checked. {withEvidence === 0
                 ? "No row on this page carries that evidence today"
-                : `${withEvidence} of ${OFFERS.length} rows carry it`}. “licence not re-confirmed” means we could not
+                : `${withEvidence} of ${OFFERS.length} rows carry it`}. “licence not recorded” means we could not
               check — not that the operator is unlicensed. A licence says nothing about whether an offer is
-              running: that is what each row's status shows.
+              running: that is what each row's status shows.{" "}
+              <a href="/how-we-check-offers" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
+                How we check these offers
+              </a>.
             </p>
             <p className="text-xs text-gray-400 text-center mt-1">
               “unverified” = we could not read this offer on the bookmaker's own page; “re-checked” = we did, and

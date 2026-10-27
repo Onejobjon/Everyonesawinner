@@ -74,9 +74,9 @@ export function licenceEvidence(o: {
   const licensee = (o.licensee || "").trim();
   const registerAccount = (o.registerAccount || "").trim();
   const status = (o.licenceStatus || "").trim() || undefined;
-  // `licensed` is the older boolean; `licenceStatus` is the agreed field. Both
-  // are honoured, but nothing short of an explicit "verified" earns the tick.
-  const verified = status === "verified" || (status === undefined && (o.licensed === true || o.licensed === "true"));
+  // `licenceStatus` is the agreed field; `licensed` is a legacy boolean that is
+  // no longer read. Nothing short of an explicit "verified" earns the tick.
+  const verified = status === "verified"; // a missing licenceStatus is NOT verified
   return {
     ok: verified && Boolean(licensee) && Boolean(registerAccount),
     licensee: licensee || undefined,
@@ -94,7 +94,7 @@ export function licenceLine(o: Parameters<typeof licenceEvidence>[0]): string {
     const when = e.checkedOn ? ` — checked ${e.checkedOn}` : "";
     return `Licensed by the Gambling Commission: ${e.licensee}, account ${e.registerAccount}${when}`;
   }
-  return "Licence not re-confirmed — we could not check the Gambling Commission register for this operator, so we make no claim either way";
+  return "Licence not recorded — we could not check the Gambling Commission register for this operator, so we make no claim either way";
 }
 
 /** Shown wherever a profit figure used to be. */
