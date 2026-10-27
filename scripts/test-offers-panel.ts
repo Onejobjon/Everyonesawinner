@@ -9,6 +9,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import FreeBetsOffers from "../src/components/FreeBetsOffers";
+import HowWeCheckOffers from "../src/pages/HowWeCheckOffers";
+import { MemoryRouter } from "react-router-dom";
 import offersData from "../src/content/free-bets-offers.json";
 import { licenceEvidence, licenceLine, NOT_QUOTED, type FreeBetOffer } from "../src/lib/free-bets";
 
@@ -180,5 +182,20 @@ const leaked = ROWS.map((o) => o.bookmaker).filter((b) => source.includes(b));
 check("no bookmaker name is hard-coded in the component", leaked.length === 0, leaked.join(", "));
 check("component imports the dataset", source.includes('from "../content/free-bets-offers.json"'));
 
+
+// ── the explainer page the panel links to ──────────────────────────────────
+console.log("\n/how-we-check-offers");
+const pageHtml = renderToStaticMarkup(
+  createElement(MemoryRouter, null, createElement(HowWeCheckOffers, null)),
+);
+check("renders the approved heading", pageHtml.includes("How we check the offers"));
+check("says a licence is not a promotion", pageHtml.toLowerCase().includes("a licence is not a promotion"));
+check(
+  "gives the reader the register search they can repeat",
+  pageHtml.includes("public-register/businesses") && pageHtml.includes("business-search="),
+);
+check("says what unverifiable means", pageHtml.includes("we could not read this"));
+check("quotes no expected-profit figure", !/£\s?\d/.test(pageHtml));
+check("the panel footer links to the explainer", html.includes('href="/how-we-check-offers"'));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
