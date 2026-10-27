@@ -23,7 +23,7 @@ cd "$(dirname "$0")/.."
 REPO="$PWD"
 SECRETS="/home/team/shared/.secrets/telegram.env"
 LOG="$REPO/.run/alerts.log"
-INTERVAL="${ALERT_INTERVAL_SEC:-3600}"   # hourly while all is well
+INTERVAL="${ALERT_INTERVAL_SEC:-600}"   # every 10 min — alerts as soon as scanned (owner directive 2026-10-27)
 RETRY_FAST="${ALERT_RETRY_SEC:-15}"      # quick retry when a tick crashes
 mkdir -p .run
 

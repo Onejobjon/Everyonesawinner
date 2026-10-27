@@ -4,5 +4,5 @@
 export default function handler(_req: any, res: any): void {
   res.statusCode = 200;
   res.setHeader("content-type", "application/json");
-  res.end(JSON.stringify({ ok: true, from: "vercel-api-function" }));
+  res.end(JSON.stringify({ ok: true, from: "vercel-api-function", build: "2026-10-27T14:05Z" }));
 }
