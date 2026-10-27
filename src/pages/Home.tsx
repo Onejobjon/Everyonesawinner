@@ -328,7 +328,7 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Start making money today. <strong>50% off Pro for your first month.</strong></p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and exactly what they include. <strong>50% off Pro for your first month.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and nothing can be charged until it does.</span></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
               {n:"Starter",p:"£9.99",pr:"/month",d:"Perfect for beginners.",f:["Full offer database","Unlimited calculator usage","Profit tracker","Email support"],pop:false,link:"https://buy.stripe.com/aFaaEX3i6119e5h93edQQ06"},
@@ -356,7 +356,7 @@ export default function Home() {
                 </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{plan.d}</p>
                 <ul className="mt-6 space-y-3">{plan.f.map((feat,j) => (<li key={j} className="flex items-center gap-3 text-sm"><svg className="h-5 w-5 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>{feat}</li>))}</ul>
-                <a href={plan.link} target="_blank" rel="noopener noreferrer" className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold transition-all block text-center ${plan.pop ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700" : "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300"}`}>Subscribe - {plan.disc || plan.p}{plan.pr}</a>
+                <button type="button" disabled aria-disabled="true" className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold block text-center cursor-not-allowed border border-gray-300 text-gray-400 dark:border-gray-700 dark:text-gray-500`}>Checkout opens shortly</button>
               </div>
             ))}
           </div>
