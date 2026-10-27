@@ -27,9 +27,11 @@ export default async function handler(req: any, res: any): Promise<void> {
       send(res, 405, JSON.stringify({ ok: false, error: "Method not allowed" }));
       return;
     }
+    // Vercel hands us req.body ALREADY PARSED when content-type is JSON, and as a
+    // string in other runtimes — accept both, or every real signup 400s.
     let body: any;
     try {
-      body = JSON.parse(req.body || "{}");
+      body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
     } catch {
       send(res, 400, JSON.stringify({ ok: false, error: "Invalid JSON body" }));
       return;
