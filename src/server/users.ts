@@ -66,6 +66,10 @@ function newToken(): string {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Constant salt used ONLY to burn the same time as a real hash when a login must
+// fail, so response timing does not reveal which addresses have accounts.
+const dummySalt = "00000000000000000000000000000000";
+
 /**
  * Owner seats — comped Pro access with no Stripe subscription.
  *
@@ -181,7 +185,7 @@ function authenticateUserJson(email: string, password: string): PublicUser {
   if (isOwnerSeat(cleanEmail)) {
     if (!ownerSecretMatches(password)) {
       // Equalise timing so this does not reveal which emails are owner seats.
-      hashPassword(password || "", "00000000000000000000000000000000");
+      hashPassword(password || "", dummySalt);
       throw new Error("Invalid email or password.");
     }
     const salt = randomBytes(16).toString("hex");
@@ -206,7 +210,6 @@ function authenticateUserJson(email: string, password: string): PublicUser {
 
   // Always compute a hash even when the record is missing, to avoid a timing
   // side-channel that reveals which emails exist.
-  const dummySalt = "00000000000000000000000000000000";
   const candidate = hashPassword(password || "", record?.salt || dummySalt);
   const expected = record?.passwordHash || "";
   const candidateBuf = Buffer.from(candidate, "hex");
@@ -311,11 +314,10 @@ async function authenticateUserDb(email: string, password: string): Promise<Publ
   } else if (cleanEmail && isOwnerSeat(cleanEmail)) {
     // Fail closed: an owner address with no valid secret is never accepted,
     // even if a row exists.
-    hashPassword(pw || "", "00000000000000000000000000000000");
+    hashPassword(pw || "", dummySalt);
     throw new Error("Invalid email or password.");
   }
   const record = rows[0];
-  const dummySalt = "00000000000000000000000000000000";
   const candidate = Buffer.from(hashPassword(pw, record?.salt || dummySalt), "hex");
   const expected = Buffer.from(record?.password_hash || "", "hex");
   const match =
