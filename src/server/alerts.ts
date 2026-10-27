@@ -410,10 +410,19 @@ export function telegramText(o: Opportunity): string {
 async function responseText(res: Response): Promise<string> {
   try {
     const t = await res.text();
-    return t ? t.slice(0, 300) : "(empty body)";
+    // Read the WHOLE body here: this string is also what we JSON.parse to check
+    // Telegram's `ok` flag. Truncating it (it used to be sliced to 300 chars)
+    // cut the JSON mid-object, so a delivered message was scored as a failure
+    // and re-sent forever. Only the LOGGED copy is shortened — see the log sites.
+    return t || "(empty body)";
   } catch {
     return "(no body)";
   }
+}
+
+/** Short, log-safe view of a response body. */
+function brief(body: string, n = 300): string {
+  return body.length > n ? `${body.slice(0, n)}…` : body;
 }
 
 async function deliver(o: Opportunity): Promise<void> {
@@ -497,8 +506,11 @@ const TG_MIN_INTERVAL_MS = 300;
  * failure throws so the caller leaves the opportunity unseen and retries it on
  * the next scan. No-op unless the channel is configured.
  */
-async function postTelegram(text: string): Promise<void> {
-  if (!TG_TOKEN || !TG_CHAT_ID) return;
+async function postTelegram(text: string): Promise<{ ok: boolean; messageId: number | null }> {
+  if (!TG_TOKEN || !TG_CHAT_ID) {
+    log("telegram skipped — TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set in this process");
+    return { ok: false, messageId: null };
+  }
 
   // Space out sends — never faster than TG_MIN_INTERVAL_MS after the last send.
   const elapsed = Date.now() - lastTelegramSendAt;
@@ -528,7 +540,7 @@ async function postTelegram(text: string): Promise<void> {
     if (ok) {
       const msgId = data?.result?.message_id;
       log(`telegram ok${msgId != null ? ` msg_id=${msgId}` : ""}`);
-      return;
+      return { ok: true, messageId: msgId ?? null };
     }
 
     const desc = data?.description || `HTTP ${res.status}`;
@@ -537,7 +549,7 @@ async function postTelegram(text: string): Promise<void> {
       res.status === 429 || res.status >= 500 || (retryAfter != null && retryAfter > 0);
 
     if (!retriable || attempt === maxRetries) {
-      log(`telegram FAILED (${desc}) — body: ${rawBody}`);
+      log(`telegram FAILED (${desc}) — body: ${brief(rawBody)}`);
       throw new Error(
         `telegram send failed: ${desc}${retryAfter != null && retryAfter > 0 ? ` (retry after ${retryAfter}s)` : ""}`
       );
@@ -551,6 +563,20 @@ async function postTelegram(text: string): Promise<void> {
     await sleep(waitMs);
     lastTelegramSendAt = Date.now();
   }
+  // Unreachable (every path above returns or throws) — keeps the return type honest.
+  return { ok: false, messageId: null };
+}
+
+/**
+ * Delivery self-test. Sends a clearly-labelled message through the SAME
+ * postTelegram() code path a real opportunity alert uses (throttle, retries,
+ * `ok: true` check), so a green result proves the channel end to end even when
+ * a scan finds no qualifying opportunity.
+ */
+export async function sendTestAlert(): Promise<{ ok: boolean; messageId: number | null }> {
+  return postTelegram(
+    "✅ Everyone's A Winner — alert delivery check. Hourly scans are live. (Test message, not an opportunity.)"
+  );
 }
 
 // ── Site health check (never-again monitoring) ──────────────────────────────
@@ -703,4 +729,25 @@ if ((import.meta as { main?: boolean }).main && Bun.argv.includes("--once")) {
       console.error(`ALERT_ONCE error: ${String(e)}`);
       process.exit(1);
     });
+}
+
+// CLI: `bun src/server/alerts.ts --test-alert` sends one delivery-check message
+// through the real postTelegram() path and prints the Message API result.
+if ((import.meta as { main?: boolean }).main && Bun.argv.includes("--test-alert")) {
+  sendTestAlert()
+    .then((r) => {
+      console.log(`TEST_ALERT ${JSON.stringify(r)}`);
+      process.exit(r.ok ? 0 : 1);
+    })
+    .catch((e) => {
+      console.error(`TEST_ALERT error: ${String(e)}`);
+      process.exit(1);
+    });
+}
+
+// CLI: `bun src/server/alerts.ts --status` prints the non-secret channel /
+// schedule status (what /api/alert-status used to serve) and exits.
+if ((import.meta as { main?: boolean }).main && Bun.argv.includes("--status")) {
+  console.log(JSON.stringify(alertStatus()));
+  process.exit(0);
 }
