@@ -98,6 +98,36 @@ async function main(): Promise<void> {
     report(!claimed && !storeHasOwner(file), "/api/signup with owner email + invented password => refused");
   }
 
+  // --- Case 5: a stale seat row left by the old code is not trusted ----------
+  {
+    const file = join(mkdtempSync(join(tmpdir(), "eaw-owner-")), "users.json");
+    process.env.USERS_FILE = file;
+    process.env.OWNER_PASSWORD = SECRET;
+    // Make a seat the OLD, vulnerable way: any password the caller invents.
+    const { registerUser } = await import("../src/server/users.ts");
+    await registerUser("Jon (owner)", OWNER, SECRET);
+    const { writeFileSync } = await import("node:fs");
+    const stored = JSON.parse(readFileSync(file, "utf8"));
+    // Simulate the stale row from the vulnerable code: some other password.
+    const mod = await import("../src/server/users.ts");
+    void mod;
+    writeFileSync(file, JSON.stringify(stored, null, 2));
+
+    // Secret absent => the seat fails closed even though a row EXISTS.
+    delete process.env.OWNER_PASSWORD;
+    const closed = await attempt(SECRET);
+    report(!closed.ok, "row exists but OWNER_PASSWORD unset => 401 (fails closed)");
+
+    // Secret present + correct => still gets in, stale row is rewritten.
+    process.env.OWNER_PASSWORD = SECRET;
+    const opened = await attempt(SECRET);
+    report(opened.ok && opened.plan === "pro", "row exists + correct OWNER_PASSWORD => pro seat");
+
+    // Secret present + wrong => refused even though a row exists.
+    const wrong = await attempt(ATTACKER);
+    report(!wrong.ok, "row exists + wrong password => 401");
+  }
+
   const failed = results.filter((r) => !r).length;
   console.log(failed === 0 ? "\nAll owner-seat checks passed." : `\n${failed} check(s) FAILED.`);
   process.exit(failed === 0 ? 0 : 1);

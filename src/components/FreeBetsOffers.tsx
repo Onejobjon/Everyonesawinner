@@ -22,14 +22,14 @@ const offers: Offer[] = [
   { bookmaker: "Betfred", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", ukGbp: "✅", section: "uk", url: "https://www.betfred.com" },
   { bookmaker: "Ladbrokes", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", ukGbp: "✅", section: "uk", url: "https://www.ladbrokes.com" },
   { bookmaker: "Coral", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", ukGbp: "✅", section: "uk", url: "https://www.coral.co.uk" },
-  { bookmaker: "Unibet", offer: "Bet £10, get £20 + £10 casino", minStake: "£10", freeBetValue: "£30 total", tokens: "2 × £10", ukGbp: "✅", section: "uk", url: "https://www.unibet.co.uk" },
+  { bookmaker: "Unibet", offer: "Bet £20, get £40 in free bets — re-checked 27 Oct 2026", minStake: "£20", freeBetValue: "£40", tokens: "Not stated on offer panel", ukGbp: "✅", section: "uk", url: "https://www.unibet.co.uk" },
   { bookmaker: "BetVictor", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.betvictor.com" },
   { bookmaker: "SpreadEx", offer: "Bet £20, get £20 in free bets", minStake: "£20", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "uk", url: "https://www.spreadex.com" },
   { bookmaker: "Boylesports (IE)", offer: "Bet €10, get €20 in free bets", minStake: "€10", freeBetValue: "€20", tokens: "2 × €10", ukGbp: "✅", section: "uk", url: "https://www.boylesports.com" },
   { bookmaker: "888sport", offer: "Bet £10, get £10 + £10 casino", minStake: "£10", freeBetValue: "£20 total", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.888sport.com" },
   { bookmaker: "Betway", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.betway.com" },
   { bookmaker: "10Bet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.10bet.com" },
-  { bookmaker: "BetUK", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", ukGbp: "✅", section: "uk", url: "https://www.betuk.com" },
+  { bookmaker: "BetUK", offer: "Bet £10, get £40 in free bets — re-checked 27 Oct 2026", minStake: "£10", freeBetValue: "£40", tokens: "4 × £10", ukGbp: "✅", section: "uk", url: "https://www.betuk.com" },
   { bookmaker: "BetZone", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.betzone.co.uk" },
   { bookmaker: "Kwiff", offer: "Bet £10, get £10 boosted bet", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.kwiff.com" },
   { bookmaker: "NetBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.netbet.co.uk" },
@@ -239,6 +239,9 @@ export default function FreeBetsOffers() {
             </p>
             <p className="text-xs text-gray-400 text-center mt-1">
               We list what each bookmaker publishes and do not quote a profit figure — what you keep depends on the odds you match at. Always check the terms on the bookmaker's own site before signing up.
+            </p>
+            <p className="text-xs text-gray-400 text-center mt-1">
+              Only the offers marked “re-checked” were read on the bookmaker's own page on that date. The rest were listed earlier and have not been confirmed since — treat them as a starting point, not a current quote.
             </p>
           </div>
         </div>

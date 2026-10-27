@@ -172,14 +172,18 @@ function authenticateUserJson(email: string, password: string): PublicUser {
   const cleanEmail = (email ?? "").trim().toLowerCase();
   const users = loadUsers();
   let record = users[cleanEmail];
-
-  // Self-provisioning owner seat, gated on the SERVER-HELD secret. The store is
-  // ephemeral (a redeploy wipes it), so an allow-listed address with no row is
-  // re-created here — but only when the submitted password equals
-  // process.env.OWNER_PASSWORD. With no row there is nothing else to compare
-  // against, so any weaker gate lets a stranger claim the founder's Pro seat.
-  // Secret not set => no provisioning => ordinary 401 below.
-  if (!record && isOwnerSeat(cleanEmail) && ownerSecretMatches(password)) {
+  // The owner seat is controlled by the SERVER-HELD secret and nothing else.
+  //  - Secret set: only a password equal to OWNER_PASSWORD gets in, whatever is
+  //    in the store; the record is then (re)written to match the secret, so a
+  //    stale or wrongly-provisioned row can neither lock the owner out nor let
+  //    a stranger in.
+  //  - Secret not set: the seat fails CLOSED (401) even if a row exists.
+  if (isOwnerSeat(cleanEmail)) {
+    if (!ownerSecretMatches(password)) {
+      // Equalise timing so this does not reveal which emails are owner seats.
+      hashPassword(password || "", "00000000000000000000000000000000");
+      throw new Error("Invalid email or password.");
+    }
     const salt = randomBytes(16).toString("hex");
     record = {
       name: "Jon (owner)",
@@ -188,18 +192,18 @@ function authenticateUserJson(email: string, password: string): PublicUser {
       passwordHash: hashPassword(password, salt),
       subscription: true,
       plan: "pro",
-      createdAt: new Date().toISOString(),
+      createdAt: record?.createdAt || new Date().toISOString(),
     };
     users[cleanEmail] = record;
     try {
       saveUsers(users);
-      console.log(`[users] owner seat provisioned for ${cleanEmail}`);
     } catch (e) {
-      // Disk may be read-only on a hosted function; the in-memory record still
-      // makes THIS request succeed, and the seat re-provisions next time.
       console.warn(`[users] could not persist owner seat for ${cleanEmail}: ${String(e)}`);
     }
+    return toPublic(record);
   }
+
+
   // Always compute a hash even when the record is missing, to avoid a timing
   // side-channel that reveals which emails exist.
   const dummySalt = "00000000000000000000000000000000";
@@ -287,18 +291,28 @@ async function authenticateUserDb(email: string, password: string): Promise<Publ
     `SELECT email, name, password_hash, salt, plan, subscription_status FROM users WHERE lower(email) = $1`,
     [cleanEmail],
   );
-  // Owner seat self-provisions (same rule as the JSON store): the first
-  // successful login for an allow-listed address creates the record.
-  if (rows.length === 0 && cleanEmail && isOwnerSeat(cleanEmail) && ownerSecretMatches(pw)) {
+  // Owner seat: controlled by the server secret alone (same rule as the JSON
+  // store). Secret set + matching password => create/refresh the row as Pro.
+  // Secret missing or password different => ordinary 401, no row touched.
+  if (cleanEmail && isOwnerSeat(cleanEmail) && ownerSecretMatches(pw)) {
     const salt = randomBytes(16).toString("hex");
     rows = await query<UserRow>(
       `INSERT INTO users (email, name, password_hash, salt, plan)
        VALUES ($1, $2, $3, $4, 'pro')
-       ON CONFLICT (lower(email)) DO NOTHING
+       ON CONFLICT (lower(email)) DO UPDATE
+         SET password_hash = EXCLUDED.password_hash,
+             salt = EXCLUDED.salt,
+             plan = 'pro',
+             subscription_status = COALESCE(users.subscription_status, 'active')
        RETURNING email, name, password_hash, salt, plan, subscription_status`,
       [cleanEmail, "Jon (owner)", hashPassword(pw, salt), salt],
     );
-    console.log(`[users] owner seat provisioned in Postgres for ${cleanEmail}`);
+    console.log(`[users] owner seat refreshed in Postgres for ${cleanEmail}`);
+  } else if (cleanEmail && isOwnerSeat(cleanEmail)) {
+    // Fail closed: an owner address with no valid secret is never accepted,
+    // even if a row exists.
+    hashPassword(pw || "", "00000000000000000000000000000000");
+    throw new Error("Invalid email or password.");
   }
   const record = rows[0];
   const dummySalt = "00000000000000000000000000000000";
