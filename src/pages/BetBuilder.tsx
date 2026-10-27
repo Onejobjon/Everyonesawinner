@@ -585,7 +585,7 @@ export default function BetBuilder() {
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing the top {results.accas.length} of {results.total} matching multi-leg bets (from {results.considered} fixtures with exchange lay prices), ranked by guaranteed retained profit. Lay each leg <strong>in order</strong>, only after the previous leg settles.
+                Showing the top {results.accas.length} of {results.total} matching multi-leg bets (from {results.considered} fixtures with exchange lay prices), ranked by retained profit. Lay each leg <strong>in order</strong>, only after the previous leg settles.
                 {results.noLayExcluded > 0 && (
                   <> {results.noLayExcluded} outcome{results.noLayExcluded === 1 ? "" : "s"} skipped — no exchange lay price.</>
                 )}

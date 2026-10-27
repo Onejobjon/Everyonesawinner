@@ -191,7 +191,7 @@ function Footer() {
               <span className="rounded-lg bg-indigo-600 p-1.5 text-white font-bold text-sm">EAW</span>
               <span className="text-lg font-bold tracking-tight">Everyone's A Winner</span>
             </Link>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 max-w-xs">Turn free bets into guaranteed, tax-free profit. Made simple for everyone.</p>
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 max-w-xs">Turn free bets into tax-free cash. Made simple for everyone.</p>
           </div>
           <div>
             <h4 className="text-sm font-semibold">Product</h4>
@@ -241,10 +241,10 @@ export default function Home() {
             Legal • Low-risk • Tax-free
           </div>
           <h1 className="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl">
-            Turn <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Free Bets</span> Into Guaranteed Profit
+            Turn <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Free Bets</span> Into Cash
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 dark:text-gray-400 sm:text-xl">
-            Everyone's A Winner finds free bet offers and shows you exactly how to turn them into cash. No gambling and no guesswork — we show you the promotions bookmakers give away, and exactly what each one returns before you stake a penny.
+            Everyone's A Winner finds free bet offers and shows you how to turn them into cash. No guesswork: we lay out the terms we can check, say plainly which ones we can't, and show you what a matched bet returns before you stake a penny.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <a href="#pricing" className="rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">View Plans →</a>
@@ -270,7 +270,7 @@ export default function Home() {
               <div>
                 <p className="text-lg font-bold">Free Bet Offers</p>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  UK, Irish &amp; global welcome offers — with the maths done so you know what each one is worth.
+                  UK, Irish &amp; global welcome offers, set out plainly — and where we can't stand behind a figure, we say so.
                 </p>
               </div>
             </div>
@@ -291,7 +291,7 @@ export default function Home() {
           <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { icon: "📊", title: "Best Odds Finder", desc: "See the best prices across bookmakers and exchanges at a glance. Find profitable opportunities in seconds." },
-              { icon: "💰", title: "Profit Calculator", desc: "Enter your stake and odds to instantly work out your guaranteed profit, exchange stake and total return." },
+              { icon: "💰", title: "Profit Calculator", desc: "Enter your stake and odds to instantly work out the profit you lock in, the exchange stake and your total return." },
               { icon: "🔔", title: "Offer Alerts", desc: "Get notified the moment new profitable offers go live. Never miss a sign-up bonus or free bet." },
               { icon: "🧮", title: "Auto Calculation", desc: "Enter your odds once and our tool calculates exactly how much to stake for maximum profit." },
               { icon: "⚡", title: "Sign-Up Journey", desc: "Guided walkthroughs for every bookmaker offer. Know which accounts to open and in what order." },

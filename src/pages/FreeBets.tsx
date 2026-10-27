@@ -216,7 +216,7 @@ export default function FreeBets() {
             Free bet offers, all in one place
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-gray-600 dark:text-gray-400">
-            {ALL_OFFERS.length} current UK, Irish &amp; global welcome offers — with the maths done so you know exactly what each one is worth.
+            {ALL_OFFERS.length} listed welcome offers from UK, Irish and global bookmakers — set out in plain terms. Where we quote an estimate, its assumptions are shown; where we can't, we say so rather than guess.
           </p>
           <div className="mt-8 mx-auto max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-left text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
             <p>{meta.disclaimer}</p>

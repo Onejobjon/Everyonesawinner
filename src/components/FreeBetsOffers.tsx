@@ -126,8 +126,7 @@ export default function FreeBetsOffers() {
           {/* Guidance note */}
           <div className="px-6 py-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Latest UK, Irish &amp; global welcome offers. Use one free bet per match for guaranteed profit. 
-              Total estimated one-time profit: <strong className="text-gray-700 dark:text-gray-300">~£570–£800</strong>
+              Listed UK, Irish &amp; global welcome offers. Only offers marked as re-checked were read on the bookmaker's own page on that date; the rest are unconfirmed. We do not quote a total profit figure — what you keep depends on which offers you can actually open and the odds you match at.
             </p>
           </div>
 

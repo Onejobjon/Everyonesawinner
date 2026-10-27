@@ -28,7 +28,7 @@ export default function Preview() {
           >
             <span className="text-3xl">💰</span>
             <h3 className="mt-3 text-lg font-bold">Profit Calculator</h3>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Calculate stakes and guaranteed profit instantly.</p>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Calculate stakes and the profit you lock in, instantly.</p>
           </Link>
 
           <Link

@@ -162,9 +162,9 @@ export default function Oddsmatcher() {
                       <span className="text-lg">{dutch.isArbitrage ? "💰" : "⚠️"}</span>
                       <span className="text-sm text-gray-700 dark:text-gray-300">
                         {freeBetMode ? (
-                          <>Total cash stake: <strong>£{dutch.totalCashStake.toFixed(2)}</strong> — guaranteed return: <strong>£{dutch.guaranteedReturn.toFixed(2)}</strong> —</>
+                          <>Total cash stake: <strong>£{dutch.totalCashStake.toFixed(2)}</strong> — return if both sides settle: <strong>£{dutch.guaranteedReturn.toFixed(2)}</strong> —</>
                         ) : (
-                          <>Total stake: <strong>£{dutch.totalStake.toFixed(2)}</strong> — guaranteed return: <strong>£{dutch.guaranteedReturn.toFixed(2)}</strong> —</>
+                          <>Total stake: <strong>£{dutch.totalStake.toFixed(2)}</strong> — return if both sides settle: <strong>£{dutch.guaranteedReturn.toFixed(2)}</strong> —</>
                         )}
                         {dutch.isArbitrage ? (
                           <span className="text-green-600 dark:text-green-400 font-semibold"> profit <strong>£{dutch.netProfit.toFixed(2)}</strong></span>
