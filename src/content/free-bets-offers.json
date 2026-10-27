@@ -57,7 +57,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "Hillside (UK Gaming) ENC",
+   "registerAccount": "55149",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=55149",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Sky Bet",
@@ -90,7 +95,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "Bonne Terre Limited",
+   "registerAccount": "38718",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=38718",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "William Hill",
@@ -123,7 +133,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.williamhill.com"
-   }
+   },
+   "licensee": "WHG (International) Limited",
+   "registerAccount": "39225",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39225",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Paddy Power",
@@ -156,7 +171,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "PPB Counterparty Services Limited",
+   "registerAccount": "39439",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39439",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Betfair Sportsbook",
@@ -189,7 +209,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "PPB Entertainment Limited",
+   "registerAccount": "39426",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39426",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Betfred",
@@ -222,7 +247,12 @@
    "httpCheck": {
     "httpStatus": "ERR",
     "finalUrl": "URLError:<urlopen error [Errno -3] Temporary failure in name resoluti"
-   }
+   },
+   "licensee": "Petfre (Gibraltar) Limited",
+   "registerAccount": "39544",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39544",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Ladbrokes",
@@ -255,7 +285,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "LC International Limited",
+   "registerAccount": "54743",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=54743",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Coral",
@@ -288,7 +323,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "LC International Limited",
+   "registerAccount": "54743",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=54743",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Unibet",
@@ -322,7 +362,12 @@
     "httpStatus": "200",
     "finalUrl": "https://www.unibet.co.uk"
    },
-   "estProfitRemovedReason": "no profit figure is shown for any offer: the terms are unverified from a non-UK IP. The working for the two offers whose terms were read lives in content/free-bets-audit-2026-10-27.md"
+   "estProfitRemovedReason": "no profit figure is shown for any offer: the terms are unverified from a non-UK IP. The working for the two offers whose terms were read lives in content/free-bets-audit-2026-10-27.md",
+   "licensee": "Platinum Gaming Limited",
+   "registerAccount": "45322",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=45322",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "BetVictor",
@@ -355,7 +400,12 @@
    "httpCheck": {
     "httpStatus": "451",
     "finalUrl": "HTTP Error 451: "
-   }
+   },
+   "licensee": "BV Gaming Limited",
+   "registerAccount": "39576",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39576",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "SpreadEx",
@@ -388,7 +438,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.spreadex.com"
-   }
+   },
+   "licensee": "Spreadex Limited",
+   "registerAccount": "8835",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=8835",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Boylesports (IE)",
@@ -421,7 +476,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "Boylesports Enterprise",
+   "registerAccount": "39469",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39469",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "888sport",
@@ -456,7 +516,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.888sport.com"
-   }
+   },
+   "licensee": "888 UK Limited",
+   "registerAccount": "39028",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39028",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Betway",
@@ -489,7 +554,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://betway.com/"
-   }
+   },
+   "licensee": "Betway Limited",
+   "registerAccount": "39372",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39372",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "10Bet",
@@ -522,7 +592,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://welcome10bet.com/restricted_note/"
-   }
+   },
+   "licensee": "Blue Star Planet Limited",
+   "registerAccount": "43173",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=43173",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "BetUK",
@@ -556,7 +631,12 @@
     "httpStatus": "200",
     "finalUrl": "https://www.betuk.com"
    },
-   "estProfitRemovedReason": "no profit figure is shown for any offer: the terms are unverified from a non-UK IP. The working for the two offers whose terms were read lives in content/free-bets-audit-2026-10-27.md"
+   "estProfitRemovedReason": "no profit figure is shown for any offer: the terms are unverified from a non-UK IP. The working for the two offers whose terms were read lives in content/free-bets-audit-2026-10-27.md",
+   "licensee": "iBet Global Limited",
+   "registerAccount": "53377",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=53377",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "BetZone",
@@ -589,7 +669,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "Betzone Ltd",
+   "registerAccount": "61997",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=61997",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Kwiff",
@@ -623,7 +708,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.kwiff.com"
-   }
+   },
+   "licensee": "Eaton Gate Gaming Limited",
+   "registerAccount": "44448",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=44448",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "NetBet",
@@ -656,7 +746,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.netbet.co.uk"
-   }
+   },
+   "licensee": "Netbet Enterprises Limited",
+   "registerAccount": "39170",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39170",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Luckster",
@@ -689,7 +784,12 @@
    "httpCheck": {
     "httpStatus": "400",
     "finalUrl": "HTTP Error 400: Bad Request"
-   }
+   },
+   "licensee": "AG Communications LimitedAG",
+   "registerAccount": "39483",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39483",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "CopyBet",
@@ -722,7 +822,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "Copybet UK Limited",
+   "registerAccount": "53774",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=53774",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Hollywood Bets",
@@ -755,7 +860,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://hollywoodbets.co.uk/sports"
-   }
+   },
+   "licensee": "Hollywoodbets International UK Limited",
+   "registerAccount": "53028",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=53028",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "VBet",
@@ -788,7 +898,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "SCGO Limited",
+   "registerAccount": "44662",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=44662",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Mr Green",
@@ -821,7 +936,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.mrgreen.com"
-   }
+   },
+   "licensee": "Mr Green Limited",
+   "registerAccount": "39264",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39264",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Casumo",
@@ -854,7 +974,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://restricted.casumo.com/"
-   }
+   },
+   "licensee": "Casumo Services Limited",
+   "registerAccount": "39265",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39265",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "LeoVegas Sport",
@@ -887,7 +1012,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.leovegas.com"
-   }
+   },
+   "licensee": "LeoVegas Gaming PLC",
+   "registerAccount": "39198",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39198",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "LiveScore Bet",
@@ -920,7 +1050,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.livescorebet.com"
-   }
+   },
+   "licensee": "LiveScore Betting and Gaming (Gibraltar) Limited",
+   "registerAccount": "56859",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=56859",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "BetMGM",
@@ -953,7 +1088,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.nj.betmgm.com/en/engage/lan/geolocator?orh=www.betmgm.com"
-   }
+   },
+   "licensee": "LeoVegas Gaming PLC",
+   "registerAccount": "39198",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39198",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Fitzdares",
@@ -986,7 +1126,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "Fitzdares Limited",
+   "registerAccount": "400",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=400",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Virgin Bet",
@@ -1019,7 +1164,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.virginbet.com"
-   }
+   },
+   "licensee": "Virgin Bet Limited",
+   "registerAccount": "54310",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=54310",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Bwin",
@@ -1052,7 +1202,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.bwin.com/en/sports"
-   }
+   },
+   "licensee": "LC International Limited",
+   "registerAccount": "54743",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=54743",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Sportingbet",
@@ -1085,7 +1240,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "LC International Limited",
+   "registerAccount": "54743",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=54743",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Betsson",
@@ -1118,7 +1278,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.betsson.com/maintenance-pages/betsson.com/country-blocked.html"
-   }
+   },
+   "licensee": "Zecure Gaming Limited",
+   "registerAccount": "56427",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=56427",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "QuinnBet",
@@ -1151,7 +1316,12 @@
    "httpCheck": {
     "httpStatus": "403",
     "finalUrl": "HTTP Error 403: Forbidden"
-   }
+   },
+   "licensee": "QuinnBet (Gibraltar) Limited",
+   "registerAccount": "61011",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=61011",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Matchbook",
@@ -1184,7 +1354,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.matchbook.com"
-   }
+   },
+   "licensee": "Triplebet Limited",
+   "registerAccount": "39504",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=39504",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "Dafabet",
@@ -1217,7 +1392,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.dafabet.com/en"
-   }
+   },
+   "licensee": "SCGO Limited",
+   "registerAccount": "44662",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=44662",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   },
   {
    "bookmaker": "SportPesa",
@@ -1248,7 +1428,12 @@
    "httpCheck": {
     "httpStatus": "200",
     "finalUrl": "https://www.sportpesa.com"
-   }
+   },
+   "licensee": "TGP Europe Limited",
+   "registerAccount": "38898",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=38898",
+   "licenceCheckedOn": "2026-10-27",
+   "licenceStatus": "verified"
   }
  ]
 }

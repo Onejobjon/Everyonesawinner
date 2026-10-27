@@ -1,103 +1,55 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
+import offersData from "../content/free-bets-offers.json";
+import {
+  keptOffers,
+  licenceEvidence,
+  profitText,
+  statusLabel,
+  type FreeBetOffer,
+} from "../lib/free-bets";
 
-interface Offer {
-  bookmaker: string;
-  offer: string;
-  minStake: string;
-  freeBetValue: string;
-  tokens: string;
+/**
+ * The offers panel on /oddsmatcher.
+ *
+ * It renders `src/content/free-bets-offers.json` and nothing else — there is no
+ * operator list in this file, so it cannot drift from /free-bets again. What it
+ * shows about each row is described by src/lib/free-bets.ts, which the public
+ * page uses too.
+ */
+const OFFERS: FreeBetOffer[] = keptOffers(offersData.offers as FreeBetOffer[]);
+const CHECKED_ON = (offersData.meta as { lastVerified?: string }).lastVerified || "";
 
-  ukGbp: "✅" | "⚠️";
-  section: "uk" | "global" | "exchange";
-  url: string;
-}
+const TONE_CLASS: Record<string, string> = {
+  changed:
+    "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  verified:
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  unverifiable:
+    "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+  withdrawn: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+};
 
-const offers: Offer[] = [
-  // ── UK/IE Licensed Bookmakers (1–41) ──
-  { bookmaker: "Bet365", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", ukGbp: "✅", section: "uk", url: "https://www.bet365.com" },
-  { bookmaker: "Sky Bet", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", ukGbp: "✅", section: "uk", url: "https://www.skybet.com" },
-  { bookmaker: "William Hill", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", ukGbp: "✅", section: "uk", url: "https://www.williamhill.com" },
-  { bookmaker: "Paddy Power", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "uk", url: "https://www.paddypower.com" },
-  { bookmaker: "Betfair Sportsbook", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "uk", url: "https://www.betfair.com/sport" },
-  { bookmaker: "Betfred", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", ukGbp: "✅", section: "uk", url: "https://www.betfred.com" },
-  { bookmaker: "Ladbrokes", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", ukGbp: "✅", section: "uk", url: "https://www.ladbrokes.com" },
-  { bookmaker: "Coral", offer: "Bet £5, get £20 in free bets", minStake: "£5", freeBetValue: "£20", tokens: "4 × £5", ukGbp: "✅", section: "uk", url: "https://www.coral.co.uk" },
-  { bookmaker: "Unibet", offer: "Bet £20, get £40 in free bets — re-checked 27 Oct 2026", minStake: "£20", freeBetValue: "£40", tokens: "Not stated on offer panel", ukGbp: "✅", section: "uk", url: "https://www.unibet.co.uk" },
-  { bookmaker: "BetVictor", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.betvictor.com" },
-  { bookmaker: "SpreadEx", offer: "Bet £20, get £20 in free bets", minStake: "£20", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "uk", url: "https://www.spreadex.com" },
-  { bookmaker: "Boylesports (IE)", offer: "Bet €10, get €20 in free bets", minStake: "€10", freeBetValue: "€20", tokens: "2 × €10", ukGbp: "✅", section: "uk", url: "https://www.boylesports.com" },
-  { bookmaker: "888sport", offer: "Bet £10, get £10 + £10 casino", minStake: "£10", freeBetValue: "£20 total", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.888sport.com" },
-  { bookmaker: "Betway", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.betway.com" },
-  { bookmaker: "10Bet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.10bet.com" },
-  { bookmaker: "BetUK", offer: "Bet £10, get £40 in free bets — re-checked 27 Oct 2026", minStake: "£10", freeBetValue: "£40", tokens: "4 × £10", ukGbp: "✅", section: "uk", url: "https://www.betuk.com" },
-  { bookmaker: "BetZone", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.betzone.co.uk" },
-  { bookmaker: "Kwiff", offer: "Bet £10, get £10 boosted bet", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.kwiff.com" },
-  { bookmaker: "NetBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.netbet.co.uk" },
-  { bookmaker: "Luckster", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.luckster.com" },
-  { bookmaker: "CopyBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.copybet.com" },
-  { bookmaker: "Hollywood Bets", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", ukGbp: "✅", section: "uk", url: "https://www.hollywoodbets.co.uk" },
-  { bookmaker: "Vegas Land (WH)", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.vegasland.com" },
-  { bookmaker: "MansionBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.mansionbet.com" },
-  { bookmaker: "BetBull", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.betbull.com" },
-  { bookmaker: "Megapari", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.megapari.com" },
-  { bookmaker: "VBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.vbet.co.uk" },
-  { bookmaker: "FansBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.fansbet.com" },
-  { bookmaker: "Mr Green", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.mrgreen.com" },
-  { bookmaker: "Casumo", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.casumo.com" },
-  { bookmaker: "LeoVegas Sport", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.leovegas.com" },
-  { bookmaker: "LiveScore Bet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "uk", url: "https://www.livescorebet.com" },
-  { bookmaker: "SportNation", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.sportnation.com" },
-  { bookmaker: "EnergyBet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.energybet.com" },
-  { bookmaker: "RedZone", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.redzone.bet" },
-  { bookmaker: "BetMGM", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "uk", url: "https://www.betmgm.com" },
-  { bookmaker: "Fitzdares", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.fitzdares.com" },
-  { bookmaker: "Virgin Bet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "uk", url: "https://www.virginbet.com" },
-  { bookmaker: "Black Type", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.blacktype.com" },
-  { bookmaker: "Cobbler", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.cobbler.com" },
-  { bookmaker: "WeBringTheFun", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "uk", url: "https://www.webringthefun.com" },
-
-  // ── Global/European Bookmakers (42–60) ──
-  { bookmaker: "Bwin", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "global", url: "https://www.bwin.com" },
-  { bookmaker: "Sportingbet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "global", url: "https://www.sportingbet.com" },
-  { bookmaker: "Betsson", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "✅", section: "global", url: "https://www.betsson.com" },
-  { bookmaker: "Betsafe", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "global", url: "https://www.betsafe.com" },
-  { bookmaker: "Tipico", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "⚠️", section: "global", url: "https://www.tipico.com" },
-  { bookmaker: "QuinnBet", offer: "Bet €10, get €20 in free bets", minStake: "€10", freeBetValue: "€20", tokens: "2 × €10", ukGbp: "✅", section: "global", url: "https://www.quinnbet.com" },
-  { bookmaker: "Matchbook", offer: "£10 free bet on first deposit", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "global", url: "https://www.matchbook.com" },
-  { bookmaker: "PokerStars Sports", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "global", url: "https://www.pokerstars.com/sports" },
-  { bookmaker: "RaceBets", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "global", url: "https://www.racebets.com" },
-  { bookmaker: "Dafabet", offer: "Bet £10, get £20 in free bets", minStake: "£10", freeBetValue: "£20", tokens: "2 × £10", ukGbp: "⚠️", section: "global", url: "https://www.dafabet.com" },
-  { bookmaker: "1xBet", offer: "Bet £10, get £30 in free bets", minStake: "£10", freeBetValue: "£30", tokens: "3 × £10", ukGbp: "⚠️", section: "global", url: "https://www.1xbet.com" },
-  { bookmaker: "22Bet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "⚠️", section: "global", url: "https://www.22bet.com" },
-  { bookmaker: "SportPesa", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "⚠️", section: "global", url: "https://www.sportpesa.com" },
-  { bookmaker: "Bet-at-home", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "⚠️", section: "global", url: "https://www.bet-at-home.com" },
-  { bookmaker: "Betwinner", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "⚠️", section: "global", url: "https://www.betwinner.com" },
-  { bookmaker: "ComeOn", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "global", url: "https://www.comeon.com" },
-  { bookmaker: "Mobilebet", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "✅", section: "global", url: "https://www.mobilebet.com" },
-  { bookmaker: "Neo.bet", offer: "Bet £10, get £15 in free bets", minStake: "£10", freeBetValue: "£15", tokens: "1 × £15", ukGbp: "⚠️", section: "global", url: "https://www.neo.bet" },
-  { bookmaker: "CasinoDaddy", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "⚠️", section: "global", url: "https://www.casinodaddy.com" },
-  { bookmaker: "Rabona", offer: "Bet £10, get £10 in free bets", minStake: "£10", freeBetValue: "£10", tokens: "1 × £10", ukGbp: "⚠️", section: "global", url: "https://www.rabona.com" },
-];
-
-export default function FreeBetsOffers() {
-  const [open, setOpen] = useState(false);
+export default function FreeBetsOffers({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [search, setSearch] = useState("");
   const [section, setSection] = useState<"all" | "uk" | "global">("all");
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return offers.filter((o) => {
+    return OFFERS.filter((o) => {
       if (section !== "all" && o.section !== section) return false;
       if (!q) return true;
       return (
         o.bookmaker.toLowerCase().includes(q) ||
-        o.offer.toLowerCase().includes(q)
+        o.offer.toLowerCase().includes(q) ||
+        (o.jurisdiction || "").toLowerCase().includes(q)
       );
     });
   }, [search, section]);
 
-  const ukCount = offers.filter((o) => o.section === "uk").length;
-  const globalCount = offers.filter((o) => o.section === "global").length;
+  const ukCount = OFFERS.filter((o) => o.section === "uk").length;
+  const globalCount = OFFERS.filter((o) => o.section === "global").length;
+  const withEvidence = OFFERS.filter((o) => licenceEvidence(o).ok).length;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
@@ -110,7 +62,7 @@ export default function FreeBetsOffers() {
           <span className="text-lg">🎁</span>
           <span className="text-base font-semibold">Free Bet Offers</span>
           <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
-            {offers.length} available
+            {OFFERS.length} listed
           </span>
         </div>
         <svg
@@ -126,7 +78,9 @@ export default function FreeBetsOffers() {
           {/* Guidance note */}
           <div className="px-6 py-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Listed UK, Irish &amp; global welcome offers. Only offers marked as re-checked were read on the bookmaker's own page on that date; the rest are unconfirmed. We do not quote a total profit figure — what you keep depends on which offers you can actually open and the odds you match at.
+              Listed UK, Irish &amp; global welcome offers. Only offers marked as re-checked were read on the
+              bookmaker's own page; the rest are unconfirmed and may be out of date. We do not quote a profit
+              figure — what you keep depends on which offers you can actually open and the odds you match at.
             </p>
           </div>
 
@@ -156,7 +110,7 @@ export default function FreeBetsOffers() {
                   : "bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
               }`}
             >
-              All ({offers.length})
+              All ({OFFERS.length})
             </button>
             <button
               onClick={() => setSection("uk")}
@@ -195,52 +149,105 @@ export default function FreeBetsOffers() {
                 No bookmakers match your search.
               </div>
             ) : (
-              filtered.map((o, i) => (
-                <a
-                  key={i}
-                  href={o.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-6 py-3 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-gray-900 items-center"
-                >
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-gray-900 dark:text-gray-100">{o.bookmaker}</span>
-                      <span className="text-xs">{o.ukGbp}</span>
+              filtered.map((o) => {
+                const licence = licenceEvidence(o);
+                const status = statusLabel(o.status);
+                const profit = profitText(o);
+                return (
+                  <a
+                    key={o.bookmaker}
+                    href={o.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-bookmaker={o.bookmaker}
+                    data-testid="offers-row"
+                    data-licence-evidence={licence.ok ? "yes" : "no"}
+                    className="grid grid-cols-1 gap-2 px-6 py-3 text-sm transition-colors hover:bg-gray-50 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-center sm:gap-3 dark:hover:bg-gray-900"
+                  >
+                    <div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">{o.bookmaker}</span>
+                        {licence.ok ? (
+                          <span
+                            data-testid="offers-row-uk-tick"
+                            title={`Licensed: ${licence.licensee} — Gambling Commission account ${licence.registerAccount}`}
+                            className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          >
+                            ✅ UK licensed
+                          </span>
+                        ) : (
+                          <span
+                            data-testid="offers-row-no-licence"
+                            title="We do not hold this operator's licensee and Gambling Commission register account on file, so we make no licence claim here. Check the Gambling Commission register before depositing."
+                            className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                          >
+                            licence not recorded
+                          </span>
+                        )}
+                        <span
+                          data-testid="offers-row-status"
+                          title={o.statusReason || undefined}
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${TONE_CLASS[status.tone]}`}
+                        >
+                          {status.text}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{o.offer}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                        {o.jurisdiction ? `${o.jurisdiction} · ` : ""}checked {o.checked_on}
+                        {o.verified_on ? ` · terms read ${o.verified_on}` : ""}
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{o.offer}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-gray-400">Min</span>
-                    <p className="font-medium text-gray-700 dark:text-gray-300">{o.minStake}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-gray-400">Tokens</span>
-                    <p className="font-medium text-purple-600 dark:text-purple-400">{o.tokens}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-gray-400">Free bet</span>
-                    <p className="font-medium text-green-600 dark:text-green-400">{o.freeBetValue}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs text-gray-400">UK/GBP</span>
-                    <p className="font-medium">{o.ukGbp}</p>
-                  </div>
-                </a>
-              ))
+                    <div className="text-right">
+                      <span className="text-xs text-gray-400">Min stake</span>
+                      <p className="font-medium text-gray-700 dark:text-gray-300">{o.minStake}</p>
+                      <span className="text-[11px] text-gray-400">@ {o.minOdds}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-gray-400">Free bets</span>
+                      <p className="font-medium text-purple-600 dark:text-purple-400">{o.freeBetTokens}</p>
+                      <span className="text-[11px] text-gray-400">{o.freeBetExpiry}</span>
+                    </div>
+                    <div className="text-right sm:max-w-[180px]">
+                      <span className="text-xs text-gray-400">Est. profit</span>
+                      {profit.isEstimate ? (
+                        <p
+                          title={profit.basis}
+                          className="font-semibold text-indigo-600 dark:text-indigo-400"
+                        >
+                          {profit.text}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-gray-400">{profit.text}</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-gray-400">UK/GBP</span>
+                      <p className="font-medium">{o.ukGbp === "✅" ? "GBP" : "verify"}</p>
+                    </div>
+                  </a>
+                );
+              })
             )}
           </div>
 
           {/* Footer */}
           <div className="border-t border-gray-100 px-6 py-3 dark:border-gray-800">
             <p className="text-xs text-gray-400 text-center">
-              ✅ = UK licensed &amp; GBP accepted &nbsp;|&nbsp; ⚠️ = Verify UK/GBP eligibility before signing up
+              “✅ UK licensed” appears only where the row carries the operator's licensee and Gambling Commission
+              register account. {withEvidence === 0
+                ? "We hold that evidence for none of the rows shown"
+                : `We hold it for ${withEvidence} of ${OFFERS.length} rows`} — where a row says “licence not
+              recorded”, check the register yourself before depositing.
             </p>
             <p className="text-xs text-gray-400 text-center mt-1">
-              We list what each bookmaker publishes and do not quote a profit figure — what you keep depends on the odds you match at. Always check the terms on the bookmaker's own site before signing up.
+              “unverified” = we could not read this offer on the bookmaker's own page; “re-checked” = we did, and
+              the terms had changed. Only re-checked offers were read on the bookmaker's own page — the rest are a
+              starting point, not a current quote.
             </p>
             <p className="text-xs text-gray-400 text-center mt-1">
-              Only the offers marked “re-checked” were read on the bookmaker's own page on that date. The rest were listed earlier and have not been confirmed since — treat them as a starting point, not a current quote.
+              We do not quote a profit figure — what you keep depends on the odds you match at. Always check the
+              terms on the bookmaker's own site before signing up. 18+ · begambleaware.org
             </p>
           </div>
         </div>

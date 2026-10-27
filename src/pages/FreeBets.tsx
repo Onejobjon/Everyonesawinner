@@ -4,6 +4,7 @@ import { getMatches, type Match } from "../lib/odds-api";
 import { calcDutchFreeBet } from "../lib/odds";
 import EmailCapture from "../components/EmailCapture";
 import offersData from "../content/free-bets-offers.json";
+import { licenceEvidence } from "../lib/free-bets";
 
 // ── URL policy ─────────────────────────────────────────────────────────────
 // Live re-check of the 17 `urlVerified:false` offers (2026-10-21 curl sweep):
@@ -280,7 +281,23 @@ export default function FreeBets() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-gray-900 dark:text-gray-100">{o.bookmaker}</span>
-                          <span className="text-xs">{o.ukGbp === "✅" ? "✅" : "⚠️"}</span>
+                          {licenceEvidence(o).ok ? (
+                            <span
+                              data-testid="free-bets-uk-tick"
+                              title={`Licensed: ${licenceEvidence(o).licensee} — Gambling Commission account ${licenceEvidence(o).registerAccount}`}
+                              className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                            >
+                              ✅ UK licensed
+                            </span>
+                          ) : (
+                            <span
+                              data-testid="free-bets-no-licence"
+                              title="We do not hold this operator's licensee and Gambling Commission register account on file, so we make no licence claim here. Check the Gambling Commission register before depositing."
+                              className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                            >
+                              licence not recorded
+                            </span>
+                          )}
                           {unlinked && (
                             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
                               verify directly
@@ -331,7 +348,8 @@ export default function FreeBets() {
           </div>
 
           <p className="mt-4 text-center text-xs text-gray-400">
-            ✅ = UK licensed &amp; GBP accepted · ⚠️ = verify UK/GBP eligibility before signing up · 18+ · begambleaware.org
+            ✅ UK licensed appears only where we hold the operator's licensee and Gambling Commission register
+            account; “licence not recorded” means we do not, so check the register yourself · 18+ · begambleaware.org
           </p>
         </div>
       </section>
