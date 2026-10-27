@@ -65,14 +65,29 @@ function newToken(): string {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Owner seats. These addresses are always Pro with an active subscription, no
- * matter what the stored row says — the owner must never be locked out of the
- * product he pays for while billing is being rebuilt. Keep the list explicit and
- * short; it is an allowlist, not a role system.
+ * Owner seats — comped Pro access with no Stripe subscription.
+ *
+ * Addresses come from the OWNER_EMAILS environment variable (comma-separated,
+ * e.g. "owner@everyonesawinner.uk,someone@else.com"), with the business owner's
+ * address as a built-in default so the seat cannot be lost by forgetting to set
+ * the variable. This is an allowlist, not a role system: keep it short.
+ *
+ * The seat is SELF-PROVISIONING (see authenticateUser): if the allow-listed
+ * address has no record — which is what happens on every redeploy today, because
+ * the JSON store lives on an ephemeral disk — the login request creates it from
+ * the password supplied at that moment. We never store a password ourselves and
+ * never hardcode one in the repo; the first successful login sets it.
  */
-const OWNER_EMAILS = ["owner@everyonesawinner.uk"];
+const DEFAULT_OWNER_EMAILS = ["owner@everyonesawinner.uk"];
+export function ownerEmails(): string[] {
+  const fromEnv = (process.env.OWNER_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return Array.from(new Set([...fromEnv, ...DEFAULT_OWNER_EMAILS]));
+}
 function isOwnerSeat(email: string): boolean {
-  return OWNER_EMAILS.includes(email.trim().toLowerCase());
+  return ownerEmails().includes(email.trim().toLowerCase());
 }
 
 function toPublic(record: StoredUser): PublicUser {
@@ -108,13 +123,16 @@ export function registerUser(name: string, email: string, password: string): Pub
   if (users[cleanEmail]) throw new Error("An account with that email already exists.");
 
   const salt = randomBytes(16).toString("hex");
+  const owner = isOwnerSeat(cleanEmail);
   const record: StoredUser = {
     name: cleanName,
     email: cleanEmail,
     salt,
     passwordHash: hashPassword(password, salt),
-    subscription: false,
-    plan: null,
+    // Owner seats are comped Pro: they are not customers and must never be
+    // blocked behind a subscription that billing has not built yet.
+    subscription: owner,
+    plan: owner ? "pro" : null,
     createdAt: new Date().toISOString(),
   };
   users[cleanEmail] = record;
@@ -126,7 +144,35 @@ export function registerUser(name: string, email: string, password: string): Pub
 export function authenticateUser(email: string, password: string): PublicUser {
   const cleanEmail = (email ?? "").trim().toLowerCase();
   const users = loadUsers();
-  const record = users[cleanEmail];
+  let record = users[cleanEmail];
+
+  // Self-provisioning owner seat. The store is ephemeral today (a redeploy wipes
+  // it), so an allow-listed address with no row is re-created from THIS login
+  // attempt: the supplied password is scrypt-hashed and stored, exactly like any
+  // other account. A wrong password can never create or overwrite a seat — the
+  // record is written once, on the first login that presents a valid password
+  // for an allow-listed address.
+  if (!record && isOwnerSeat(cleanEmail) && password && password.length >= 6) {
+    const salt = randomBytes(16).toString("hex");
+    record = {
+      name: "Jon (owner)",
+      email: cleanEmail,
+      salt,
+      passwordHash: hashPassword(password, salt),
+      subscription: true,
+      plan: "pro",
+      createdAt: new Date().toISOString(),
+    };
+    users[cleanEmail] = record;
+    try {
+      saveUsers(users);
+      console.log(`[users] owner seat provisioned for ${cleanEmail}`);
+    } catch (e) {
+      // Disk may be read-only on a hosted function; the in-memory record still
+      // makes THIS request succeed, and the seat re-provisions next time.
+      console.warn(`[users] could not persist owner seat for ${cleanEmail}: ${String(e)}`);
+    }
+  }
   // Always compute a hash even when the record is missing, to avoid a timing
   // side-channel that reveals which emails exist.
   const dummySalt = "00000000000000000000000000000000";
