@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "bash scripts/ensure-alert-worker.sh || true",
     "dev": "vite",
+    "postinstall": "bash scripts/ensure-alert-worker.sh || true",
     "build": "vite build && node scripts/sync-git.mjs && (node scripts/verify-deploy.mjs || true)",
     "preview": "vite preview",
     "start": "bun serve-static.ts"

@@ -264,4 +264,8 @@ const server = Bun.serve({
 console.log(`Serving dist/ on http://${HOST}:${PORT}`);
 
 // Start the opportunity alert worker (no-op unless a channel is configured).
-startAlertWorker();
+// The alert worker normally runs INSIDE this server (state/health endpoint on
+// the same process). When this instance is started purely as the port-3100
+// status/health host for a separate scan loop, set ALERT_WORKER_DISABLED=1 so
+// we don't scan twice.
+if (process.env.ALERT_WORKER_DISABLED !== "1") startAlertWorker();
