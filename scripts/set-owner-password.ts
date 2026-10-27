@@ -10,9 +10,14 @@
  * store, so recovery never involves letting an unauthenticated request create a
  * seat. It does not change the login rule — the secret is still the only way in.
  *
- * Writes to Postgres when DATABASE_URL is set, otherwise to the JSON store
- * (which a redeploy wipes — so run it again after a publish, or set
- * OWNER_PASSWORD and let the normal login path apply it).
+ * WHERE IT WRITES — this matters:
+ *  - DATABASE_URL set: it writes the Postgres row, which every environment
+ *    reads. Authoritative; this is the intended recovery path.
+ *  - No DATABASE_URL: it writes the JSON file of THIS checkout only
+ *    (USERS_FILE, default ./.run/users.json). Each environment keeps its own
+ *    file, so before DATABASE_URL exists the live site is NOT changed by it —
+ *    for live, the lever is the OWNER_PASSWORD secret itself: the running app
+ *    rewrites its own row from the secret on the next owner login.
  */
 import { randomBytes, scryptSync } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -60,7 +65,8 @@ if (process.env.DATABASE_URL) {
   };
   writeFileSync(file, JSON.stringify(users, null, 2));
   console.log(`✓ owner seat reset in ${file} for ${email} (plan pro)`);
-  console.log("  note: this file is wiped by a deploy — also save OWNER_PASSWORD in Secrets.");
+  console.log("  note: this is THIS environment's JSON store — the live app keeps its own copy.");
+  console.log("  for live, save OWNER_PASSWORD in Secrets; the app applies it on the next login.");
 }
 console.log("Log in with that password. The OWNER_PASSWORD secret must match it.");
 process.exit(0);

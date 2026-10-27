@@ -29,8 +29,17 @@ provision from an arbitrary login):
 OWNER_PASSWORD='new-secret' bun scripts/set-owner-password.ts owner@everyonesawinner.uk
 ```
 
-That writes a fresh scrypt hash straight into the account store. Then set
-`OWNER_PASSWORD` to the same value in Secrets.
+Where that lands matters:
+
+- **With `DATABASE_URL`** — it writes the Postgres row, which every environment
+  reads, so this command *is* the recovery path. Do this one.
+- **Without `DATABASE_URL`** — it writes only this checkout's
+  `.run/users.json`. Each environment keeps its own copy of that file, so it
+  does not change the live site. Before Postgres, the live lever is the
+  `OWNER_PASSWORD` secret itself: the running app rewrites its own owner row
+  from that secret on the next owner login.
+
+Either way, `OWNER_PASSWORD` in Secrets must match the password you set.
 
 ## 3. Billing → plan (per-user subscription status)
 
