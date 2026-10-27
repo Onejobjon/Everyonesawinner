@@ -10,7 +10,8 @@
 // capture needs a Postgres `leads` table (src/db.ts) once DATABASE_URL is
 // connected. The platform URL (Bun server, serve-static.ts) uses the same module
 // and IS durable (its `.run/leads.json` lives on the shared site disk).
-import { storeLead } from "../src/server/leads";
+// Local store is imported lazily: a static import of ../src/** broke the
+// deployed function at load time (opaque 500 before any handler code ran).
 import { needsPlatformForward, forwardToPlatform, send, withErrorJson } from "./_forward";
 
 function respond(res: any, status: number, body: unknown): void {
@@ -46,6 +47,7 @@ async function handlerInner(req: any, res: any): Promise<void> {
       send(res, out.status, out.body, out.contentType);
       return;
     }
+    const { storeLead } = await import("../src/server/leads");
     const record = storeLead({
       name: typeof name === "string" ? name : "",
       email: typeof email === "string" ? email : "",

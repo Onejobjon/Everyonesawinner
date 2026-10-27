@@ -48,8 +48,10 @@ const FRESHNESS_MAX_GAP_MS = 60 * 60_000; // 60 minutes
 const ACTIONABILITY_BUFFER_MS = 15 * 60_000; // 15 minutes
 
 // ── Config (all env-var driven, safe defaults) ─────────────────────────────
-// How often the worker runs a check (minutes). Default 60 = hourly.
-const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, 60);
+// How often the worker runs a check (minutes). Default 10 = matches the site's
+// 10-minute odds refresh, so an opportunity is alerted as soon as it is scanned
+// rather than sitting until the next hour (owner directive, 2026-10-27).
+const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, 10);
 // How long a fetched odds snapshot stays "fresh" before the worker re-fetches.
 const CACHE_TTL_MIN = num(process.env.ALERT_CACHE_TTL_MIN, 10);
 
@@ -579,7 +581,7 @@ async function postTelegram(text: string): Promise<{ ok: boolean; messageId: num
  */
 export async function sendTestAlert(): Promise<{ ok: boolean; messageId: number | null }> {
   return postTelegram(
-    "✅ Everyone's A Winner — alert delivery check. Hourly scans are live. (Test message, not an opportunity.)"
+    "✅ Everyone's A Winner — alert delivery check. Scans run every 10 minutes. (Test message, not an opportunity.)"
   );
 }
 

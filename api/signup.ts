@@ -6,7 +6,8 @@
 // platform URL (Bun server) is durable via `.run/users.json`. Production-grade
 // Vercel auth needs a Postgres `users` table (src/db.ts) once DATABASE_URL is
 // connected.
-import { registerUser } from "../src/server/users";
+// Local store is imported lazily: a static import of ../src/** broke the
+// deployed function at load time (opaque 500 before any handler code ran).
 import { needsPlatformForward, forwardToPlatform, send, withErrorJson } from "./_forward";
 
 function respond(res: any, status: number, body: unknown): void {
@@ -45,6 +46,7 @@ async function handlerInner(req: any, res: any): Promise<void> {
       send(res, out.status, out.body, out.contentType);
       return;
     }
+    const { registerUser } = await import("../src/server/users");
     const user = registerUser(
       typeof name === "string" ? name : "",
       typeof email === "string" ? email : "",

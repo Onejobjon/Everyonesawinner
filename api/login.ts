@@ -1,6 +1,7 @@
 // Vercel serverless function: POST /api/login — account login.
 // Mirrors the Bun server's `/api/login` route and reuses `authenticateUser`.
-import { authenticateUser } from "../src/server/users";
+// Local store is imported lazily: a static import of ../src/** broke the
+// deployed function at load time (opaque 500 before any handler code ran).
 import { needsPlatformForward, forwardToPlatform, send, withErrorJson } from "./_forward";
 
 function respond(res: any, status: number, body: unknown): void {
@@ -32,6 +33,7 @@ async function handlerInner(req: any, res: any): Promise<void> {
       send(res, out.status, out.body, out.contentType);
       return;
     }
+    const { authenticateUser } = await import("../src/server/users");
     const user = authenticateUser(
       typeof email === "string" ? email : "",
       typeof password === "string" ? password : "",
