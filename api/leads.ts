@@ -11,6 +11,7 @@
 // connected. The platform URL (Bun server, serve-static.ts) uses the same module
 // and IS durable (its `.run/leads.json` lives on the shared site disk).
 import { storeLead } from "../src/server/leads";
+import { needsPlatformForward, forwardToPlatform, send, withErrorJson } from "./_forward";
 
 function respond(res: any, status: number, body: unknown): void {
   res.statusCode = status;
@@ -19,7 +20,7 @@ function respond(res: any, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-export default async function handler(req: any, res: any): Promise<void> {
+async function handlerInner(req: any, res: any): Promise<void> {
   if (req.method !== "POST") {
     respond(res, 405, { ok: false, error: "Method not allowed" });
     return;
@@ -40,6 +41,11 @@ export default async function handler(req: any, res: any): Promise<void> {
   };
 
   try {
+    if (needsPlatformForward()) {
+      const out = await forwardToPlatform("/api/leads", "POST", JSON.stringify({ name, email, source }));
+      send(res, out.status, out.body, out.contentType);
+      return;
+    }
     const record = storeLead({
       name: typeof name === "string" ? name : "",
       email: typeof email === "string" ? email : "",
@@ -50,3 +56,5 @@ export default async function handler(req: any, res: any): Promise<void> {
     respond(res, 400, { ok: false, error: e instanceof Error ? e.message : "Invalid lead" });
   }
 }
+
+export default withErrorJson(handlerInner);

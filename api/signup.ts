@@ -7,6 +7,7 @@
 // Vercel auth needs a Postgres `users` table (src/db.ts) once DATABASE_URL is
 // connected.
 import { registerUser } from "../src/server/users";
+import { needsPlatformForward, forwardToPlatform, send, withErrorJson } from "./_forward";
 
 function respond(res: any, status: number, body: unknown): void {
   res.statusCode = status;
@@ -15,7 +16,7 @@ function respond(res: any, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-export default async function handler(req: any, res: any): Promise<void> {
+async function handlerInner(req: any, res: any): Promise<void> {
   if (req.method !== "POST") {
     respond(res, 405, { ok: false, error: "Method not allowed" });
     return;
@@ -33,6 +34,17 @@ export default async function handler(req: any, res: any): Promise<void> {
     password?: unknown;
   };
   try {
+    if (needsPlatformForward()) {
+      // Vercel has no writable disk and no DATABASE_URL yet: run the same
+      // handler on the platform deployment instead of crashing on a file write.
+      const out = await forwardToPlatform("/api/signup", "POST", JSON.stringify({
+        name: typeof name === "string" ? name : "",
+        email: typeof email === "string" ? email : "",
+        password: typeof password === "string" ? password : "",
+      }));
+      send(res, out.status, out.body, out.contentType);
+      return;
+    }
     const user = registerUser(
       typeof name === "string" ? name : "",
       typeof email === "string" ? email : "",
@@ -46,3 +58,5 @@ export default async function handler(req: any, res: any): Promise<void> {
     });
   }
 }
+
+export default withErrorJson(handlerInner);

@@ -1,0 +1,186 @@
+{
+  "schema_version": 2,
+  "verified_on": "2026-10-27",
+  "verified_at_utc": "2026-10-27T13:50Z",
+  "verified_by": "Everyone's A Winner - content researcher",
+  "purpose": "Structured, quotable 2up/early-payout terms for the Lay Bet Finder badge. Only bookmakers verified on their own site on the date above appear here.",
+  "verification_method": "Live browser check of each bookmaker's own promotions page and the full terms page linked from it (the 'FULL TERMS' / 'More info' link), 2026-10-27 13:30-13:50 UTC. Every quoted string is copied from the bookmaker's page. Our browser egress resolves to a non-UK IP, so 888sport served US-facing template content around the offer (dollar amounts on unrelated promotions); the 2 Up terms reference UK time and 90-minute football settlement and are the page the site's own 'FULL TERMS' link serves. Unibet's pages were served in UK form (GambleAware.org, GBP, Platinum Gaming Limited).",
+  "integration_contract": {
+    "stable_for_the_badge": [
+      "bookmakers.<feed_key>.confirmed",
+      "bookmakers.<feed_key>.offer_name",
+      "bookmakers.<feed_key>.market.is_dedicated_2up_market",
+      "bookmakers.<feed_key>.badge_label",
+      "bookmakers.<feed_key>.badge_tooltip",
+      "bookmakers.<feed_key>.terms_url"
+    ],
+    "provenance_only_not_for_logic": [
+      "verification_method",
+      "bookmakers.<feed_key>.*.verbatim",
+      "bookmakers.<feed_key>.additional_terms_verbatim",
+      "bookmakers.<feed_key>.operator_note"
+    ],
+    "rules": [
+      "Badge only feed keys present in 'bookmakers' with confirmed = true.",
+      "Anything not listed is unbadged - do not infer from other bookmakers.",
+      "badge_label is the card label; badge_tooltip is the hover text; both are final copy.",
+      "Badges never alter stake, lay stake, liability or profit figures."
+    ],
+    "every_bookmaker_object_has_the_same_keys": true
+  },
+  "badge_rules": {
+    "badged_bookmakers": [
+      "sport888",
+      "unibet_uk"
+    ],
+    "no_other_bookmaker_gets_a_badge": true,
+    "excluded": {
+      "bet365": "Excluded. Not in our odds feed and no claim verified from its own site - we do not assert whether it runs a 2up offer."
+    },
+    "badges_are_information_only": true,
+    "badges_never_change_the_profit_maths": true,
+    "market_match_warning": "Both verified offers apply to a dedicated 2 Up market that is SEPARATE from the standard 90-minute match result price the Lay Bet Finder lists. A badge must never be read as 'the price I am looking at qualifies'. See market.is_dedicated_2up_market.",
+    "wording_rule": "Badge text and tooltips describe the bookmaker's settlement rule only. No profit, value, edge or money-back claim; no guarantee the offer is available on a given match, competition or account."
+  },
+  "bookmakers": {
+    "sport888": {
+      "feed_key": "sport888",
+      "bookmaker": "888sport",
+      "verified_on": "2026-10-27",
+      "confirmed": true,
+      "offer_name": "2 Up",
+      "terms_url": "https://www.888sport.com/online-sports-betting-promotions/2uprowterms/",
+      "promotions_url": "https://www.888sport.com/online-sports-betting-promotions/",
+      "market": {
+        "confirmed": true,
+        "is_dedicated_2up_market": true,
+        "summary": "Bookmaker's dedicated 'FULL TIME RESULT - 2 Up' market, selected competitions only. Not the standard Full Time Result market.",
+        "verbatim": "The promotion is available on selections placed on the “FULL TIME RESULT - 2 Up” market in selected competitions only (the Promotion Markets)."
+      },
+      "bet_types": {
+        "confirmed": true,
+        "singles": true,
+        "multiples": true,
+        "verbatim": "‘2 Up’ is available on single and multiple bets."
+      },
+      "sport": {
+        "confirmed": true,
+        "sport": "football",
+        "pre_match_only": true,
+        "verbatim": "2 Up applies to 90 minutes (plus any additional time added on by the referee, excluding Extra Time and Penalties) only."
+      },
+      "min_odds": {
+        "confirmed": false,
+        "value": null,
+        "reason": "No minimum odds figure appears on the 2 Up offer page or in its full terms. Not stated - not verified absent for UK customers."
+      },
+      "max_stake": {
+        "confirmed": false,
+        "value": null,
+        "reason": "No maximum stake figure appears on the 2 Up offer page or in its full terms."
+      },
+      "trigger_condition": {
+        "confirmed": true,
+        "summary": "The backed team takes a two-goal lead at any point inside 90 minutes (plus referee's added time); the bet is settled as a winner whatever the final score.",
+        "verbatim": "If that team take a two-goal lead in the match at any time before 90 minutes (plus any additional time added on by the referee, excluding Extra Time and Penalties), we’ll settle the selection as a winner regardless of the result."
+      },
+      "payout_type": {
+        "confirmed": true,
+        "type": "early_payout",
+        "summary": "Early settlement as a winning bet (stake plus winnings paid as a normal win). Not a free bet - no token, no wagering, no expiry.",
+        "verbatim": "We will aim to settle all qualifying 2 Up bets within 15 minutes of your selection going 2 goals ahead."
+      },
+      "expiry": {
+        "confirmed": false,
+        "value": null,
+        "reason": "Not applicable: the payout is a settled win, so there is no free bet to expire. Null rather than a free-bet expiry date."
+      },
+      "exclusions_verbatim": [
+        "2 Up is not available on Odds Boost markets.",
+        "Bets that are Cashed Out in full will no longer qualify for 2 Up. Bets that are partially cashed out, the remaining stake will still be eligible for 2 Up.",
+        "If your bet is paid out early in accordance with this promotion, it will not be paid out again if your selection goes on to win the match.",
+        "Bets placed using free bets will be eligible for 2 Up."
+      ],
+      "additional_terms_verbatim": [
+        "2 UP | YOUR BET'S A WINNER IF YOUR TEAM GOES 2 GOALS AHEAD",
+        "Bet on our 2 Up market and we'll settle your selection as a winner if your team leads by 2 goals at any point, regardless of the final result.",
+        "The promotion will run from 00:00:01 (UK time) on Tuesday 31st March 2026, until cancelled or withdrawn by us (the Promotion Period)."
+      ],
+      "operator_note": "Terms page served to us names Virtual Digital Services Limited (Malta) / Virtual Global Digital Services Limited (Gibraltar) as promoter; 888's site footer states GB customers are served by 888 UK Limited (UK Gambling Commission licence 39028). UK-facing licensing detail not re-verified from a UK IP.",
+      "badge_label": "2UP",
+      "badge_tooltip": "888sport pays out early if your team leads by 2 goals - its own 2-Up market only",
+      "badge_note": "Early payout, not a free bet. Qualifies only on 888sport's 'FULL TIME RESULT - 2 Up' market in selected competitions - not on the standard Full Time Result price."
+    },
+    "unibet_uk": {
+      "feed_key": "unibet_uk",
+      "bookmaker": "Unibet UK",
+      "verified_on": "2026-10-27",
+      "confirmed": true,
+      "offer_name": "Get Paid Early with 2-Up",
+      "terms_url": "https://www.unibet.co.uk/promotions/sportsbook-promotions/2-up",
+      "promotions_url": "https://www.unibet.co.uk/promotions",
+      "market": {
+        "confirmed": true,
+        "is_dedicated_2up_market": true,
+        "summary": "Separate '2 Up / Early Payout' market on eligible football matches, typically shown below the standard match result market. Selections listed as Home / Draw / Away.",
+        "verbatim": "The 2 Up / Early Payout market is a separate market from the standard Match Result (90 minutes) market."
+      },
+      "bet_types": {
+        "confirmed": true,
+        "singles": true,
+        "multiples": true,
+        "verbatim": "Bets may be eligible for inclusion in multiples or bet builders where supported."
+      },
+      "sport": {
+        "confirmed": true,
+        "sport": "football",
+        "pre_match_only": true,
+        "verbatim": "Available on selected football competitions only. Pre-match bets only (bets must be placed before kick-off)."
+      },
+      "min_odds": {
+        "confirmed": false,
+        "value": null,
+        "reason": "No minimum odds figure appears on the 2-Up promotion page or its full terms."
+      },
+      "max_stake": {
+        "confirmed": false,
+        "value": null,
+        "reason": "No maximum stake figure appears on the 2-Up promotion page or its full terms."
+      },
+      "trigger_condition": {
+        "confirmed": true,
+        "summary": "The selected team goes two goals ahead at any time during the match (2-0, 3-1, 4-2, etc.); the bet is settled immediately as a winner regardless of the final result.",
+        "verbatim": "If the team selected in the 2 Up market goes two goals ahead at any time during the match, the bet will be settled immediately as a winner, regardless of the final result of the match."
+      },
+      "payout_type": {
+        "confirmed": true,
+        "type": "early_payout",
+        "summary": "Early settlement as a winning bet. Not a free bet - no token, no wagering, no expiry.",
+        "verbatim": "Settlement occurs immediately once the two-goal lead is achieved, and the bet result will not be affected by any later goals or the final match result."
+      },
+      "expiry": {
+        "confirmed": false,
+        "value": null,
+        "reason": "Not applicable: the payout is a settled win, so there is no free bet to expire. Null rather than a free-bet expiry date."
+      },
+      "exclusions_verbatim": [
+        "Cash Out is not available on bets placed in the 2 Up market.",
+        "Only bets placed on markets marked with the 2UP logo qualify for 2UP Early Payout.",
+        "If a goal is disallowed, overturned by VAR or recorded incorrectly by the data provider, settlement may be reversed, corrected, or delayed until the official match data confirms the correct score.",
+        "The sportsbook reserves the right to withdraw the 2 Up market from any event at any time.",
+        "Availability may vary by competition, region, or customer account."
+      ],
+      "additional_terms_verbatim": [
+        "Win Before the Whistle!",
+        "With 2-Up, your bet is settled as a winner the moment your team goes two goals ahead — no matter what happens next.",
+        "If your team goes two goals clear, your bet wins — no matter the final score. Enjoy the action with the chance to secure your win before full-time.",
+        "18+ | GambleAware.org. Selected pre-match football markets only. Bet settled as a winner when your team goes two goals ahead. Geo restrictions and T&Cs apply.",
+        "This means that more than one selection can be settled as a winner in the same match if multiple teams achieve a two-goal lead during play."
+      ],
+      "operator_note": "Promotional terms refer to Platinum Gaming Limited, whose trading names include Unibet, 32Red and Bingo.com.",
+      "badge_label": "2UP",
+      "badge_tooltip": "Unibet pays out early when your team goes 2 goals ahead - selected pre-match markets",
+      "badge_note": "Early payout, not a free bet. Qualifies only on Unibet's separate 2-Up market on selected pre-match football. Their own explainer also lists Draw among 2-Up selections - quoted only, do not build draw logic on the badge."
+    }
+  }
+}

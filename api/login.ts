@@ -1,6 +1,7 @@
 // Vercel serverless function: POST /api/login — account login.
 // Mirrors the Bun server's `/api/login` route and reuses `authenticateUser`.
 import { authenticateUser } from "../src/server/users";
+import { needsPlatformForward, forwardToPlatform, send, withErrorJson } from "./_forward";
 
 function respond(res: any, status: number, body: unknown): void {
   res.statusCode = status;
@@ -9,7 +10,7 @@ function respond(res: any, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-export default async function handler(req: any, res: any): Promise<void> {
+async function handlerInner(req: any, res: any): Promise<void> {
   if (req.method !== "POST") {
     respond(res, 405, { ok: false, error: "Method not allowed" });
     return;
@@ -26,6 +27,11 @@ export default async function handler(req: any, res: any): Promise<void> {
     password?: unknown;
   };
   try {
+    if (needsPlatformForward()) {
+      const out = await forwardToPlatform("/api/login", "POST", JSON.stringify({ email, password }));
+      send(res, out.status, out.body, out.contentType);
+      return;
+    }
     const user = authenticateUser(
       typeof email === "string" ? email : "",
       typeof password === "string" ? password : "",
@@ -38,3 +44,5 @@ export default async function handler(req: any, res: any): Promise<void> {
     });
   }
 }
+
+export default withErrorJson(handlerInner);

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth, isProPlan } from "../lib/auth";
 
 interface PaywallProps {
@@ -29,15 +29,11 @@ function Nav() {
 export default function Paywall({ children, title, tier = "any" }: PaywallProps) {
   const { user, checkAuth } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  // Preview bypass: ?preview=1 skips all auth/subscription checks
-  const isPreview = searchParams.get("preview") === "1";
-
-  if (isPreview) {
-    return <>{children}</>;
-  }
-
+  // SECURITY (2026-10-27): there is NO query-string bypass any more.
+  // `?preview=1` used to render every Pro tool with all auth checks skipped, so
+  // anyone could open /lay-bets?preview=1 and use the paid product for free.
+  // The paywall now fails CLOSED: no session → /login, no subscription → the
+  // subscribe screen. /preview is marketing copy only.
   // Not logged in → redirect to /login
   useEffect(() => {
     if (!checkAuth()) {

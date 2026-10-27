@@ -64,7 +64,27 @@ function newToken(): string {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Owner seats. These addresses are always Pro with an active subscription, no
+ * matter what the stored row says — the owner must never be locked out of the
+ * product he pays for while billing is being rebuilt. Keep the list explicit and
+ * short; it is an allowlist, not a role system.
+ */
+const OWNER_EMAILS = ["owner@everyonesawinner.uk"];
+function isOwnerSeat(email: string): boolean {
+  return OWNER_EMAILS.includes(email.trim().toLowerCase());
+}
+
 function toPublic(record: StoredUser): PublicUser {
+  if (isOwnerSeat(record.email)) {
+    return {
+      name: record.name,
+      email: record.email,
+      subscription: true,
+      plan: "pro",
+      token: newToken(),
+    };
+  }
   return {
     name: record.name,
     email: record.email,
