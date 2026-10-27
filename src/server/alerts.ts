@@ -27,7 +27,7 @@
 import { join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { transformMatches, type Match, type MatchOutcome } from "../lib/odds-api";
-import { ODDS_API_KEY } from "./odds-key";
+import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./odds-key";
 import { calcLay, calcFreeBetProfit, qualifiesForLay, layGap, round2 } from "../lib/odds";
 import { checkBackLayPair } from "../lib/odds-sanity";
 
@@ -142,6 +142,10 @@ type Opportunity = CashOpportunity | FreebetOpportunity;
 let lastRequestsRemaining: number | null = null;
 
 async function fetchRawMatches(): Promise<unknown[]> {
+  // No key anywhere → fail loudly. Previously this silently produced an empty
+  // scan ("0 opportunities"), which reads like "nothing on today" instead of
+  // "the feed is down".
+  if (!ODDS_API_KEY) throw new Error(oddsKeyProblem() || "ODDS_API_KEY missing");
   const url = `${BASE}/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal`;
   const res = await fetch(url);
   if (!res.ok) {
@@ -720,6 +724,7 @@ export function startAlertWorker(): void {
 // CLI: `bun src/server/alerts.ts --once` runs a single check and exits.
 // (Used for local end-to-end verification against a fake webhook receiver.)
 if ((import.meta as { main?: boolean }).main && Bun.argv.includes("--once")) {
+  logOddsKeyState("alert worker");
   runAlertCheck()
     .then((r) => {
       console.log(`ALERT_ONCE result=${JSON.stringify(r)}`);

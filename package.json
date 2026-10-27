@@ -6,6 +6,7 @@
     "predev": "bash scripts/ensure-alert-worker.sh || true",
     "dev": "vite",
     "postinstall": "bash scripts/ensure-alert-worker.sh || true",
+    "prebuild": "bash scripts/scan-secrets.sh",
     "build": "vite build && node scripts/sync-git.mjs && (node scripts/verify-deploy.mjs || true)",
     "preview": "vite preview",
     "start": "bun serve-static.ts"

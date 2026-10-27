@@ -8,7 +8,11 @@
 // are dead code there. Keep every new domain route in `api/`.
 //
 // Server-side only — the key never reaches the client bundle.
-const DEV_KEY = "5827ab1071dd26e737d7d2d1054ef8b4";
+// SECURITY (2026-10-27): this file used to carry a committed fallback key. The
+// repo is PUBLIC, so that value is compromised and was deleted. There is NO key
+// in the source tree by design — the function reads ODDS_API_KEY from the
+// environment and returns an explicit 503 when it is missing. Never put a
+// literal back: scripts/scan-secrets.sh fails the build on a 32-hex string.
 
 // Server-side cache (in-memory per warm instance). TTL 10 min — repeated
 // /api/odds hits within that window serve the cached upstream body instead of
@@ -27,7 +31,22 @@ export default async function handler(req: any, res: any): Promise<void> {
   const host = (req.headers && req.headers.host) || "localhost";
   const url = new URL(req.url ?? "/api/odds", `https://${host}`);
   const sport = url.searchParams.get("sport") || "upcoming";
-  const key = process.env.ODDS_API_KEY || DEV_KEY;
+  const key = (process.env.ODDS_API_KEY || "").trim();
+  if (!key) {
+    // Loud and honest: never a silent empty list.
+    console.error("[odds-key] /api/odds refused — ODDS_API_KEY is not set in this environment");
+    respond(
+      res,
+      JSON.stringify({
+        error: "odds_unavailable",
+        message:
+          "Live odds are temporarily unavailable because the odds feed key is not configured on the server.",
+      }),
+      503,
+      false,
+    );
+    return;
+  }
   const target =
     sport === "upcoming"
       ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${key}&regions=uk&markets=h2h&oddsFormat=decimal`

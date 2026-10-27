@@ -5,7 +5,7 @@
 // serve.ts, because the platform gateway reverse-proxies that port.
 import { join, extname } from "node:path";
 import { startAlertWorker, runAlertCheck, alertStatus } from "./src/server/alerts";
-import { ODDS_API_KEY } from "./src/server/odds-key";
+import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./src/server/odds-key";
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser } from "./src/server/users";
 
@@ -84,6 +84,18 @@ const server = Bun.serve({
     // Odds proxy — fetches live odds server-side so the API key never ships
     // to the client. Query: ?sport=<sportKey> (default "upcoming").
     if (url.pathname === "/api/odds") {
+      // No key anywhere → say so out loud (503 + log), never a silent empty list.
+      if (!ODDS_API_KEY) {
+        console.error(`[odds-key] /api/odds refused — ${oddsKeyProblem()}`);
+        return Response.json(
+          {
+            error: "odds_unavailable",
+            message:
+              "Live odds are temporarily unavailable because the odds feed key is not configured on the server.",
+          },
+          { status: 503, headers: { "cache-control": "no-store" } },
+        );
+      }
       const sport = url.searchParams.get("sport") || "upcoming";
       const target =
         sport === "upcoming"
@@ -262,6 +274,7 @@ const server = Bun.serve({
 });
 
 console.log(`Serving dist/ on http://${HOST}:${PORT}`);
+logOddsKeyState("serve-static boot");
 
 // Start the opportunity alert worker (no-op unless a channel is configured).
 // The alert worker normally runs INSIDE this server (state/health endpoint on
