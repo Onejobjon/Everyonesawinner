@@ -244,16 +244,16 @@ export default function Home() {
             Turn <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Free Bets</span> Into Guaranteed Profit
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 dark:text-gray-400 sm:text-xl">
-            Everyone's A Winner finds free bet offers and shows you exactly how to turn them into cash. No gambling, no risk — just consistent, tax-free earnings from promotions that bookmakers give away.
+            Everyone's A Winner finds free bet offers and shows you exactly how to turn them into cash. No gambling and no guesswork — we show you the promotions bookmakers give away, and exactly what each one returns before you stake a penny.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <a href="#pricing" className="rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">View Plans →</a>
             <a href="#how-it-works" className="rounded-xl border border-gray-300 px-8 py-3.5 text-base font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900 transition-colors">How it works</a>
           </div>
           <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-3 border-y border-gray-200 dark:border-gray-800 py-8">
-            <div><p className="text-3xl font-bold text-indigo-600">£500+</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Average monthly profit per user</p></div>
-            <div><p className="text-3xl font-bold text-indigo-600">50,000+</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Offers matched monthly</p></div>
-            <div><p className="text-3xl font-bold text-indigo-600">99.8%</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Success rate on matched bets</p></div>
+            <div><p className="text-3xl font-bold text-indigo-600">£20</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">See exactly what £20 returns on any outcome</p></div>
+            <div><p className="text-3xl font-bold text-indigo-600">10 min</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Odds refreshed every 10 minutes</p></div>
+            <div><p className="text-3xl font-bold text-indigo-600">20</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">UK bookmakers and exchanges, side by side</p></div>
           </div>
         </div>
       </section>
@@ -366,10 +366,10 @@ export default function Home() {
         <div className="mx-auto max-w-3xl px-6">
           <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Frequently asked questions</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400">Everything you need to know about earning from free bets.</p></div>
           <div className="mt-12 space-y-4">
-            {["Is earning from free bets legal?","How much money can I make?","Do I need any experience?","Is the profit really tax-free?","How much money do I need to start?"].map((q,i) => (
+            {["Is earning from free bets legal?","How much money can I make?","Do I need any experience?","Is the profit really tax-free?","How much money do I need to start?","Why do I get fewer free-bet alerts than I used to?"].map((q,i) => (
               <details key={i} className="rounded-xl border border-gray-200 dark:border-gray-800">
                 <summary className="flex cursor-pointer items-center justify-between px-6 py-4 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">{q}<svg className="h-5 w-5 flex-shrink-0 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></summary>
-                <div className="px-6 pb-4 text-sm text-gray-600 dark:text-gray-400">{["Yes, it's completely legal in the UK and Ireland. You're simply using promotional offers that bookmakers willingly provide.","Active users average £300-£500/month from welcome offers and £100-£300/month ongoing from daily promotions.","None! You don't need to know anything about sports. Our calculator does all the work for you.","Yes! Gambling winnings in the UK and Ireland are tax-free — no income tax or capital gains tax.","As little as £100-£200. Most offers require only £5-£10 to get started."][i]}</div>
+                <div className="px-6 pb-4 text-sm text-gray-600 dark:text-gray-400">{["Yes, it's completely legal in the UK and Ireland. You're simply using promotional offers that bookmakers willingly provide.","We don't quote an average monthly profit, because we would be making it up — we don't have the user base to measure one honestly. What we do give you is the exact profit on every opportunity, in pounds, before you place anything. Your own results depend on how many offers you work through.","None! You don't need to know anything about sports. Our calculator does all the work for you.","Yes! Gambling winnings in the UK and Ireland are tax-free — no income tax or capital gains tax.","As little as £100-£200. Most offers require only £5-£10 to get started.","We would rather send you fewer, real alerts than fabricated ones. A free bet only counts as more than 100% retention when the value you keep beats the free bet face value, and mathematically that needs the exchange lay price to sit well below the bookmaker back price. When that gap is large, the two prices are almost always describing slightly different markets rather than a genuine edge — so we withhold them and do not alert on them. In practice that leaves longer odds, around 20 and above, where the exchange is tight. We do not promise a frequency; some weeks will be quieter than others."][i]}</div>
               </details>
             ))}
           </div>
@@ -380,7 +380,7 @@ export default function Home() {
       <section className="py-20 md:py-28 bg-gradient-to-br from-indigo-600 to-purple-700">
         <div className="mx-auto max-w-3xl px-6 text-center">
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Start turning free bets into profit today</h2>
-          <p className="mt-4 text-lg text-indigo-100">Join thousands of users who make consistent, tax-free income with Everyone's A Winner.</p>
+          <p className="mt-4 text-lg text-indigo-100">Every offer, every outcome — see the exact return before you place a bet.</p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <a href="#pricing" className="rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-indigo-700 shadow-lg hover:bg-indigo-50 transition-all">Subscribe Now →</a>
             <a href="#how-it-works" className="rounded-xl border border-white/30 px-8 py-3.5 text-base font-semibold text-white hover:bg-white/10 transition-colors">Learn more</a>

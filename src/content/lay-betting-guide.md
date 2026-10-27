@@ -87,6 +87,25 @@ That's it. Two clicks each side, and your outcome is covered.
 
 ---
 
+## Why You'll Sometimes See Fewer Matches
+
+Some days the Lay Bet Finder shows a shorter list than it did before, and a line under the results tells you how many rows were hidden and why. That's deliberate — here's what's happening.
+
+We put two prices side by side: a bookmaker's back price and an exchange's lay price. Almost always those two prices describe the same thing — same match, same market, same outcome — so comparing them tells you your real cost or profit. Sometimes they don't. A lay price sitting well below the bookmaker's price *looks* like easy profit, but in practice it usually means the two prices are describing **different markets**:
+
+- **A period versus the whole match.** One side prices 90 minutes; the other includes extra time, or settles on the result after 90 minutes.
+- **Regulation time versus overtime.** This is exactly why we exclude ice hockey — bookmaker back odds there are regulation-time while exchange lays include overtime, so the two never line up.
+- **A handicap versus an outright.** "Team to win" and "Team to win by two or more" are different bets with different prices, even though they sit next to each other in a list.
+- **Slightly different market rules.** Void rules, dead-heat rules, retirement rules — small differences that only matter on the day they matter.
+
+When the market rules differ, you aren't covering the same outcome twice. You'd be placing two bets on two different things, which is the exact risk matched betting is meant to remove.
+
+**The rule we apply.** If the exchange lay price is more than **10% below** the bookmaker's back price, the row is withheld and the page tells you how many were. With 5% exchange commission, a genuine lay-below-back edge is only worth a few percent — so a gap of 10% or more is far more likely to be two different markets than free money. Prices the feed reports as unavailable (1.00 and 451) are dropped for the same reason: they aren't prices at all.
+
+**What it means for you.** You'll sometimes see fewer matches than you would if we showed everything. We'd rather show you ten rows you can actually place than thirty where the best-looking one would fail at the exchange. If a row you expected is missing, the note under the results is telling you it was a pricing mismatch, not an outage — and everything left in the list is genuinely available.
+
+---
+
 ## Honest Expectations
 
 - **Qualifying losses are normal.** Losing £0.50–£1 to unlock a free bet is expected — it's the cost of doing business, not a mistake.
@@ -110,4 +129,4 @@ That's it. Two clicks each side, and your outcome is covered.
 
 ---
 
-*This guide was written by the Everyone's A Winner content team. Last updated: September 2026.*
+*This guide was written by the Everyone's A Winner content team. Last updated: October 2026.*

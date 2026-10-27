@@ -295,7 +295,7 @@ export default function LayBets() {
 
           {results.withheld > 0 && (
             <p className="mt-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-              ⚠️ {results.withheld} row{results.withheld === 1 ? "" : "s"} hidden — the exchange lay price was more than 10% below the bookmaker price, so it can't actually be matched.
+              ⚠️ {results.withheld} row{results.withheld === 1 ? "" : "s"} hidden — the exchange lay price was more than 10% below the bookmaker price, so it can't be matched. That gap nearly always means two different markets, not free money. See “Why you'll sometimes see fewer matches” in the guide below.
             </p>
           )}
 
