@@ -35,13 +35,17 @@ function fromSecretFile(): string | null {
   return null;
 }
 
-const fromEnv = (process.env.ODDS_API_KEY || "").trim();
+// The owner's platform Secret is currently stored under the name `Oddsapi`
+// (not `ODDS_API_KEY`), so accept that as a legacy alias — a misnamed secret
+// must not take the odds feed down. Both are environment variables, never repo
+// literals. Renaming the Secret to ODDS_API_KEY is the clean end state.
+const ENV_ALIAS = "Oddsapi";
+const fromEnvPrimary = (process.env.ODDS_API_KEY || "").trim();
+const fromEnvAlias = (process.env[ENV_ALIAS] || "").trim();
+const fromEnv = fromEnvPrimary || fromEnvAlias;
 
-export const ODDS_API_KEY_SOURCE: "env" | "secret-file" | "missing" = fromEnv
-  ? "env"
-  : fromSecretFile()
-    ? "secret-file"
-    : "missing";
+export const ODDS_API_KEY_SOURCE: "env" | `env:${string}` | "secret-file" | "missing" =
+  fromEnvPrimary ? "env" : fromEnvAlias ? `env:${ENV_ALIAS}` : fromSecretFile() ? "secret-file" : "missing";
 
 export const ODDS_API_KEY: string | null = fromEnv || fromSecretFile() || null;
 

@@ -31,8 +31,30 @@ export default async function handler(req: any, res: any): Promise<void> {
   const host = (req.headers && req.headers.host) || "localhost";
   const url = new URL(req.url ?? "/api/odds", `https://${host}`);
   const sport = url.searchParams.get("sport") || "upcoming";
-  const key = (process.env.ODDS_API_KEY || "").trim();
+  // `Oddsapi` is the name the owner's platform Secret currently uses; accept it
+  // as an alias so a misnamed secret cannot take the feed down.
+  const key = (process.env.ODDS_API_KEY || process.env.Oddsapi || "").trim();
   if (!key) {
+    // No key in THIS deployment (e.g. the custom-domain project has no env var
+    // yet). Rather than break the domain, answer with the same live feed from
+    // the platform deployment, which holds the key. No secret is copied here.
+    const upstreamHost =
+      process.env.PLATFORM_ODDS_URL || "https://515136800b641762e9aace79427eb7c4.ctonew.app";
+    try {
+      const proxied = await fetch(
+        `${upstreamHost}/api/odds?sport=${encodeURIComponent(sport)}`,
+        { headers: { accept: "application/json" } },
+      );
+      const body = await proxied.text();
+      if (proxied.ok) {
+        console.log("[odds-key] served via platform fallback (this deployment has no key)");
+        respond(res, body, 200, true);
+        return;
+      }
+      console.error(`[odds-key] platform fallback returned ${proxied.status}`);
+    } catch (e) {
+      console.error(`[odds-key] platform fallback failed: ${String(e)}`);
+    }
     // Loud and honest: never a silent empty list.
     console.error("[odds-key] /api/odds refused — ODDS_API_KEY is not set in this environment");
     respond(
