@@ -37,7 +37,7 @@ const renderedSet = new Set(rendered);
 const keptSet = new Set(ROWS.map((o) => o.bookmaker));
 
 check("panel renders one row per kept offer", rendered.length === ROWS.length, `${rendered.length} rows vs ${ROWS.length}`);
-check("exactly 37 rows", rendered.length === 37, String(rendered.length));
+check(`exactly ${ROWS.length} rows`, rendered.length === ROWS.length, String(rendered.length));
 check(
   "rendered operator set === dataset operator set",
   renderedSet.size === keptSet.size && [...keptSet].every((b) => renderedSet.has(b)),
@@ -140,7 +140,7 @@ check(
 // ── the lead's integration assertions ──────────────────────────────────────
 console.log("\nlicence integration");
 const tickCount = count('data-testid="offers-row-uk-tick"');
-check("37 licence ticks on the real dataset", tickCount === 37, String(tickCount));
+check(`${ROWS.length} licence ticks on the real dataset`, tickCount === ROWS.length, String(tickCount));
 check(
   'the words "licence not recorded" appear zero times on the real dataset',
   count("licence not recorded") === 0,
@@ -167,8 +167,8 @@ check(
   String((fallbackHtml.match(/licence not recorded/g) || []).length),
 );
 check(
-  "the other 36 rows still show their licence line",
-  (fallbackHtml.match(/data-testid="offers-row-licence"/g) || []).length === 36,
+  `the other ${ROWS.length - 1} rows still show their licence line`,
+  (fallbackHtml.match(/data-testid="offers-row-licence"/g) || []).length === ROWS.length - 1,
 );
 
 console.log("\nsearch and section filters survive");
@@ -218,7 +218,7 @@ const pubLinks = [...pub.matchAll(/<a\b[^>]*data-testid="free-bets-licence"[^>]*
     account: (tag.match(/data-register-account="([^"]*)"/) || [])[1] || "",
   };
 });
-check("37 register links on the public page", pubLinks.length === 37, String(pubLinks.length));
+check(`every row gets a register link (${ROWS.length})`, pubLinks.length === ROWS.length, String(pubLinks.length));
 check(
   "every register link points at that row's registerUrl, in dataset order",
   pubLinks.length === ROWS.length && pubLinks.every((l, i) => l.href === ROWS[i].registerUrl),
@@ -231,8 +231,8 @@ check(
   pubLinks.every((l) => l.target === "_blank" && l.rel.includes("noopener") && l.rel.includes("noreferrer")),
 );
 check(
-  "the visible licence sentence renders 37 times",
-  (pub.match(/Licensed by the Gambling Commission — /g) || []).length === 37,
+  `the visible licence sentence renders ${ROWS.length} times`,
+  (pub.match(/Licensed by the Gambling Commission — /g) || []).length === ROWS.length,
   String((pub.match(/Licensed by the Gambling Commission — /g) || []).length),
 );
 check(
@@ -244,8 +244,8 @@ check(
   (() => {
     const noTitles = pub.replace(/ title="[^"]*"/g, "");
     return (
-      (noTitles.match(/data-testid="free-bets-licence"/g) || []).length === 37 &&
-      (noTitles.match(/Licensed by the Gambling Commission — /g) || []).length === 37
+      (noTitles.match(/data-testid="free-bets-licence"/g) || []).length === ROWS.length &&
+      (noTitles.match(/Licensed by the Gambling Commission — /g) || []).length === ROWS.length
     );
   })(),
 );
