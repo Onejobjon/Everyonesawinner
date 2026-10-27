@@ -42,7 +42,7 @@ interface Offer {
   minOdds: string;
   freeBetTokens: string;
   freeBetExpiry: string;
-  estProfit: string;
+  estProfit: string | null;
   ukGbp: string;
   keyTerms: string[];
   notes: string;
@@ -302,7 +302,11 @@ export default function FreeBets() {
                       </div>
                       <div className="text-sm">
                         <span className="block text-xs text-gray-400">Est. profit</span>
-                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">{o.estProfit}</span>
+                        {o.estProfit ? (
+                          <span className="font-semibold text-indigo-600 dark:text-indigo-400">{o.estProfit}</span>
+                        ) : (
+                          <span className="block text-[11px] text-gray-400">not quoted — depends on the odds you match at</span>
+                        )}
                       </div>
                       <div className="text-sm text-right">
                         {unlinked ? (
