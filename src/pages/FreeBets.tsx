@@ -4,7 +4,8 @@ import { getMatches, type Match } from "../lib/odds-api";
 import { calcDutchFreeBet } from "../lib/odds";
 import EmailCapture from "../components/EmailCapture";
 import offersData from "../content/free-bets-offers.json";
-import { licenceEvidence } from "../lib/free-bets";
+import { licenceEvidence, type FreeBetOffer } from "../lib/free-bets";
+import { LicenceLine } from "../components/LicenceLine";
 
 // ── URL policy ─────────────────────────────────────────────────────────────
 // Live re-check of the 17 `urlVerified:false` offers (2026-10-21 curl sweep):
@@ -33,23 +34,8 @@ const UNLINKED = new Set([
   "Rabona", // 403 blocked
 ]);
 
-interface Offer {
-  bookmaker: string;
-  section: "uk" | "global";
-  jurisdiction: string;
-  offer: string;
-  headlineValue: string;
-  minStake: string;
-  minOdds: string;
-  freeBetTokens: string;
-  freeBetExpiry: string;
-  estProfit: string | null;
-  ukGbp: string;
-  keyTerms: string[];
-  notes: string;
-  url: string;
-  urlVerified: boolean;
-}
+/** The dataset shape is defined once in src/lib/free-bets.ts. */
+type Offer = FreeBetOffer;
 
 const meta = offersData.meta as {
   name: string;
@@ -276,15 +262,16 @@ export default function FreeBets() {
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {filtered.map((o) => {
                   const unlinked = UNLINKED.has(o.bookmaker);
+                  const licence = licenceEvidence(o);
                   const inner = (
                     <div className="grid grid-cols-1 gap-3 px-6 py-4 sm:grid-cols-[1.6fr_0.7fr_0.8fr_0.8fr_0.8fr] sm:items-center">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-gray-900 dark:text-gray-100">{o.bookmaker}</span>
-                          {licenceEvidence(o).ok ? (
+                          {licence.ok ? (
                             <span
                               data-testid="free-bets-uk-tick"
-                              title={`Licensed: ${licenceEvidence(o).licensee} — Gambling Commission account ${licenceEvidence(o).registerAccount}`}
+                              title={`Licensed: ${licence.licensee} — Gambling Commission account ${licence.registerAccount}`}
                               className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                             >
                               ✅ UK licensed
@@ -306,6 +293,13 @@ export default function FreeBets() {
                         </div>
                         <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{o.offer}</p>
                         <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">{o.headlineValue}</p>
+                        {/* Visible licence evidence + register link — a tooltip is not evidence. */}
+                        <LicenceLine
+                          offer={o}
+                          testId="free-bets-licence"
+                          unknownTestId="free-bets-licence-unknown"
+                          caveat="— this is a licence check, not confirmation that the offer is running: check the terms on the bookmaker's own page before depositing."
+                        />
                       </div>
                       <div className="text-sm">
                         <span className="block text-xs text-gray-400">Min stake</span>
@@ -341,16 +335,21 @@ export default function FreeBets() {
                       </div>
                     </div>
                   );
-                  return <div key={o.bookmaker}>{inner}</div>;
+                  return (
+                    <div key={o.bookmaker} data-bookmaker={o.bookmaker}>
+                      {inner}
+                    </div>
+                  );
                 })}
               </div>
             )}
           </div>
 
           <p className="mt-4 text-center text-xs text-gray-400">
-            ✅ UK licensed appears only where we re-confirmed the operator on the Gambling Commission register and
-            hold their account number; “licence not re-confirmed” means we could not check — not that the operator
-            is unlicensed · 18+ · begambleaware.org
+            Where we re-confirmed an operator on the Gambling Commission register and hold their account number, the
+            row says so and links to the register — click it and check us. Where we could not check, the row says that
+            instead: that is not a statement that the operator is unlicensed. A licence is not a terms check, and it
+            is not evidence an offer is running · 18+ · begambleaware.org
           </p>
         </div>
       </section>

@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import offersData from "../content/free-bets-offers.json";
+import { LicenceLine } from "./LicenceLine";
 import {
   keptOffers,
   licenceEvidence,
-  licenceLine,
   profitText,
   statusLabel,
   type FreeBetOffer,
@@ -211,29 +211,12 @@ export default function FreeBetsOffers({
                         {o.verified_on ? ` · terms read ${o.verified_on}` : ""}
                       </p>
                       {/* Licence line: the operator's licence only — never a claim that the offer is running. */}
-                      {licence.ok ? (
-                        <p className="mt-1.5 border-l-2 border-emerald-300 pl-2 text-[11px] leading-5 text-gray-500 dark:border-emerald-800 dark:text-gray-400">
-                          <a
-                            data-testid="offers-row-licence"
-                            href={licence.registerUrl || undefined}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline decoration-dotted hover:text-indigo-600 dark:hover:text-indigo-400"
-                          >
-                            Licensed by the Gambling Commission — {licence.licensee}, account{" "}
-                            {licence.registerAccount}
-                          </a>
-                          {licence.checkedOn ? ` · checked ${licence.checkedOn}` : ""}
-                          <span className="italic">
-                            {" "}— a licence is not a terms check and it is not evidence this offer is live: the row's
-                            status above says whether the offer itself was confirmed.
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="mt-1.5 text-[11px] leading-5 text-gray-400 dark:text-gray-500">
-                          <span data-testid="offers-row-licence-unknown">{licenceLine(o)}</span>
-                        </p>
-                      )}
+                      <LicenceLine
+                        offer={o}
+                        testId="offers-row-licence"
+                        unknownTestId="offers-row-licence-unknown"
+                        caveat="— a licence is not a terms check and it is not evidence this offer is live: the row's status above says whether the offer itself was confirmed."
+                      />
                     </div>
                     <div className="text-right">
                       <span className="text-xs text-gray-400">Min stake</span>
