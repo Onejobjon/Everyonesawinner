@@ -9,6 +9,7 @@ import Calculator from "./pages/Calculator";
 import Oddsmatcher from "./pages/Oddsmatcher";
 import LayBets from "./pages/LayBets";
 import BetBuilder from "./pages/BetBuilder";
+import SameMatch from "./pages/SameMatch";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
 import Logout from "./pages/Logout";
@@ -31,6 +32,10 @@ export default function App() {
         <Route path="/oddsmatcher" element={<Oddsmatcher />} />
         <Route path="/lay-bets" element={<LayBets />} />
         <Route path="/bet-builder" element={<BetBuilder />} />
+        {/* Same-Match Planner: one fixture at a time, plans that pin exactly one
+            scoreline with exactly one lay. Lives beside /bet-builder, which is
+            unchanged — its rename is still queued. */}
+        <Route path="/same-match" element={<SameMatch />} />
         {/* Acca Finder is now the Bet Builder (multi-leg); singles live in /lay-bets */}
         <Route path="/acca-finder" element={<Navigate to="/bet-builder" replace />} />
         {/* World Cup is over — redirect old links to the Lay Bet Finder */}

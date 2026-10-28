@@ -7,6 +7,7 @@ import { join, extname } from "node:path";
 import { startAlertWorker, runAlertCheck, alertStatus } from "./src/server/alerts";
 import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./src/server/odds-key";
 import { runLeagueSearch, parseLeagueParam } from "./src/server/league-search";
+import { runEventFetch, parseMarkets, isCatalogueSport } from "./src/server/same-match";
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser, findByEmail } from "./src/server/users";
 import { resolveSession, revokeSession } from "./src/server/sessions";
@@ -189,6 +190,72 @@ const server = Bun.serve({
           { status: 502, headers: { "cache-control": "no-store" } },
         );
       }
+    }
+
+    // ONE fixture's markets, on demand — the Same-Match Planner's paid step.
+    //
+    // The per-event endpoint bills 1 credit per event per market per region
+    // (measured), so this serves exactly one event and never sweeps. Auth is
+    // checked first (same order as /api/odds-leagues): an anonymous or non-Pro
+    // caller costs ZERO credits, because nothing calls the provider until the
+    // gate has passed.
+    if (url.pathname === "/api/same-match") {
+      const gate = await requireProSession(req, "this fetch");
+      if (!gate.ok) {
+        console.warn(`[same-match] refused ${url.pathname} — ${gate.error}`);
+        return Response.json(
+          { error: gate.error, message: gate.message },
+          { status: gate.status, headers: { "cache-control": "no-store" } },
+        );
+      }
+      const eventId = (url.searchParams.get("event") || "").trim();
+      const sport = (url.searchParams.get("sport") || "").trim();
+      const markets = parseMarkets(url.searchParams.get("markets"));
+      if (!eventId || !sport) {
+        return Response.json(
+          {
+            error: "no_event",
+            message: "Pick one fixture first — this fetch covers exactly one match.",
+          },
+          { status: 400, headers: { "cache-control": "no-store" } },
+        );
+      }
+      if (!isCatalogueSport(sport)) {
+        return Response.json(
+          {
+            error: "unknown_competition",
+            message: "That competition is not in our list, so nothing was requested. Nothing was charged.",
+          },
+          { status: 400, headers: { "cache-control": "no-store" } },
+        );
+      }
+      if (!ODDS_API_KEY) {
+        console.error(`[same-match] refused — ${oddsKeyProblem()}`);
+        return Response.json(
+          {
+            error: "odds_unavailable",
+            message:
+              "The live odds feed is not configured on this server, so this match cannot be fetched. Nothing was charged.",
+          },
+          { status: 503, headers: { "cache-control": "no-store" } },
+        );
+      }
+      const result = await runEventFetch({ sport, eventId, markets, apiKey: ODDS_API_KEY });
+      if (!result.ok) {
+        console.error(`[same-match] ${sport}/${eventId} failed — ${result.error}`);
+        return Response.json(
+          { ...result, error: "fetch_failed", message: result.error },
+          { status: 502, headers: { "cache-control": "no-store" } },
+        );
+      }
+      const spent = result.credits.measured
+        ? `${result.credits.spent} credits`
+        : `~${result.credits.spent} credits (estimated)`;
+      console.log(
+        `[same-match] ${sport}/${eventId} markets=${result.markets.join(",")} ${spent}` +
+          (result.credits.remaining != null ? `, ${result.credits.remaining} left` : ""),
+      );
+      return Response.json(result, { headers: { "cache-control": "no-store" } });
     }
 
     // Non-secret alert-config status (channel presence + schedule only).
