@@ -35,9 +35,9 @@ export default function EmailCapture({ source = "homepage" }: { source?: string 
         {status === "done" ? (
           <div className="rounded-2xl border border-green-200 bg-white p-10 text-center shadow-sm dark:border-green-900 dark:bg-gray-950">
             <span className="text-5xl">🎉</span>
-            <h3 className="mt-4 text-2xl font-bold tracking-tight">You're on the list!</h3>
+            <h3 className="mt-4 text-2xl font-bold tracking-tight">Details saved.</h3>
             <p className="mt-3 text-gray-600 dark:text-gray-400">
-              Thanks{name ? ` ${name.split(" ")[0]}` : ""} — we'll email you when new offers land.
+              Thanks{name ? ` ${name.split(" ")[0]}` : ""} — your details are saved. We aren't sending emails yet.
             </p>
             <Link
               to="/signup"
@@ -48,9 +48,9 @@ export default function EmailCapture({ source = "homepage" }: { source?: string 
           </div>
         ) : (
           <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-            <h3 className="text-2xl font-bold tracking-tight">Get new offers by email</h3>
+            <h3 className="text-2xl font-bold tracking-tight">Get told when this opens</h3>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              We'll drop you a line when fresh free-bet offers go live. No spam, unsubscribe anytime.
+              We're collecting a list for launch. Nothing is sent yet and there is no newsletter running — leave your details and we'll contact you once there is something to send.
             </p>
             <form onSubmit={onSubmit} className="mt-6 space-y-4">
               <div>

@@ -560,7 +560,7 @@ export default function LayBets() {
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair). Figures use your £{stakeVal} back stake and include 5% exchange commission.
+                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair or Smarkets — each row names its source). Figures use your £{stakeVal} back stake and include 5% exchange commission.
               </p>
             </>
           )}

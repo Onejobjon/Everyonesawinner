@@ -261,7 +261,6 @@ export default function FreeBetsOffers({
                 ? "No row on this page carries that evidence today"
                 : `${withEvidence} of ${OFFERS.length} rows carry it`}. Where we could not check an operator, the row
               says so and makes no licence claim — which is not a statement that the operator is unlicensed.
-              running: that is what each row's status shows.{" "}
               <a href="/how-we-check-offers" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
                 How we check these offers
               </a>.

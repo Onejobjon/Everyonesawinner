@@ -97,7 +97,7 @@ function FeaturedPicks() {
 
 function SportSections() {
   const sports = [
-    { key: "Lay Bets", icon: "⚡", desc: "Close, profitable lays — bookmaker odds vs Betfair exchange", link: "/lay-bets", color: "purple" },
+    { key: "Lay Bets", icon: "⚡", desc: "Close lays — bookmaker odds next to exchange lay odds", link: "/lay-bets", color: "purple" },
     { key: "Premier League", icon: "⚽", desc: "Best prices across all EPL matches", link: "/oddsmatcher", color: "indigo" },
     { key: "La Liga", icon: "🇪🇸", desc: "Spanish La Liga odds compared", link: "/oddsmatcher", color: "red" },
     { key: "Bundesliga", icon: "🇩🇪", desc: "German Bundesliga best odds", link: "/oddsmatcher", color: "amber" },
@@ -193,7 +193,7 @@ function Footer() {
               <span className="rounded-lg bg-indigo-600 p-1.5 text-white font-bold text-sm">EAW</span>
               <span className="text-lg font-bold tracking-tight">Everyone's A Winner</span>
             </Link>
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 max-w-xs">Turn free bets into tax-free cash. Made simple for everyone.</p>
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 max-w-xs">Best odds across UK bookmakers, and the offers we can evidence. 18+ · begambleaware.org</p>
           </div>
           <div>
             <h4 className="text-sm font-semibold">Product</h4>
@@ -240,7 +240,7 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-6 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300 mb-8">
             <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-            Legal • Tax-free • Fully hedged
+            18+ • Legal in the UK • Not risk-free
           </div>
           <h1 className="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl">
             Turn <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Free Bets</span> Into Cash
@@ -328,12 +328,12 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and exactly what they include. <strong>50% off Pro for your first month.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and nothing can be charged until it does.</span></p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and what each one would include. <strong>No plan can be bought yet.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and nothing can be charged until it does.</span></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
-              {n:"Starter",p:"£9.99",pr:"/month",d:"The oddsmatcher and the calculator.",f:["Best Odds Finder (oddsmatcher)","Profit calculator with lay stake and liability","The licence-checked free-bets list"],pop:false},
-              {n:"Pro",orig:"£19.99",disc:"£9.99",pr:"/month",d:"Adds the two lay tools.",f:["Everything in Starter","Lay Bet Finder — close single lays, searched on demand","Acca Lay Planner — 2–4 leg lay plans"],pop:true},
-              {n:"Annual",orig:"",disc:"£199",pr:"/year",d:"Twelve months of Pro.",f:["Everything in Pro","One payment for the year instead of twelve"],pop:false},
+              {n:"Starter",p:"£9.99",pr:"/month (planned)",d:"The oddsmatcher and the calculator.",f:["Best Odds Finder (oddsmatcher)","Profit calculator with lay stake and liability","The licence-checked free-bets list"],pop:false},
+              {n:"Pro",orig:"",disc:"£9.99",pr:"/month (planned)",d:"Adds the two lay tools.",f:["Everything in Starter","Lay Bet Finder — close single lays, searched on demand","Acca Lay Planner — 2–4 leg lay plans"],pop:true},
+              {n:"Annual",orig:"",disc:"£199",pr:"/year (planned)",d:"Twelve months of Pro.",f:["Everything in Pro","One payment for the year instead of twelve"],pop:false},
             ].map((plan,i) => (
               <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.pop ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>
                 {plan.pop && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">Most popular</span>}
@@ -350,9 +350,6 @@ export default function Home() {
                     <span className="text-4xl font-extrabold">{plan.disc}</span>
                   )}
                   <span className="text-sm text-gray-500">{plan.pr}</span>
-                  {plan.orig && plan.n === "Pro" && (
-                    <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">50% OFF</span>
-                  )}
                 </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{plan.d}</p>
                 <ul className="mt-6 space-y-3">{plan.f.map((feat,j) => (<li key={j} className="flex items-center gap-3 text-sm"><svg className="h-5 w-5 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>{feat}</li>))}</ul>
@@ -366,12 +363,12 @@ export default function Home() {
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
         <div className="mx-auto max-w-3xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Frequently asked questions</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400">Everything you need to know about earning from free bets.</p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Frequently asked questions</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400">Straight answers, including the ones that cost us a sale.</p></div>
           <div className="mt-12 space-y-4">
             {["Is earning from free bets legal?","How much money can I make?","Do I need any experience?","Is the profit really tax-free?","How much money do I need to start?","Why do I get fewer free-bet alerts than I used to?"].map((q,i) => (
               <details key={i} className="rounded-xl border border-gray-200 dark:border-gray-800">
                 <summary className="flex cursor-pointer items-center justify-between px-6 py-4 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">{q}<svg className="h-5 w-5 flex-shrink-0 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></summary>
-                <div className="px-6 pb-4 text-sm text-gray-600 dark:text-gray-400">{["Yes, it's completely legal in the UK and Ireland. You're simply using promotional offers that bookmakers willingly provide.","We don't quote an average monthly profit, because we would be making it up — we don't have the user base to measure one honestly. What we do give you is the exact profit on every opportunity, in pounds, before you place anything. Your own results depend on how many offers you work through.","None! You don't need to know anything about sports. Our calculator does all the work for you.","Yes! Gambling winnings in the UK and Ireland are tax-free — no income tax or capital gains tax.","As little as £100-£200. Most offers require only £5-£10 to get started.","We would rather send you fewer, real alerts than fabricated ones. A free bet only counts as more than 100% retention when the value you keep beats the free bet face value, and mathematically that needs the exchange lay price to sit well below the bookmaker back price. When that gap is large, the two prices are almost always describing slightly different markets rather than a genuine edge — so we withhold them and do not alert on them. In practice that leaves longer odds, around 20 and above, where the exchange is tight. We do not promise a frequency; some weeks will be quieter than others."][i]}</div>
+                <div className="px-6 pb-4 text-sm text-gray-600 dark:text-gray-400">{["Matched betting is not illegal in the UK or Ireland — you're placing bets the bookmaker offers and covering them on an exchange. It is not against the law, but it is usually against a bookmaker's own terms: they can restrict or close an account they think is matched betting, and they can withhold a free bet. Plan for that.","We don't quote an average monthly profit, because we would be making it up — we don't have the user base to measure one honestly. What we do give you is the exact profit on every opportunity, in pounds, before you place anything. Your own results depend on how many offers you work through.","None! You don't need to know anything about sports. Our calculator does all the work for you.","We are not tax advisers and you should not take this as tax advice. Gambling winnings are not taxed as income for a casual punter in the UK, but if you are treating this as a trade the position can differ, and Ireland and the UK are not identical. Ask HMRC or Revenue, or an accountant, about your own situation.","As little as £100-£200. Most offers require only £5-£10 to get started.","We would rather send you fewer, real alerts than fabricated ones. A free bet only counts as more than 100% retention when the value you keep beats the free bet face value, and mathematically that needs the exchange lay price to sit well below the bookmaker back price. When that gap is large, the two prices are almost always describing slightly different markets rather than a genuine edge — so we withhold them and do not alert on them. In practice that leaves longer odds, around 20 and above, where the exchange is tight. We do not promise a frequency; some weeks will be quieter than others."][i]}</div>
               </details>
             ))}
           </div>
@@ -384,7 +381,7 @@ export default function Home() {
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Start turning free bets into profit today</h2>
           <p className="mt-4 text-lg text-indigo-100">Every offer, every outcome — see the exact return before you place a bet.</p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="#pricing" className="rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-indigo-700 shadow-lg hover:bg-indigo-50 transition-all">Subscribe Now →</a>
+            <a href="#pricing" className="rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-indigo-700 shadow-lg hover:bg-indigo-50 transition-all">See the plans →</a>
             <a href="#how-it-works" className="rounded-xl border border-white/30 px-8 py-3.5 text-base font-semibold text-white hover:bg-white/10 transition-colors">Learn more</a>
           </div>
         </div>

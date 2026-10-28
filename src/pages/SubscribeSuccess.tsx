@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { useAuth, type Plan } from "../lib/auth";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 
 export default function SubscribeSuccess() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { activateSubscription, user } = useAuth();
+  const { user } = useAuth();
   const [status, setStatus] = useState<"activating" | "done" | "error">("activating");
   const [countdown, setCountdown] = useState(3);
 
@@ -16,18 +15,10 @@ export default function SubscribeSuccess() {
     }
 
     try {
-      // Determine the plan: ?plan= query param takes precedence, else the
-      // plan the user selected in /subscribe before opening Stripe.
-      const fromQuery = searchParams.get("plan");
-      const pending = localStorage.getItem("eaw_pending_plan");
-      const plan: Plan =
-        fromQuery === "pro" || fromQuery === "annual" || fromQuery === "starter"
-          ? fromQuery
-          : pending === "pro" || pending === "annual" || pending === "starter"
-          ? pending
-          : "starter";
+      // No payment has been received, so there is nothing to activate here.
+      // Only the server can grant a plan; we just clear the leftover hint the
+      // /subscribe page wrote before it opened checkout.
       localStorage.removeItem("eaw_pending_plan");
-      activateSubscription(plan);
       setStatus("done");
 
       // Redirect to dashboard after 3 seconds

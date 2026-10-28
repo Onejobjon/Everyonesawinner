@@ -9,13 +9,12 @@ const plans: {
   desc: string;
   features: string[];
   popular: boolean;
-  orig?: string;
 }[] = [
   {
     id: "starter",
     name: "Starter",
     price: "£9.99",
-    period: "/month",
+    period: "/month (planned)",
     desc: "The oddsmatcher and the calculator.",
     features: [
       "Best Odds Finder (oddsmatcher)",
@@ -27,9 +26,8 @@ const plans: {
   {
     id: "pro",
     name: "Pro",
-    orig: "£19.99",
     price: "£9.99",
-    period: "/month",
+    period: "/month (planned)",
     desc: "Adds the two lay tools.",
     features: [
       "Everything in Starter",
@@ -42,7 +40,7 @@ const plans: {
     id: "annual",
     name: "Annual",
     price: "£199",
-    period: "/year",
+    period: "/year (planned)",
     desc: "Twelve months of Pro at the same tools.",
     features: [
       "Everything in Pro",
@@ -124,20 +122,8 @@ export default function Subscribe() {
               )}
               <h3 className="text-lg font-semibold">{plan.name}</h3>
               <div className="mt-4 flex items-baseline gap-1">
-                {(plan as any).orig ? (
-                  <>
-                    <span className="text-2xl font-extrabold text-gray-400 line-through">{(plan as any).orig}</span>
-                    <span className="text-4xl font-extrabold text-indigo-600">{plan.price}</span>
-                  </>
-                ) : (
-                  <span className="text-4xl font-extrabold">{plan.price}</span>
-                )}
+                <span className="text-4xl font-extrabold">{plan.price}</span>
                 <span className="text-sm text-gray-500">{plan.period}</span>
-                {(plan as any).orig && plan.name === "Pro" && (
-                  <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">
-                    50% OFF
-                  </span>
-                )}
               </div>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{plan.desc}</p>
               <ul className="mt-6 space-y-3">

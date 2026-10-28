@@ -120,9 +120,8 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">Planned plan</span>
               <h3 className="mt-3 text-lg font-semibold">Pro Monthly</h3>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-sm font-bold text-gray-400 line-through">£19.99</span>
                 <span className="text-3xl font-extrabold text-indigo-600">£9.99</span>
-                <span className="text-sm text-gray-500">/mo</span>
+                <span className="text-sm text-gray-500">/mo (planned)</span>
               </div>
               <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
                 <li>• Lay Bet Finder — close single lays</li>
@@ -140,7 +139,7 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
                 <span className="text-3xl font-extrabold">£199</span>
                 <span className="text-sm text-gray-500">/yr</span>
               </div>
-              <p className="mt-1 text-xs text-gray-500">Save £40 vs monthly</p>
+              <p className="mt-1 text-xs text-gray-500">Billed once a year (planned)</p>
               <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
                 <li>• Lay Bet Finder — close single lays</li>
                 <li>• Acca Lay Planner — 2–4-leg lay plans</li>

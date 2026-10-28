@@ -7,10 +7,9 @@
  *
  * The important rule lives in `licenceEvidence`: a UK tick is only allowed when
  * the row itself carries the licensee and its Gambling Commission register
- * account. The pruned dataset records the register evidence that justified
- * removing a row, but does not (yet) store it per kept row — so today no row
- * earns a tick, and both surfaces say so instead of implying a licence we
- * cannot point at.
+ * account. The pruned dataset stores the licensee and register account on every
+ * kept row, so the tick and the licence line render from the row itself — never
+ * from a list kept in code.
  */
 export interface FreeBetOffer {
   bookmaker: string;

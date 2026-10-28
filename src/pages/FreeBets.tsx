@@ -162,9 +162,9 @@ function OddsPreview() {
             to="/signup"
             className="inline-block rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all"
           >
-            See every match — from £4.99
+            The full oddsmatcher is on the plans
           </Link>
-          <p className="mt-3 text-xs text-gray-500">50% off your first month · cancel anytime</p>
+          <p className="mt-3 text-xs text-gray-500">No plan can be bought yet — checkout opens shortly</p>
         </div>
       </div>
     </section>

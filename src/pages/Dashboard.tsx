@@ -46,7 +46,7 @@ export default function Dashboard() {
             <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-950">
               <span className="text-2xl">⚡</span>
               <h3 className="mt-4 text-lg font-semibold">Lay Bet Finder</h3>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Close, profitable lays — bookmaker odds vs Betfair exchange.</p>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Close lays — bookmaker odds vs exchange lay odds.</p>
               <Link to="/lay-bets" className="mt-4 inline-block text-sm font-semibold text-indigo-600 hover:text-indigo-700">Open →</Link>
             </div>
           </div>
