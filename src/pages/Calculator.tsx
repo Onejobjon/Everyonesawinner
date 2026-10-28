@@ -4,7 +4,11 @@ import Paywall from "../components/Paywall";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "../components/CommissionControl";
 
 export function calcProfit(stake: number, backOdds: number, layOdds: number, comm: number) {
-  const layStake = stake * (backOdds - 1) / (layOdds - 1);
+  // Commission-aware lay stake — the SAME formula as calcLay in lib/odds.ts,
+  // so the calculator and the Lay Bet Finder can never quote different numbers
+  // for the same bet. (The old formula had no commission term, so both outcomes
+  // did not balance and it printed ~22p more loss than the finder did.)
+  const layStake = (stake * backOdds) / (layOdds - comm / 100);
   const liability = layStake * (layOdds - 1);
   const backWin = stake * (backOdds - 1) - liability;
   const layWin = layStake * (1 - comm / 100) - stake;

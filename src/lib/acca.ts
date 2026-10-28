@@ -43,7 +43,7 @@ export interface AccaPlan {
    * correctly, this is the SAME whether the acca wins or any leg loses.
    */
   retainedProfit: number;
-  /** Share of the free-bet value kept = retainedProfit / grossReturn (0–1). */
+  /** Share of the free-bet STAKE kept = retainedProfit / freeStake (0–1). */
   retention: number;
   /** Per-leg lay plan, in the order the legs must be laid. */
   legs: AccaLegPlan[];
@@ -113,7 +113,10 @@ export function sequentialLayPlan(
     combinedBackOdds: round2(B),
     grossReturn: round2(grossReturn),
     retainedProfit: round2(retainedProfit),
-    retention: grossReturn > 0 ? retainedProfit / grossReturn : 0,
+    // Retention means the share of the free-bet STAKE kept. Dividing by
+    // grossReturn measured the share of the pot the bet would pay if it won,
+    // and printed "Retain 11%" for a plan the guide correctly calls 79%.
+    retention: freeStake > 0 ? retainedProfit / freeStake : 0,
     legs: legPlans.map((lp) => ({
       ...lp,
       layStake: round2(lp.layStake),
@@ -179,7 +182,7 @@ export function sequentialLayPlanPaid(
     combinedBackOdds: round2(B),
     grossReturn: round2(grossReturn),
     retainedProfit: round2(lockedIn),
-    retention: grossReturn > 0 ? lockedIn / grossReturn : 0, // negative when a cost
+    retention: backStake > 0 ? lockedIn / backStake : 0, // share of the back stake kept
     legs: legPlans.map((lp) => ({
       ...lp,
       layStake: round2(lp.layStake),

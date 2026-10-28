@@ -574,7 +574,7 @@ export default function BetBuilder() {
                           </div>
                           {mode === "free" && (
                             <div className="rounded-md bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-300">
-                              Retain {retentionPct}%
+                              Retain {retentionPct}% of the free bet
                             </div>
                           )}
                         </div>

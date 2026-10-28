@@ -22,11 +22,26 @@ describe("calculator headline", () => {
     expect(r.profit).toBe(Math.min(r.backWin, r.layWin));
   });
 
-  test("headline is never the midpoint when the two outcomes differ", () => {
+  test("both outcomes balance: the calculator agrees with the Lay Bet Finder", () => {
+    // Once the lay stake includes commission (the formula calcLay uses), the two
+    // outcomes must land in the same place to within a penny. The OLD formula had
+    // no commission term, so they diverged — and this calculator quoted a
+    // different loss from the finder for an identical bet.
     const r = calcProfit(DEFAULTS.stake, DEFAULTS.backOdds, DEFAULTS.layOdds, DEFAULTS.comm);
-    const midpoint = Math.round(((r.backWin + r.layWin) / 2) * 100) / 100;
-    expect(r.profit).not.toBe(midpoint);
-    expect(r.profit).toBeLessThan(midpoint);
+    expect(Math.abs(r.backWin - r.layWin)).toBeLessThanOrEqual(0.01);
+    expect(r.profit).toBe(Math.min(r.backWin, r.layWin));
+  });
+
+  test("commission is charged: a 5% exchange costs more than a 2% one", () => {
+    const two = calcProfit(10, 3.0, 3.1, 2);
+    const five = calcProfit(10, 3.0, 3.1, 5);
+    expect(five.profit).toBeLessThan(two.profit);
+  });
+
+  test("the lay stake is shorter than the back stake, as the formula requires", () => {
+    const r = calcProfit(20, 2.0, 2.05, 2);
+    expect(r.layStake).toBeLessThan(20);
+    expect(r.layStake).toBeGreaterThan(19);
   });
 
   test("a genuinely good match still reports the smaller (but positive) side", () => {
