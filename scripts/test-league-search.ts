@@ -38,13 +38,21 @@ const CATALOGUE = JSON.parse(readFileSync(join(ROOT, "src", "data", "sports-cata
   defaultKeys: string[];
 };
 
+/**
+ * Fixed kick-off epoch. The stub must be DETERMINISTIC: section 9 runs the same
+ * behaviour through the platform module and the Vercel function and compares the
+ * two payloads byte for byte, so a `Date.now()`-derived commence_time would make
+ * the two calls differ by a few milliseconds and fail on nothing but the clock.
+ */
+const EVENT_EPOCH = Date.UTC(2026, 10, 29, 15, 0, 0);
+
 /** Minimal provider event so the combined count is easy to reason about. */
 function event(sportKey: string, n: number) {
   return {
     id: `${sportKey}-${n}`,
     sport_key: sportKey,
     sport_title: sportKey,
-    commence_time: new Date(Date.now() + 3_600_000 * (n + 1)).toISOString(),
+    commence_time: new Date(EVENT_EPOCH + 3_600_000 * (n + 1)).toISOString(),
     home_team: `Home ${n}`,
     away_team: `Away ${n}`,
     bookmakers: [],
@@ -71,14 +79,21 @@ interface StubBehaviour {
 
 function makeFetch(behaviour: StubBehaviour) {
   const calls: Call[] = [];
-  const fetchImpl = (async (input: any) => {
+  const fetchImpl = (async (input: any, init?: any) => {
     const url = String(input);
     calls.push({ url, at: Date.now() });
     const key = url.match(/sports\/([^/]+)\/odds/)?.[1] ?? "";
     if (behaviour.hang?.includes(key)) {
-      // Never resolves — the caller's AbortController must cut it off.
+      // Never answers on its own — only the caller's abort cuts it off. This is
+      // what a real hung request looks like, and the production code relies on
+      // AbortController (not on the stub being polite).
       return new Promise((_, reject) => {
-        setTimeout(() => reject(Object.assign(new Error("aborted"), { name: "AbortError" })), 60_000);
+        const abort = () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        const signal: AbortSignal | undefined = init?.signal;
+        if (signal) {
+          if (signal.aborted) return abort();
+          signal.addEventListener("abort", abort);
+        }
       });
     }
     const headers = new Map<string, string>([
@@ -311,3 +326,4 @@ if (failures.length === 0) {
   for (const f of failures) console.log(`   • ${f}`);
   process.exit(1);
 }
+process.exit(failures.length === 0 ? 0 : 1);
