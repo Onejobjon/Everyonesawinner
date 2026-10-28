@@ -217,6 +217,8 @@ function Footer() {
             <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <li><Link to="/free-bets" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Free bets</Link></li>
               <li><Link to="/how-we-check-offers" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">How we check offers</Link></li>
+              <li><Link to="/privacy" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Privacy</Link></li>
+              <li><Link to="/terms" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Terms</Link></li>
             </ul>
           </div>
         </div>

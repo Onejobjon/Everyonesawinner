@@ -3,6 +3,8 @@ import { AuthProvider } from "./lib/auth";
 import Home from "./pages/Home";
 import FreeBets from "./pages/FreeBets";
 import HowWeCheckOffers from "./pages/HowWeCheckOffers";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 import Calculator from "./pages/Calculator";
 import Oddsmatcher from "./pages/Oddsmatcher";
 import LayBets from "./pages/LayBets";
@@ -21,6 +23,10 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/free-bets" element={<FreeBets />} />
         <Route path="/how-we-check-offers" element={<HowWeCheckOffers />} />
+        {/* Legal pages sit in the public part of the router — no login, because a
+            privacy notice you have to sign in to read is not a privacy notice. */}
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="/calculator" element={<Calculator />} />
         <Route path="/oddsmatcher" element={<Oddsmatcher />} />
         <Route path="/lay-bets" element={<LayBets />} />

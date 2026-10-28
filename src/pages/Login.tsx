@@ -80,6 +80,14 @@ export default function Login() {
           </button>
         </form>
 
+        <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
+          We store what you type here — see how in our{" "}
+          <Link to="/privacy" className="text-indigo-600 underline hover:text-indigo-700 dark:text-indigo-400">
+            Privacy notice
+          </Link>
+          .
+        </p>
+
         <p className="mt-8 text-center text-sm text-gray-500">
           Don't have an account? <Link to="/signup" className="text-indigo-600 hover:text-indigo-700 font-medium">Create one</Link>
         </p>

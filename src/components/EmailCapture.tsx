@@ -93,6 +93,13 @@ export default function EmailCapture({ source = "homepage" }: { source?: string 
                 {status === "submitting" ? "Saving…" : "Keep me posted"}
               </button>
             </form>
+            <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
+              We store what you type here — see how in our{" "}
+              <Link to="/privacy" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
+                Privacy notice
+              </Link>
+              .
+            </p>
           </div>
         )}
       </div>
