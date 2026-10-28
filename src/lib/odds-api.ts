@@ -582,3 +582,130 @@ export function clearCache(sportKey?: string): void {
     }
   }
 }
+// ── On-demand, league-scoped search (Lay Bet Finder) ────────────────────────
+//
+// DELIBERATELY SEPARATE from fetchOdds() above, which reads a 10-minute cache:
+// a search is a fresh read of the feed, performed only when the user presses
+// Search. Nothing here reads or writes the odds caches, in memory or in
+// localStorage — otherwise the button could serve yesterday's prices and call
+// them fresh, and a search would silently become "free" while claiming to be
+// a live read.
+
+/** One competition covered by a search: what came back, and how it went. */
+export interface SearchedLeague {
+  key: string;
+  /** Readable competition name, from the generated catalogue. */
+  label: string;
+  ok: boolean;
+  /** Fixtures the provider returned for this competition. */
+  events: number;
+  /** Wall time for this competition's request, in ms. */
+  ms: number;
+  /** Plain-language reason, present only when ok is false. */
+  error?: string;
+}
+
+export interface LeagueSearchResult {
+  /** Combined, sanity-checked matches from every competition that answered. */
+  matches: Match[];
+  /** Per-competition outcome, in the order requested. */
+  leagues: SearchedLeague[];
+  /** Keys the server refused (not in the competition catalogue) — never fetched. */
+  rejected: string[];
+  credits: {
+    perLeague: number;
+    spent: number;
+    remaining: number | null;
+    measured: boolean;
+  };
+  /** Fixtures the provider returned across every competition (before filtering). */
+  fixtures: number;
+  elapsedMs: number;
+  fetchedAt: string;
+}
+
+interface LeagueSearchPayload {
+  ok?: boolean;
+  partial?: boolean;
+  requested?: string[];
+  rejected?: string[];
+  leagues?: SearchedLeague[];
+  events?: unknown[];
+  credits?: { perLeague?: number; spent?: number; remaining?: number | null; measured?: boolean };
+  fetchedAt?: string;
+  error?: string;
+  message?: string;
+}
+
+/**
+ * Run a real, fresh search over the given competitions.
+ *
+ * Throws only when the search itself could not run (no competition returned,
+ * network failure, server misconfigured). A single competition failing is NOT
+ * an error: it comes back in `leagues` with ok:false and a reason, so the page
+ * can show the others and say which one is missing.
+ */
+export async function searchLeagues(leagueKeys: string[]): Promise<LeagueSearchResult> {
+  const started = Date.now();
+  const keys = leagueKeys.filter((k) => typeof k === "string" && k.length > 0);
+  if (keys.length === 0) {
+    throw new Error("Pick at least one competition to search.");
+  }
+  const url = `/api/odds-leagues?leagues=${encodeURIComponent(keys.join(","))}`;
+  const res = await fetch(url, { headers: { accept: "application/json" }, cache: "no-store" });
+  let payload: LeagueSearchPayload | null = null;
+  try {
+    payload = (await res.json()) as LeagueSearchPayload;
+  } catch {
+    payload = null;
+  }
+  if (!res.ok || !payload) {
+    throw new Error(
+      payload?.message ||
+        (res.status === 429
+          ? "Too many searches just now — wait a moment and try again."
+          : `The search could not run (${res.status}). Please try again.`),
+    );
+  }
+  const leagues = Array.isArray(payload.leagues) ? payload.leagues : [];
+  const answered = leagues.filter((l) => l.ok);
+  if (answered.length === 0) {
+    const reasons = leagues.map((l) => `${l.label}: ${l.error ?? "no result"}`).join("; ");
+    throw new Error(
+      reasons ? `No competition answered — ${reasons}` : "No competition answered. Please try again.",
+    );
+  }
+
+  // Group the combined events by competition so each one is transformed with its
+  // own sport key: that is what applies the shared odds-sanity rules
+  // (sentinel prices dropped, a lay >10% below the back withheld) and the
+  // ice-hockey exclusion. No transform is re-implemented here.
+  const byKey = new Map<string, ApiMatch[]>();
+  for (const ev of payload.events ?? []) {
+    const match = ev as ApiMatch;
+    if (!match || typeof match.sport_key !== "string") continue;
+    const bucket = byKey.get(match.sport_key);
+    if (bucket) bucket.push(match);
+    else byKey.set(match.sport_key, [match]);
+  }
+  const matches: Match[] = [];
+  for (const [sportKey, events] of byKey) {
+    matches.push(...transformMatches(events, sportKey));
+  }
+
+  const credits = payload.credits ?? {};
+  return {
+    matches,
+    leagues,
+    rejected: Array.isArray(payload.rejected) ? payload.rejected : [],
+    credits: {
+      perLeague: typeof credits.perLeague === "number" ? credits.perLeague : 1,
+      spent: typeof credits.spent === "number" ? credits.spent : keys.length,
+      remaining: typeof credits.remaining === "number" ? credits.remaining : null,
+      measured: Boolean(credits.measured),
+    },
+    fixtures: Array.isArray(payload.events) ? payload.events.length : 0,
+    elapsedMs: Date.now() - started,
+    fetchedAt: payload.fetchedAt ?? new Date().toISOString(),
+  };
+}

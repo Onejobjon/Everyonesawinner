@@ -6,6 +6,7 @@
 import { join, extname } from "node:path";
 import { startAlertWorker, runAlertCheck, alertStatus } from "./src/server/alerts";
 import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./src/server/odds-key";
+import { runLeagueSearch, parseLeagueParam } from "./src/server/league-search";
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser, findByEmail } from "./src/server/users";
 import { resolveSession, revokeSession } from "./src/server/sessions";
@@ -123,6 +124,56 @@ const server = Bun.serve({
         return new Response(body, { status: upstream.status, headers });
       } catch (e) {
         return Response.json({ error: "odds proxy failed" }, { status: 502 });
+      }
+    }
+
+    // On-demand, league-scoped odds search — the Lay Bet Finder's Search button
+    // (src/server/league-search.ts). Query: ?leagues=soccer_epl,soccer_efl_champ
+    //
+    // Deliberately SEPARATE from /api/odds above:
+    //  • it never reads the 10-minute cache (a search is a fresh read), and
+    //  • it never writes it, so a user's search can neither serve stale numbers
+    //    as "fresh" nor disturb what the scheduled alert worker sees.
+    if (url.pathname === "/api/odds-leagues") {
+      const keys = parseLeagueParam(url.searchParams.get("leagues"));
+      if (keys.length === 0) {
+        return Response.json(
+          {
+            error: "no_leagues",
+            message: "Pick at least one competition — a search only runs over the competitions you select.",
+          },
+          { status: 400, headers: { "cache-control": "no-store" } },
+        );
+      }
+      if (!ODDS_API_KEY) {
+        console.error(`[league-search] refused — ${oddsKeyProblem()}`);
+        return Response.json(
+          {
+            error: "odds_unavailable",
+            message:
+              "The live odds feed is not configured on this server, so a search cannot run. Nothing was charged.",
+          },
+          { status: 503, headers: { "cache-control": "no-store" } },
+        );
+      }
+      try {
+        const result = await runLeagueSearch(keys, { apiKey: ODDS_API_KEY });
+        const spent = result.credits.measured ? `${result.credits.spent} credits` : `~${result.credits.spent} credits (estimated)`;
+        console.log(
+          `[league-search] ${result.leagues.filter((l) => l.ok).length}/${result.leagues.length} leagues, ` +
+            `${result.events.length} events, ${spent}${result.credits.remaining != null ? `, ${result.credits.remaining} left` : ""}` +
+            (result.rejected.length ? `, rejected: ${result.rejected.join("|")}` : ""),
+        );
+        for (const l of result.leagues) {
+          if (!l.ok) console.error(`[league-search] league failed: ${l.key} — ${l.error}`);
+        }
+        return Response.json(result, { headers: { "cache-control": "no-store" } });
+      } catch (e) {
+        console.error(`[league-search] search failed: ${String(e)}`);
+        return Response.json(
+          { error: "search_failed", message: "The search could not run — please try again." },
+          { status: 502, headers: { "cache-control": "no-store" } },
+        );
       }
     }
 
