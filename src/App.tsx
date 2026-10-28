@@ -13,7 +13,6 @@ import Logout from "./pages/Logout";
 import Dashboard from "./pages/Dashboard";
 import Subscribe from "./pages/Subscribe";
 import SubscribeSuccess from "./pages/SubscribeSuccess";
-import Preview from "./pages/Preview";
 
 export default function App() {
   return (
@@ -36,7 +35,8 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/subscribe/success" element={<SubscribeSuccess />} />
-        <Route path="/preview" element={<Preview />} />
+        {/* /preview used to promise "no auth or subscription required" while the ?preview=1 bypass was removed for security — it now only showed a paywall, so send people to the real door */}
+        <Route path="/preview" element={<Navigate to="/login" replace />} />
       </Routes>
     </AuthProvider>
   );
