@@ -126,9 +126,8 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
               </div>
               <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
                 <li>• Lay Bet Finder — close single lays</li>
-                <li>• Bet Builder — 2–4-leg lay plans</li>
-                <li>• Everything in Starter</li>
-                <li>• Advanced oddsmatcher</li>
+                <li>• Acca Lay Planner — 2–4-leg lay plans</li>
+                <li>• Oddsmatcher and calculator</li>
               </ul>
               <button type="button" disabled aria-disabled="true" className="mt-6 block w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500">
                 Checkout opens shortly
@@ -144,9 +143,9 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
               <p className="mt-1 text-xs text-gray-500">Save £40 vs monthly</p>
               <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
                 <li>• Lay Bet Finder — close single lays</li>
-                <li>• Bet Builder — 2–4-leg lay plans</li>
+                <li>• Acca Lay Planner — 2–4-leg lay plans</li>
                 <li>• Everything in Pro</li>
-                <li>• 2 months free</li>
+                <li>• One payment for the year</li>
               </ul>
               <button type="button" disabled aria-disabled="true" className="mt-6 block w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500">
                 Checkout opens shortly
