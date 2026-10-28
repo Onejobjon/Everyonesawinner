@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import Paywall from "../components/Paywall";
+import { CommissionControl, CommissionNote, useExchangeCommission } from "../components/CommissionControl";
 
 export function calcProfit(stake: number, backOdds: number, layOdds: number, comm: number) {
   const layStake = stake * (backOdds - 1) / (layOdds - 1);
@@ -24,8 +25,10 @@ export default function Calculator() {
   const [stake, setStake] = useState(10);
   const [backOdds, setBackOdds] = useState(3.0);
   const [layOdds, setLayOdds] = useState(3.1);
-  const [comm, setComm] = useState(2);
-  const result = calcProfit(stake, backOdds, layOdds, comm);
+  // ONE shared commission, persisted across pages (2% by default, adjustable —
+  // Betfair charges per market, so a fixed rate would misstate the profit).
+  const { pct: commPct, label: commLabel, setPct: setCommPct } = useExchangeCommission();
+  const result = calcProfit(stake, backOdds, layOdds, commPct);
 
   return (
     <Paywall title="the profit calculator">
@@ -64,9 +67,7 @@ export default function Calculator() {
                 <p className="text-xs text-gray-400 mt-0.5">Decimal odds (e.g. 2.55)</p>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Exchange Fee (%)</label>
-                <input type="number" value={comm} onChange={(e) => setComm(Number(e.target.value))}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-900" min={0} max={10} step={0.5} />
+                <CommissionControl pct={commPct} onChange={setCommPct} />
               </div>
             </div>
 
@@ -77,6 +78,10 @@ export default function Calculator() {
               </p>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 The lower of the two figures below — that is the one you can count on.
+              </p>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <CommissionNote pct={commPct} className="font-medium" /> — figures use {commLabel} exchange
+                commission, adjustable above.
               </p>
               <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
                 <div>

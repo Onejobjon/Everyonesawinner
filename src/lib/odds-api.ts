@@ -638,6 +638,23 @@ interface LeagueSearchPayload {
 }
 
 /**
+ * The session token this browser holds, for endpoints that must identify the
+ * caller. A search is a Pro tool and the server checks the token itself (it
+ * does not trust the copy in localStorage) — this is only how the token gets
+ * there. Returns "" when there is no usable stored session.
+ */
+function sessionToken(): string {
+  try {
+    const stored = localStorage.getItem("eaw_session");
+    if (!stored) return "";
+    const parsed = JSON.parse(stored) as { token?: unknown };
+    return typeof parsed?.token === "string" ? parsed.token : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Run a real, fresh search over the given competitions.
  *
  * Throws only when the search itself could not run (no competition returned,
@@ -652,7 +669,13 @@ export async function searchLeagues(leagueKeys: string[]): Promise<LeagueSearchR
     throw new Error("Pick at least one competition to search.");
   }
   const url = `/api/odds-leagues?leagues=${encodeURIComponent(keys.join(","))}`;
-  const res = await fetch(url, { headers: { accept: "application/json" }, cache: "no-store" });
+  // The endpoint is Pro-gated server-side (401 anonymous / 403 not Pro), so the
+  // session token has to travel with the request. Without this the search would
+  // be refused for the very users the page is designed for.
+  const token = sessionToken();
+  const headers: Record<string, string> = { accept: "application/json" };
+  if (token) headers.authorization = `Bearer ${token}`;
+  const res = await fetch(url, { headers, cache: "no-store" });
   let payload: LeagueSearchPayload | null = null;
   try {
     payload = (await res.json()) as LeagueSearchPayload;

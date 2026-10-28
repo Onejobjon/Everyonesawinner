@@ -46,6 +46,9 @@ const CATALOGUE = JSON.parse(readFileSync(join(ROOT, "src", "data", "sports-cata
  */
 const EVENT_EPOCH = Date.UTC(2026, 10, 29, 15, 0, 0);
 
+/** A token the fake account service treats as a Pro session. */
+const PRO_TOKEN = "test-pro-session-token-0000000000000000";
+
 /** Minimal provider event so the combined count is easy to reason about. */
 function event(sportKey: string, n: number) {
   return {
@@ -59,11 +62,6 @@ function event(sportKey: string, n: number) {
   };
 }
 
-interface Call {
-  url: string;
-  at: number;
-}
-
 interface StubBehaviour {
   /** Events per competition key; default 2. */
   events?: Record<string, number>;
@@ -75,12 +73,45 @@ interface StubBehaviour {
   garbage?: string[];
   /** Credits the fake provider claims remain. */
   remaining?: number;
+  /**
+   * How the fake ACCOUNT service answers `/api/me` for the Vercel function's
+   * Pro gate. "pro"/"annual" = allowed, "starter" = signed in but not Pro (403),
+   * "anon" = 401, "down" = 503. Defaults to "pro".
+   */
+  me?: "pro" | "annual" | "starter" | "anon" | "down";
+}
+
+/** Calls to the odds provider (and the platform search). NOT the account check. */
+interface Call {
+  url: string;
+  at: number;
 }
 
 function makeFetch(behaviour: StubBehaviour) {
   const calls: Call[] = [];
   const fetchImpl = (async (input: any, init?: any) => {
     const url = String(input);
+    // The account check is NOT a provider call: it must never be counted as
+    // spend, and it is what the Pro gate reads. Answered separately so the
+    // "zero provider calls" assertions stay about credits.
+    if (/\/api\/me(\?|$)/.test(url)) {
+      const me = behaviour.me ?? "pro";
+      if (me === "anon") {
+        return new Response(JSON.stringify({ ok: false, error: "Not signed in" }), { status: 401 });
+      }
+      if (me === "down") {
+        return new Response(JSON.stringify({ ok: false, error: "Account service unavailable" }), {
+          status: 503,
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          user: { name: "Test", email: "test@example.com", subscription: me !== "starter", plan: me },
+        }),
+        { status: 200 },
+      );
+    }
     calls.push({ url, at: Date.now() });
     const key = url.match(/sports\/([^/]+)\/odds/)?.[1] ?? "";
     if (behaviour.hang?.includes(key)) {
@@ -259,7 +290,10 @@ console.log("9. Vercel function === platform module");
     },
   };
   await handler(
-    { url: "/api/odds-leagues?leagues=soccer_epl,soccer_efl_champ,soccer_uefa_champs_league", headers: { host: "x" } },
+    {
+      url: "/api/odds-leagues?leagues=soccer_epl,soccer_efl_champ,soccer_uefa_champs_league",
+      headers: { host: "x", authorization: `Bearer ${PRO_TOKEN}` },
+    },
     res,
   );
   (globalThis as any).fetch = originalFetch;
@@ -274,6 +308,117 @@ console.log("9. Vercel function === platform module");
   check("the failing league is reported the same way", /500/.test(body.leagues.find((l: any) => l.key === "soccer_uefa_champs_league").error ?? ""));
   check("no-store on the response", res.headers["cache-control"] === "no-store", res.headers["cache-control"]);
   check("same number of upstream requests", platform.calls.length === vercel.calls.length, `${platform.calls.length} vs ${vercel.calls.length}`);
+}
+
+// ── 9b. AUTH: the endpoint fails closed, before any provider work ──────────
+
+console.log("9b. A Pro session is required before ANY provider work");
+{
+  const { default: handler } = await import("../api/odds-leagues");
+  const { requireProSession } = await import("../src/server/pro-gate");
+
+  /** Invoke the Vercel function with a stubbed account service + feed. */
+  async function callVercel(behaviour: StubBehaviour, headers: Record<string, string>) {
+    const original = globalThis.fetch;
+    const stub = makeFetch(behaviour);
+    (globalThis as any).fetch = stub.fetchImpl;
+    process.env.ODDS_API_KEY = "test";
+    let body: any = null;
+    const res = {
+      statusCode: 0,
+      headers: {} as Record<string, string>,
+      setHeader(k: string, v: string) {
+        this.headers[k] = v;
+      },
+      end(payload: string) {
+        body = JSON.parse(payload);
+      },
+    };
+    try {
+      await handler(
+        { url: "/api/odds-leagues?leagues=soccer_epl", headers: { host: "x", ...headers } },
+        res,
+      );
+    } finally {
+      (globalThis as any).fetch = original;
+    }
+    return { status: res.statusCode, body, providerCalls: stub.calls.length, headers: res.headers };
+  }
+
+  // (a) Anonymous — no token at all.
+  const anon = await callVercel({ events: { soccer_epl: 21 } }, {});
+  check("anonymous request is refused with 401", anon.status === 401, String(anon.status));
+  check("anonymous refusal names the reason", anon.body?.error === "not_signed_in", String(anon.body?.error));
+  check("anonymous request makes ZERO provider calls", anon.providerCalls === 0, `${anon.providerCalls} provider calls`);
+  check("anonymous refusal has no fixtures", !("events" in (anon.body ?? {})));
+  check("anonymous refusal is not cacheable", anon.headers["cache-control"] === "no-store");
+
+  // (b) Signed in but not Pro — must be 403, still no spend.
+  const starter = await callVercel({ events: { soccer_epl: 21 }, me: "starter" }, { authorization: `Bearer ${PRO_TOKEN}` });
+  check("a Starter (non-Pro) session is refused with 403", starter.status === 403, String(starter.status));
+  check("the 403 names the reason", starter.body?.error === "pro_required", String(starter.body?.error));
+  check("a non-Pro request makes ZERO provider calls", starter.providerCalls === 0, `${starter.providerCalls} provider calls`);
+
+  // (c) Unknown/expired token — the account service says 401.
+  const expired = await callVercel({ events: { soccer_epl: 21 }, me: "anon" }, { authorization: `Bearer ${PRO_TOKEN}` });
+  check("an expired session is refused with 401", expired.status === 401, String(expired.status));
+  check("an expired session makes ZERO provider calls", expired.providerCalls === 0, `${expired.providerCalls}`);
+  check("the expired case is reported as a session problem", expired.body?.error === "session_expired", String(expired.body?.error));
+
+  // (d) Account service unreachable — fail CLOSED, never open.
+  const down = await callVercel({ events: { soccer_epl: 21 }, me: "down" }, { authorization: `Bearer ${PRO_TOKEN}` });
+  check("an unreachable account service fails closed with 503", down.status === 503, String(down.status));
+  check("and still makes ZERO provider calls", down.providerCalls === 0, `${down.providerCalls}`);
+
+  // (e) A real Pro session still gets its fixtures.
+  const pro = await callVercel({ events: { soccer_epl: 21 } }, { authorization: `Bearer ${PRO_TOKEN}` });
+  check("a Pro session still gets fixtures", pro.status === 200 && pro.body?.events?.length === 21, `${pro.status}/${pro.body?.events?.length}`);
+  check("the Pro search did call the provider exactly once", pro.providerCalls === 1, `${pro.providerCalls}`);
+  // An Annual (Pro Annual) plan is Pro too, and the owner seat is stored as "pro".
+  const annual = await callVercel({ events: { soccer_epl: 3 }, me: "annual" }, { authorization: `Bearer ${PRO_TOKEN}` });
+  check("Pro Annual is also allowed", annual.status === 200 && annual.body?.events?.length === 3, `${annual.status}`);
+
+  // (f) The PLATFORM gate (src/server/pro-gate.ts) refuses on its own.
+  const req = (init: { auth?: string; token?: string }) => {
+    const u = new URL(`https://example.test/api/odds-leagues?leagues=soccer_epl${init.token ? `&token=${init.token}` : ""}`);
+    return new Request(u, { headers: init.auth ? { authorization: init.auth } : {} });
+  };
+  const gateAnon = await requireProSession(req({}));
+  check("platform gate: no token → 401", !gateAnon.ok && gateAnon.status === 401, JSON.stringify(gateAnon));
+  // A token under 32 chars can never be a real session, and resolveSession
+  // rejects it before touching any store — so this is deterministic.
+  const gateBad = await requireProSession(req({ auth: "Bearer short-token" }));
+  check("platform gate: an unknown token → 401, never access", !gateBad.ok && gateBad.status === 401, JSON.stringify(gateBad));
+  const gateQuery = await requireProSession(req({ token: "x" }));
+  check("platform gate: ?token= alone does not open it either", !gateQuery.ok && gateQuery.status === 401, JSON.stringify(gateQuery));
+  check("platform gate: the refusal message says nothing was charged", /Nothing was fetched and nothing was charged/.test(gateAnon.ok ? "" : gateAnon.message));
+
+  // (g) ORDER — the gate is above the provider work in BOTH implementations.
+  const serveSrc = readFileSync(join(ROOT, "serve-static.ts"), "utf8");
+  const blockStart = serveSrc.indexOf('url.pathname === "/api/odds-leagues"');
+  const blockEnd = serveSrc.indexOf('url.pathname === "/api/alert-status"', blockStart);
+  const block = serveSrc.slice(blockStart, blockEnd > blockStart ? blockEnd : blockStart + 4000);
+  const gateAt = block.indexOf("requireProSession(");
+  const searchAt = block.indexOf("runLeagueSearch(");
+  const keyAt = block.indexOf("ODDS_API_KEY");
+  check("platform handler calls the Pro gate first", gateAt >= 0, "no requireProSession call found");
+  check("platform gate is ABOVE the provider search", gateAt >= 0 && searchAt > gateAt, `${gateAt} vs ${searchAt}`);
+  check("platform gate is ABOVE the odds-key check", gateAt >= 0 && keyAt > gateAt, `${gateAt} vs ${keyAt}`);
+
+  const apiSrc = readFileSync(join(ROOT, "api", "odds-leagues.ts"), "utf8");
+  const meAt = apiSrc.indexOf("/api/me");
+  const catAt = apiSrc.indexOf("loadCatalogue()");
+  const providerAt = apiSrc.indexOf("encodeURIComponent(sport.key)}/odds/");
+  check("Vercel handler forwards the token to /api/me", meAt > 0);
+  check("Vercel gate is ABOVE the catalogue read", meAt > 0 && catAt > meAt, `${meAt} vs ${catAt}`);
+  check("Vercel gate is ABOVE the provider fetch", meAt > 0 && providerAt > meAt, `${meAt} vs ${providerAt}`);
+  check("Vercel forwards the token on the platform fallback too", /authorization: `Bearer \$\{token\}`/.test(apiSrc));
+
+  // (h) The page must SEND the token, or the Pro user's search would break.
+  const clientSrc = readFileSync(join(ROOT, "src", "lib", "odds-api.ts"), "utf8");
+  const searchFn = clientSrc.slice(clientSrc.indexOf("export async function searchLeagues"));
+  check("the client sends the session token with a search", /Bearer \$\{token\}/.test(searchFn));
+  check("the client reads the token from the stored session", /localStorage\.getItem\("eaw_session"\)/.test(clientSrc));
 }
 
 // ── 10. The page cannot fetch on open ──────────────────────────────────────

@@ -21,8 +21,9 @@
  *   • A price is usable only when 1.01 ≤ p < 451. 1.00 is not an odds, 451 is
  *     the feed's "no price" sentinel; ≤0, NaN and ±Infinity are unusable too.
  *   • A back/lay pair is suspect when the lay is more than 10% BELOW the back
- *     (lay < back × 0.90). Exchange commission is 5%, so a genuine lay-under-back
- *     edge is worth a few percent at most — a 10%+ shortfall means the two
+ *     (lay < back × 0.90). Exchange commission is 2% by default (adjustable, see
+ *     DEFAULT_COMMISSION in odds.ts), so a genuine lay-under-back edge is worth
+ *     a few percent at most — a 10%+ shortfall means the two
  *     numbers come from different coverage, not from a real opportunity.
  *
  * Consumers:

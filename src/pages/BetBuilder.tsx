@@ -1,9 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import {
-  COMMISSION,
-  round2,
-} from "../lib/odds";
+import { DEFAULT_COMMISSION } from "../lib/odds";
 import { sequentialLayPlan, sequentialLayPlanPaid, type AccaPlan } from "../lib/acca";
 import {
   getMatches,
@@ -23,6 +20,7 @@ import {
   money,
   formatAge,
 } from "../lib/laybets-common";
+import { CommissionControl, CommissionNote, useExchangeCommission } from "../components/CommissionControl";
 
 const DEFAULT_FREE_STAKE = "10"; // free-bet (SNR) stake
 const DEFAULT_PAID_STAKE = "20"; // paid (own money) back stake
@@ -127,9 +125,9 @@ function persist(p: Persisted): void {
 }
 
 /** Outcomes usable as a leg (real, close lay price within the guard). */
-function usableLegs(m: Match): MatchOutcome[] {
+function usableLegs(m: Match, commission: number = DEFAULT_COMMISSION): MatchOutcome[] {
   return m.outcomes.filter((o) => {
-    if (o.layOdds == null || o.layOdds <= COMMISSION) return false;
+    if (o.layOdds == null || o.layOdds <= commission) return false;
     if (o.odds < MIN_LEG_ODDS || o.odds > MAX_BACK_ODDS) return false;
     const gap = o.layOdds - o.odds;
     return gap >= MIN_LAY_GAP && gap <= MAX_LAY_GAP;
@@ -141,7 +139,8 @@ function buildAccas(
   matchesWithLegs: MatchWithLegs[],
   legCount: number,
   mode: BetMode,
-  stake: number
+  stake: number,
+  commission: number = DEFAULT_COMMISSION
 ): AccaCandidate[] {
   const out: AccaCandidate[] = [];
   const current: LegPick[] = [];
@@ -149,7 +148,10 @@ function buildAccas(
   function recurse(startIdx: number) {
     if (current.length === legCount) {
       const legs = current.map((l) => ({ backOdds: l.outcome.odds, layOdds: l.outcome.layOdds! }));
-      const plan = mode === "paid" ? sequentialLayPlanPaid(legs, stake) : sequentialLayPlan(legs, stake);
+      const plan =
+        mode === "paid"
+          ? sequentialLayPlanPaid(legs, stake, commission)
+          : sequentialLayPlan(legs, stake, commission);
       if (plan) {
         out.push({ legs: [...current], plan });
       }
@@ -186,6 +188,12 @@ export default function BetBuilder() {
   const freeStakeVal = parseAmount(freeStake, 10);
   const paidStakeVal = parseAmount(paidStake, 20);
   const activeStakeVal = mode === "paid" ? paidStakeVal : freeStakeVal;
+
+  // ONE shared exchange commission, persisted across pages. 2% by default
+  // (owner directive), adjustable — Betfair charges per market, so the plan is
+  // computed at the rate the user actually pays and every figure says so.
+  const { pct: commPct, rate: commission, label: commLabel, setPct: setCommPct } =
+    useExchangeCommission();
 
   const apply = (next: Draft) => {
     setDraft(next);
@@ -265,11 +273,11 @@ export default function BetBuilder() {
       if (isIceHockey(m.sportKey)) continue; // regulation-time back vs overtime lay mismatch
       if (!byCategory(m)) continue;
       for (const o of m.outcomes) {
-        if (byBookmaker(o) && (o.layOdds == null || o.layOdds <= COMMISSION)) {
+        if (byBookmaker(o) && (o.layOdds == null || o.layOdds <= commission)) {
           noLayExcluded += 1;
         }
       }
-      const outcomes = usableLegs(m)
+      const outcomes = usableLegs(m, commission)
         .filter(byBookmaker)
         .filter((o) => o.odds >= filters.minOdds);
       if (outcomes.length > 0) {
@@ -279,7 +287,7 @@ export default function BetBuilder() {
       if (matchesWithLegs.length >= MAX_MATCHES) break;
     }
 
-    const all = buildAccas(matchesWithLegs, filters.legs, mode, activeStakeVal);
+    const all = buildAccas(matchesWithLegs, filters.legs, mode, activeStakeVal, commission);
     all.sort((a, b) => b.plan.retainedProfit - a.plan.retainedProfit);
     return {
       accas: all.slice(0, TOP_N),
@@ -290,7 +298,7 @@ export default function BetBuilder() {
       qualifiedFixtures: matchesWithLegs.length,
       noLayExcluded,
     };
-  }, [matches, filters, mode, activeStakeVal]);
+  }, [matches, filters, mode, activeStakeVal, commission]);
 
   const controlClass =
     "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200";
@@ -354,13 +362,13 @@ export default function BetBuilder() {
             </div>
             <p className="mt-2 text-xs text-purple-600/80 dark:text-purple-400/80">
               {mode === "paid"
-                ? "Paid mode: your own money is at risk, so the plan locks in a qualifying profit/loss (usually a small cost). 5% exchange commission included."
-                : "Free-bet mode: figures use a stake-not-returned free bet and 5% exchange commission."}
+                ? `Paid mode: your own money is at risk, so the plan locks in a qualifying profit/loss (usually a small cost). Figures use ${commLabel} exchange commission, adjustable below.`
+                : `Free-bet mode: figures use a stake-not-returned free bet and ${commLabel} exchange commission, adjustable below.`}
             </p>
           </div>
 
           {/* Controls */}
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <label className="block">
               <span className="text-xs font-medium text-gray-500">Legs</span>
               <select
@@ -414,6 +422,8 @@ export default function BetBuilder() {
               />
             </label>
 
+            <CommissionControl pct={commPct} onChange={setCommPct} />
+
             <div className="flex items-end">
               <button
                 onClick={run}
@@ -427,7 +437,7 @@ export default function BetBuilder() {
 
           {/* Honesty rails + freshness */}
           <p className="mt-3 text-xs text-gray-400">
-            Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20); ice hockey is excluded (regulation-time back vs overtime lay). {mode === "paid" ? <>Figures use your £{paidStakeVal} back stake (your own money) and 5% exchange commission — a small locked-in loss is the normal qualifying cost, never a guaranteed profit.</> : <>Figures use a £{freeStakeVal} stake-not-returned free bet and 5% exchange commission.</>} Run searches the freshest cached odds — it never costs an API call.
+            Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20); ice hockey is excluded (regulation-time back vs overtime lay). {mode === "paid" ? <>Figures use your £{paidStakeVal} back stake (your own money) and {commLabel} exchange commission — a small locked-in loss is the normal qualifying cost, never a guaranteed profit.</> : <>Figures use a £{freeStakeVal} stake-not-returned free bet and {commLabel} exchange commission.</>} Run searches the freshest cached odds — it never costs an API call.
           </p>
           <p className="mt-1 text-xs text-gray-400">Pre-match odds — refresh every 10 minutes.</p>
 
@@ -530,6 +540,9 @@ export default function BetBuilder() {
                                   <div className="rounded-md bg-purple-50 px-2 py-1.5 dark:bg-purple-950/40">
                                     <div className="text-purple-500">Lay <span className="font-semibold text-purple-700 dark:text-purple-300">{lp.layOdds.toFixed(2)}</span></div>
                                     <div className="truncate text-purple-500">@ {leg.outcome.laySource ?? "exchange"}</div>
+                                    <div className="truncate text-[11px] text-purple-500">
+                                      <CommissionNote pct={commPct} source={leg.outcome.laySource} />
+                                    </div>
                                   </div>
                                 </div>
                                 <div className="mt-2 flex justify-between text-xs text-gray-500 dark:text-gray-400">

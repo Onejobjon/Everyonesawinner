@@ -215,9 +215,29 @@ export function calcDutchFreeBet(
 }
 
 /**
- * Betfair's standard commission on exchange winnings.
+ * Exchange commission — the DEFAULT rate the site assumes, as a fraction.
+ *
+ * OWNER DIRECTIVE (2026-10-28): 2% on both Smarkets and Betfair. This is only a
+ * DEFAULT: Betfair charges per market (commonly 5% on the main football
+ * markets, 2% on some), so a silently fixed 2% would overstate profit for a
+ * user who actually pays 5% — the same failure class as the midpoint we
+ * removed. Every calculation below therefore takes an explicit `commission`
+ * argument, and the UI shows the rate next to the figures with a control to
+ * change it.
  */
-export const COMMISSION = 0.05;
+export const DEFAULT_COMMISSION = 0.02;
+
+/** The default rate as a percentage, for UI controls (2 → "2%"). */
+export const DEFAULT_COMMISSION_PCT = 2;
+
+/**
+ * Format a commission FRACTION as a percentage for display: 0.02 → "2%",
+ * 0.025 → "2.5%". Never prints a trailing ".0".
+ */
+export function commissionPctLabel(rate: number): string {
+  const pct = Math.round(rate * 1000) / 10;
+  return `${pct}%`;
+}
 
 export interface LayCalc {
   /** Amount to stake on the exchange (the "lay" bet) */
@@ -239,7 +259,7 @@ export interface LayCalc {
  * SAME outcome on the exchange (layOdds). The lay stake below equalises the
  * result so the outcome barely matters — this is the core of matched betting.
  *
- *   layStake = (backStake × backOdds) / (layOdds − COMMISSION)
+ *   layStake = (backStake × backOdds) / (layOdds − commission)
  *   liability = layStake × (layOdds − 1)
  *   profit/loss = backStake × (backOdds − 1) − layStake × (layOdds − 1)
  *
@@ -249,7 +269,7 @@ export function calcLay(
   backOdds: number,
   layOdds: number | null,
   backStake = 20,
-  commission = COMMISSION
+  commission = DEFAULT_COMMISSION
 ): LayCalc | null {
   if (!layOdds || layOdds <= commission || backOdds <= 0) return null;
   const layStake = (backStake * backOdds) / (layOdds - commission);
@@ -268,8 +288,8 @@ export type FreeBetType = "snr" | "sr";
 /**
  * Retained profit from laying a free bet on a single outcome. The free bet is
  * backed at backOdds and laid at layOdds; the lay stake is sized so the result
- * is the same whether the outcome wins or loses, and commission (5%) is deducted
- * from the lay winnings only.
+ * is the same whether the outcome wins or loses, and commission (2% by default,
+ * adjustable — see DEFAULT_COMMISSION) is deducted from the lay winnings only.
  *
  *   payout = type === "sr" ? backOdds : backOdds − 1
  *   freeBetProfit = stake × payout × (1 − commission) / (layOdds − commission)
@@ -283,7 +303,7 @@ export function calcFreeBetProfit(
   backOdds: number,
   layOdds: number | null,
   stake = 20,
-  commission = COMMISSION,
+  commission = DEFAULT_COMMISSION,
   type: FreeBetType = "snr"
 ): number | null {
   if (!layOdds || layOdds <= commission || backOdds <= 1) return null;
@@ -306,13 +326,14 @@ export interface LayMetrics {
  */
 export function matchLayMetrics(
   outcomes: { odds: number; layOdds: number | null }[],
-  backStake = 20
+  backStake = 20,
+  commission = DEFAULT_COMMISSION
 ): LayMetrics {
   let bestProfit = -Infinity;
   let closestLoss = Infinity;
   let hasLay = false;
   for (const o of outcomes) {
-    const c = calcLay(o.odds, o.layOdds, backStake);
+    const c = calcLay(o.odds, o.layOdds, backStake, commission);
     if (!c) continue;
     hasLay = true;
     if (c.profitLoss > bestProfit) bestProfit = c.profitLoss;
@@ -343,8 +364,17 @@ export function layGap(backOdds: number, layOdds: number): number {
   return round2(layOdds - backOdds);
 }
 
-/** Whether a back/lay pair is close enough to show in the Lay Bet Finder. */
-export function qualifiesForLay(backOdds: number, layOdds: number | null): boolean {
-  if (!layOdds || layOdds <= COMMISSION) return false;
+/**
+ * Whether a back/lay pair is close enough to show in the Lay Bet Finder.
+ * `commission` is only used as a floor for a usable price (a lay at or below
+ * the commission rate is nonsense), so the rate cannot change which rows
+ * qualify — but it is threaded anyway so the whole page uses one rate.
+ */
+export function qualifiesForLay(
+  backOdds: number,
+  layOdds: number | null,
+  commission = DEFAULT_COMMISSION
+): boolean {
+  if (!layOdds || layOdds <= commission) return false;
   return layGap(backOdds, layOdds) < MAX_LAY_GAP;
 }

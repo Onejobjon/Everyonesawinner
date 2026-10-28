@@ -3,12 +3,13 @@
  *
  * The finder builds cross-match accumulators from free bets and lays them
  * leg-by-leg on the exchange. This module holds the maths — it uses the SAME
- * 5% commission (COMMISSION from odds.ts) and the SAME stake-not-returned (SNR)
+ * exchange commission (DEFAULT_COMMISSION from odds.ts: 2%, passed in by the
+ * caller so the user's own rate is used) and the SAME stake-not-returned (SNR)
  * convention as the rest of the site, so every number on the page agrees with
  * the oddsmatcher / lay-bet finder.
  */
 
-import { COMMISSION, round2 } from "./odds";
+import { DEFAULT_COMMISSION, round2 } from "./odds";
 
 /** One leg of an accumulator: decimal back odds and exchange lay odds. */
 export interface AccaLeg {
@@ -76,7 +77,7 @@ export function combinedBackOdds(legs: { backOdds: number }[]): number {
 export function sequentialLayPlan(
   legs: AccaLeg[],
   freeStake: number,
-  commission: number = COMMISSION
+  commission: number = DEFAULT_COMMISSION
 ): AccaPlan | null {
   if (legs.length === 0) return null;
   if (freeStake <= 0) return null;
@@ -144,7 +145,7 @@ export function sequentialLayPlan(
 export function sequentialLayPlanPaid(
   legs: AccaLeg[],
   backStake: number,
-  commission: number = COMMISSION
+  commission: number = DEFAULT_COMMISSION
 ): AccaPlan | null {
   if (legs.length === 0) return null;
   if (backStake <= 0) return null;

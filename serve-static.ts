@@ -10,6 +10,7 @@ import { runLeagueSearch, parseLeagueParam } from "./src/server/league-search";
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser, findByEmail } from "./src/server/users";
 import { resolveSession, revokeSession } from "./src/server/sessions";
+import { requireProSession } from "./src/server/pro-gate";
 import { handleStripeEvent, verifyStripeSignature } from "./src/server/stripe-webhook";
 
 // Port is configurable: the platform now runs its own dev server on 3000, so
@@ -135,6 +136,19 @@ const server = Bun.serve({
     //  • it never writes it, so a user's search can neither serve stale numbers
     //    as "fresh" nor disturb what the scheduled alert worker sees.
     if (url.pathname === "/api/odds-leagues") {
+      // AUTH FIRST — before the catalogue read and before any provider fetch.
+      // This endpoint answers a paid data source: an anonymous caller must cost
+      // ZERO credits, so the gate sits above everything else in this branch.
+      // (2026-10-28: it used to answer anyone; the Paywall was the only gate
+      // and a Paywall is UI, not a lock.)
+      const gate = await requireProSession(req, "this search");
+      if (!gate.ok) {
+        console.warn(`[league-search] refused ${url.pathname} — ${gate.error}`);
+        return Response.json(
+          { error: gate.error, message: gate.message },
+          { status: gate.status, headers: { "cache-control": "no-store" } },
+        );
+      }
       const keys = parseLeagueParam(url.searchParams.get("leagues"));
       if (keys.length === 0) {
         return Response.json(

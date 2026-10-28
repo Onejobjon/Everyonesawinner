@@ -28,13 +28,39 @@ import { join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
 import { transformMatches, type Match, type MatchOutcome } from "../lib/odds-api";
 import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./odds-key";
-import { calcLay, calcFreeBetProfit, qualifiesForLay, layGap, round2 } from "../lib/odds";
+import {
+  DEFAULT_COMMISSION,
+  calcLay,
+  calcFreeBetProfit,
+  qualifiesForLay,
+  layGap,
+  round2,
+} from "../lib/odds";
 import { checkBackLayPair } from "../lib/odds-sanity";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
 const MARKETS = "h2h"; // h2h_lay is auto-included with h2h — no need to request it
 const BACK_STAKE = 20;
+
+/**
+ * Exchange commission the ALERT RULE assumes — the same default as the site
+ * (OWNER DIRECTIVE 2026-10-28: 2% on Smarkets and Betfair).
+ *
+ * This is the worker's own assumption, not a user setting: an alert has no
+ * user to ask, so it uses the default and SAYS SO in the log, once per scan
+ * (`commission assumed: 2% ...`). A deployment that pays a different rate can
+ * set `EXCHANGE_COMMISSION` to a fraction (e.g. "0.05").
+ */
+export const ALERT_COMMISSION = (() => {
+  const raw = Number(process.env.EXCHANGE_COMMISSION);
+  return Number.isFinite(raw) && raw >= 0 && raw < 1 ? raw : DEFAULT_COMMISSION;
+})();
+
+/** "2%" — for the once-per-scan log line. */
+function commissionPct(): string {
+  return `${Math.round(ALERT_COMMISSION * 1000) / 10}%`;
+}
 
 // Free-bet freshness guard: skip a freebet row unless the back and lay prices
 // were last updated within this window of each other. Stale or sparse exchange
@@ -265,8 +291,14 @@ function freebetRowIsFresh(m: Match, o: MatchOutcome): boolean {
   return Math.abs(backTs - layTs) <= FRESHNESS_MAX_GAP_MS;
 }
 
+/**
+ * `commission` is the exchange commission the rule assumes. It defaults to
+ * ALERT_COMMISSION (2%) and is a parameter only so a test can prove the rule at
+ * two rates side by side — production never passes it.
+ */
 export function findOpportunities(
-  matches: Match[]
+  matches: Match[],
+  commission: number = ALERT_COMMISSION
 ): {
   opps: Opportunity[];
   skippedSuspects: number;
@@ -328,8 +360,8 @@ export function findOpportunities(
 
       // GREEN CASH — close-lay qualifying profit on all odds with gap < 0.2
       // (qualifiesForLay no longer caps back odds).
-      if (qualifiesForLay(back, lay)) {
-        const c = calcLay(back, lay, BACK_STAKE);
+      if (qualifiesForLay(back, lay, commission)) {
+        const c = calcLay(back, lay, BACK_STAKE, commission);
         if (c && c.profitLoss > 0) {
           opps.push({
             type: "cash",
@@ -344,7 +376,7 @@ export function findOpportunities(
       // FREE BET 100%+ — SNR free bet retains more than its own stake. These are
       // arb-grade rows where the exchange lay price sits below the bookmaker's
       // back price — genuinely rare, so expect few alerts (correct, not a bug).
-      const fb = calcFreeBetProfit(back, lay, BACK_STAKE);
+      const fb = calcFreeBetProfit(back, lay, BACK_STAKE, commission);
       if (fb && fb > BACK_STAKE) {
         if (!freebetRowIsFresh(m, o)) {
           skippedSuspects++;
@@ -720,6 +752,12 @@ export async function runAlertCheck(): Promise<{
   } catch (e) {
     log(`health check failed: ${String(e)}`);
   }
+  // Say what the green-cash rule assumed, once per scan, so a log reader can
+  // tell which commission a profit figure was computed at.
+  log(
+    `commission assumed: ${commissionPct()} exchange commission` +
+      (process.env.EXCHANGE_COMMISSION ? " (EXCHANGE_COMMISSION override)" : " (default)"),
+  );
   const matches = await getMatches();
   // Exactly one credits line per scan — hit or miss.
   if (lastScanCredits) recordCredits(lastScanCredits);

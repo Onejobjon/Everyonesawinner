@@ -21,6 +21,7 @@ import TwoUpNoteTag from "../components/TwoUpNoteTag";
 import TwoUpGuideSection from "../components/TwoUpGuideSection";
 import { twoUpNoteForOutcome } from "../lib/two-up";
 import { getIcon, money } from "../lib/laybets-common";
+import { CommissionControl, CommissionNote, useExchangeCommission } from "../components/CommissionControl";
 
 const DEFAULT_STAKE = "20"; // cash qualifying back stake (user-editable)
 
@@ -137,6 +138,12 @@ export default function LayBets() {
 
   const [selected, setSelected] = useState<string[]>(persisted.leagues);
 
+  // ONE shared exchange commission, persisted across pages. 2% by default
+  // (owner directive), adjustable — Betfair charges per market, so the rate has
+  // to be the user's, and every figure below is labelled with it.
+  const { pct: commPct, rate: commission, label: commLabel, setPct: setCommPct } =
+    useExchangeCommission();
+
   /**
    * `idle` until the user presses Search. NOTHING is fetched on mount: opening
    * this page must cost nothing and scan nothing (owner, 2026-10-28 — the
@@ -201,8 +208,8 @@ export default function LayBets() {
         // All odds with a lay gap < 0.2 (no back-odds ceiling). Ice hockey is
         // already excluded at the data layer (layOdds = null), so qualifiesForLay
         // returns false for it automatically.
-        if (!qualifiesForLay(o.odds, o.layOdds)) continue;
-        const lay = calcLay(o.odds, o.layOdds, stakeVal);
+        if (!qualifiesForLay(o.odds, o.layOdds, commission)) continue;
+        const lay = calcLay(o.odds, o.layOdds, stakeVal, commission);
         if (!lay) continue;
         rows.push({ match: m, outcome: o, lay, gap: layGap(o.odds, o.layOdds!) });
       }
@@ -213,7 +220,7 @@ export default function LayBets() {
       return a.gap - b.gap;
     });
     return { singles: rows, withheld };
-  }, [searchMatches, minOdds, stakeVal]);
+  }, [searchMatches, minOdds, stakeVal, commission]);
 
   const bestProfit =
     results.singles.length > 0 ? round2(results.singles[0].lay.profitLoss) : 0;
@@ -325,7 +332,7 @@ export default function LayBets() {
           </div>
 
           {/* Controls: stake / min odds / search */}
-          <div className="mt-4 grid grid-cols-2 items-end gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-2 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
               <span className="text-xs font-medium text-gray-500">Stake</span>
               <div className="mt-1 flex items-center gap-1.5">
@@ -357,6 +364,8 @@ export default function LayBets() {
               />
             </label>
 
+            <CommissionControl pct={commPct} onChange={setCommPct} />
+
             <div>
               <button
                 onClick={() => void runSearch()}
@@ -375,7 +384,7 @@ export default function LayBets() {
 
           {/* Cost honesty, before the click. */}
           <p className="mt-3 text-xs text-gray-400">
-            Singles show every outcome with a lay gap under 0.20 (negative gap = better than break-even), on your £{stakeVal} cash back stake, including 5% exchange commission. Ice hockey is excluded — bookmaker back odds are regulation-time but exchange lays include overtime, so they never match.
+            Singles show every outcome with a lay gap under 0.20 (negative gap = better than break-even), on your £{stakeVal} cash back stake, including {commLabel} exchange commission (adjustable above — set it to what your exchange actually charges). Ice hockey is excluded — bookmaker back odds are regulation-time but exchange lays include overtime, so they never match.
           </p>
           <p className="mt-1 text-xs text-gray-400">
             <strong>Nothing is fetched until you press Search.</strong> This page has no automatic scan — the scheduled scanning is the opportunity alerts, which run separately on their own timetable. A search reads the feed fresh for each competition you selected, and the odds provider bills <strong>1 credit per competition</strong> however many fixtures come back: {selected.length === 0 ? "nothing to spend yet" : `${credits(costNow)} for this selection`}. Prices the feed reports as unavailable (1.00 / 451) are removed, and a lay price more than 10% below the bookmaker price is withheld — those rows are two different markets, not an opportunity.
@@ -537,6 +546,9 @@ export default function LayBets() {
                           <div className="text-[11px] font-medium uppercase tracking-wide text-purple-500">Lay</div>
                           <div className="mt-1 text-2xl font-extrabold text-purple-700 dark:text-purple-300">{op.outcome.layOdds!.toFixed(2)}</div>
                           <div className="mt-0.5 truncate text-xs text-purple-500">@ {op.outcome.laySource}</div>
+                          <div className="mt-0.5 truncate text-[11px] text-purple-500">
+                            <CommissionNote pct={commPct} source={op.outcome.laySource} />
+                          </div>
                         </div>
                       </div>
                       <div className="mt-4 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
@@ -560,7 +572,7 @@ export default function LayBets() {
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair or Smarkets — each row names its source). Figures use your £{stakeVal} back stake and include 5% exchange commission.
+                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair or Smarkets — each row names its source). Figures use your £{stakeVal} back stake and include {commLabel} exchange commission (adjustable above).
               </p>
             </>
           )}

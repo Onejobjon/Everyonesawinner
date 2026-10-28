@@ -13,12 +13,23 @@
 // (measured: `x-requests-last: 1`, `events=16`). A search over N competitions
 // costs N credits. `spent` is read from the provider's own header, not assumed.
 //
+// AUTH (2026-10-28): Pro session required, checked BEFORE any provider work —
+// see the gate at the top of the handler. Anonymous → 401, signed in but not
+// Pro → 403, cannot verify → 503. A rejected caller spends 0 credits.
+//
 // NEVER cached here. A search is a fresh read; the 10-minute cache in
 // api/odds.ts belongs to the scheduled alert path and must not be shared.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const MAX_LEAGUES_PER_SEARCH = 8;
+/**
+ * The platform deployment, which holds the account/session store. Used for the
+ * Pro gate (forward the bearer token to `/api/me`) and for the last-resort
+ * search fallback below.
+ */
+const PLATFORM_API_URL =
+  process.env.PLATFORM_API_URL || "https://515136800b641762e9aace79427eb7c4.ctonew.app";
 // `LEAGUE_TIMEOUT_MS` lets a test prove the timeout path without waiting 12s.
 // Production never sets it.
 const LEAGUE_TIMEOUT_MS = Number(process.env.LEAGUE_TIMEOUT_MS || 12_000);
@@ -90,6 +101,92 @@ export default async function handler(req: any, res: any): Promise<void> {
   const url = new URL(req.url ?? "/api/odds-leagues", `https://${host}`);
   const keys = parseLeagueParam(url.searchParams.get("leagues"));
 
+  // ── AUTH FIRST: nothing below this block runs for a caller we cannot verify ──
+  // A search spends a real Odds API credit per competition, so an anonymous
+  // caller must cost ZERO credits. This deployment has no session store of its
+  // own — the accounts live on the platform deployment — so the token is
+  // forwarded to `/api/me` and must come back `ok` with a Pro plan.
+  // 2026-10-28: this endpoint used to answer anyone who asked.
+  const authHeader = typeof req.headers?.authorization === "string" ? req.headers.authorization : "";
+  const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const token = bearer || (typeof req.query?.token === "string" ? req.query.token : "");
+  if (!token) {
+    send(
+      {
+        error: "not_signed_in",
+        message: "Sign in to run this search. Nothing was fetched and nothing was charged.",
+      },
+      401,
+    );
+    return;
+  }
+  try {
+    const me = await fetch(`${PLATFORM_API_URL}/api/me`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+      cache: "no-store",
+    });
+    if (me.status === 401) {
+      send(
+        {
+          error: "session_expired",
+          message:
+            "Your session has expired — sign in again to run this search. Nothing was fetched and nothing was charged.",
+        },
+        401,
+      );
+      return;
+    }
+    if (!me.ok) {
+      send(
+        {
+          error: "account_unavailable",
+          message:
+            "We could not check your account, so the search did not run. Nothing was fetched and nothing was charged.",
+        },
+        503,
+      );
+      return;
+    }
+    const meBody = (await me.json().catch(() => null)) as
+      | { ok?: boolean; user?: { plan?: string | null } }
+      | null;
+    const plan = meBody?.user?.plan ?? null;
+    if (!meBody?.ok) {
+      send(
+        {
+          error: "not_signed_in",
+          message: "Sign in to run this search. Nothing was fetched and nothing was charged.",
+        },
+        401,
+      );
+      return;
+    }
+    if (plan !== "pro" && plan !== "annual") {
+      send(
+        {
+          error: "pro_required",
+          message:
+            "The Lay Bet Finder search is a Pro tool. Upgrade to Pro to run it. Nothing was fetched and nothing was charged.",
+        },
+        403,
+      );
+      return;
+    }
+  } catch (e) {
+    // Fail CLOSED: an unreachable account service must not grant access.
+    console.error(`[league-search] account service unreachable: ${String(e)}`);
+    send(
+      {
+        error: "account_unavailable",
+        message:
+          "We could not check your account, so the search did not run. Nothing was fetched and nothing was charged.",
+      },
+      503,
+    );
+    return;
+  }
+
   if (keys.length === 0) {
     send(
       {
@@ -113,12 +210,14 @@ export default async function handler(req: any, res: any): Promise<void> {
     // deployment, which has both, rather than breaking the domain or — worse —
     // accepting an unvalidated competition key and spending a credit on it.
     const why = !key ? "no odds key" : "no competition catalogue";
-    const upstreamHost =
-      process.env.PLATFORM_ODDS_URL || "https://515136800b641762e9aace79427eb7c4.ctonew.app";
+    const upstreamHost = PLATFORM_API_URL;
     try {
+      // The forward must carry the caller's token: the platform answers this
+      // endpoint only for a Pro session, and a tokenless forward would be a 401
+      // that looks like a broken search.
       const proxied = await fetch(
         `${upstreamHost}/api/odds-leagues?leagues=${encodeURIComponent(keys.join(","))}`,
-        { headers: { accept: "application/json" } },
+        { headers: { accept: "application/json", authorization: `Bearer ${token}` } },
       );
       const body = await proxied.text();
       if (proxied.ok) {
