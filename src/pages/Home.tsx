@@ -215,14 +215,14 @@ function Footer() {
           <div>
             <h4 className="text-sm font-semibold">Company</h4>
             <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
-              <li><span className="cursor-default">About</span></li>
-              <li><span className="cursor-default">Privacy</span></li>
-              <li><span className="cursor-default">Terms</span></li>
+              <li><Link to="/free-bets" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">Free bets</Link></li>
+              <li><Link to="/how-we-check-offers" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors">How we check offers</Link></li>
             </ul>
           </div>
         </div>
         <div className="mt-12 border-t border-gray-200 pt-8 text-center text-sm text-gray-500 dark:border-gray-800 dark:text-gray-500">
           <p>© {new Date().getFullYear()} Everyone's A Winner. All rights reserved.</p>
+          <p className="mt-2">18+ only. Matched betting carries risk and bookmakers may restrict accounts. If gambling is causing you harm, see <a href="https://www.begambleaware.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700 dark:hover:text-gray-300">BeGambleAware.org</a>. Information here is not financial, legal or tax advice.</p>
         </div>
       </div>
     </footer>
@@ -289,15 +289,15 @@ export default function Home() {
       {/* Features */}
       <section id="features" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Everything you need to profit</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">We handle the maths so you can focus on collecting your earnings.</p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">What the tools do</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Everything listed here exists today. We handle the maths; you decide the stake.</p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { icon: "📊", title: "Best Odds Finder", desc: "See the best prices across bookmakers and exchanges at a glance. Find profitable opportunities in seconds." },
-              { icon: "💰", title: "Profit Calculator", desc: "Enter your stake and odds to instantly work out the profit you lock in, the exchange stake and your total return." },
-              { icon: "🔔", title: "Offer Alerts", desc: "Get notified the moment new profitable offers go live. Never miss a sign-up bonus or free bet." },
-              { icon: "🧮", title: "Auto Calculation", desc: "Enter your odds once and our tool calculates exactly how much to stake for maximum profit." },
-              { icon: "⚡", title: "Sign-Up Journey", desc: "Guided walkthroughs for every bookmaker offer. Know which accounts to open and in what order." },
-              { icon: "📈", title: "Profit Tracking", desc: "Dashboard showing your total earnings, active offers, and monthly profit trends at a glance." },
+              { icon: "📊", title: "Best Odds Finder", desc: "Compare the best back price across the UK bookmakers and exchanges we cover, for each outcome." },
+              { icon: "💰", title: "Profit Calculator", desc: "Enter your stake and both prices to see the lay stake, the liability, and what each side returns." },
+              { icon: "🎯", title: "Lay Bet Finder (Pro)", desc: "Close single lays, searched on demand across the competitions you tick." },
+              { icon: "🧮", title: "Acca Lay Planner (Pro)", desc: "Plan a 2–4 leg lay across matches, with the sequential lay stakes worked out for you." },
+              { icon: "✅", title: "Licence-checked offers", desc: "Every listed offer shows the licensee, the register account and a link to the Gambling Commission entry." },
+              { icon: "🔍", title: "Price sanity check", desc: "We drop prices that cannot be real and withhold back/lay pairs that are too far apart to match." },
             ].map((f, i) => (
               <div key={i} className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm hover:shadow-md transition-shadow dark:border-gray-800 dark:bg-gray-950">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-2xl dark:bg-indigo-950">{f.icon}</div>
