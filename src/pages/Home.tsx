@@ -333,8 +333,8 @@ export default function Home() {
           <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and what each one would include. <strong>No plan can be bought yet.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and nothing can be charged until it does.</span></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
-              {n:"Starter",p:"£9.99",pr:"/month (planned)",d:"The oddsmatcher and the calculator.",f:["Best Odds Finder (oddsmatcher)","Profit calculator with lay stake and liability","The licence-checked free-bets list"],pop:false},
-              {n:"Pro",orig:"",disc:"£9.99",pr:"/month (planned)",d:"Adds the two lay tools.",f:["Everything in Starter","Lay Bet Finder — close single lays, searched on demand","Acca Lay Planner — 2–4 leg lay plans"],pop:true},
+              {n:"Starter",p:"£19.99",pr:"/month (planned)",d:"The oddsmatcher and the calculator.",f:["Best Odds Finder (oddsmatcher)","Profit calculator with lay stake and liability","The licence-checked free-bets list"],pop:false},
+              {n:"Pro",orig:"",disc:"£29.99",pr:"/month (planned)",d:"Adds the two lay tools.",f:["Everything in Starter","Lay Bet Finder — close single lays, searched on demand","Acca Lay Planner — 2–4 leg lay plans"],pop:true},
               {n:"Annual",orig:"",disc:"£199",pr:"/year (planned)",d:"Twelve months of Pro.",f:["Everything in Pro","One payment for the year instead of twelve"],pop:false},
             ].map((plan,i) => (
               <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.pop ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>

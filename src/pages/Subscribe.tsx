@@ -13,7 +13,7 @@ const plans: {
   {
     id: "starter",
     name: "Starter",
-    price: "£9.99",
+    price: "£19.99",
     period: "/month (planned)",
     desc: "The oddsmatcher and the calculator.",
     features: [
@@ -26,7 +26,7 @@ const plans: {
   {
     id: "pro",
     name: "Pro",
-    price: "£9.99",
+    price: "£29.99",
     period: "/month (planned)",
     desc: "Adds the two lay tools.",
     features: [
