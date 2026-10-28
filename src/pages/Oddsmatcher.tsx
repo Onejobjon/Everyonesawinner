@@ -177,6 +177,9 @@ export default function Oddsmatcher() {
                     ) : (
                       <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                         ⚠️ This match is missing {m.outcomesWithheld} outcome{m.outcomesWithheld === 1 ? "" : "s"} — the feed reported no usable price, so no profit is shown.
+                        {(m.backWithheldAsLaySource ?? 0) > 0 && (
+                          <> Of those, {m.backWithheldAsLaySource} had only the exchange's own price, which cannot be matched against that same exchange's lay — backing and laying the same exchange can only lose, so it is withheld rather than shown as an opportunity.</>
+                        )}
                       </div>
                     )}
                     {m.warning && (

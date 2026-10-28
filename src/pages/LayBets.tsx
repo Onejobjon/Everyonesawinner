@@ -198,10 +198,16 @@ export default function LayBets() {
     // withheld it (sentinel value, or a lay >10% below the back = two different
     // markets). Counted so the page can say so instead of silently hiding them.
     let withheld = 0;
+    // Outcomes dropped entirely because the ONLY back price quoted was the
+    // exchange that supplies the lay. Backing and laying the same exchange is a
+    // guaranteed loss, so those rows cannot be shown at all — counted so the
+    // page can say why instead of quietly returning fewer rows.
+    let laySourceExcluded = 0;
     const sorted = [...searchMatches].sort(
       (a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime()
     );
     for (const m of sorted) {
+      laySourceExcluded += m.backWithheldAsLaySource ?? 0;
       for (const o of m.outcomes) {
         if (o.odds < minOdds) continue;
         if (o.laySuspect) withheld++;
@@ -219,7 +225,7 @@ export default function LayBets() {
       if (d !== 0) return d;
       return a.gap - b.gap;
     });
-    return { singles: rows, withheld };
+    return { singles: rows, withheld, laySourceExcluded };
   }, [searchMatches, minOdds, stakeVal, commission]);
 
   const bestProfit =
@@ -483,6 +489,12 @@ export default function LayBets() {
             </p>
           )}
 
+          {results.laySourceExcluded > 0 && (
+            <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+              ⚠️ {results.laySourceExcluded} outcome{results.laySourceExcluded === 1 ? "" : "s"} withheld — the only back price quoted came from the very exchange that lays it. Backing and laying the same exchange means paying the spread and the commission to yourself: it can only lose, so we won't show it as an opportunity.
+            </p>
+          )}
+
           {phase === "done" && result && results.singles.length === 0 && (
             <div className="mt-8 rounded-xl border border-gray-200 bg-white p-8 text-left dark:border-gray-800 dark:bg-gray-950">
               <div className="flex items-start gap-3">
@@ -541,6 +553,11 @@ export default function LayBets() {
                           <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Back</div>
                           <div className="mt-1 text-2xl font-extrabold text-gray-900 dark:text-white">{op.outcome.odds.toFixed(2)}</div>
                           <div className="mt-0.5 truncate text-xs text-gray-500">@ {op.outcome.bookmaker}</div>
+                          {op.outcome.backSourceExcluded && (
+                            <div className="mt-1 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                              {op.outcome.laySource ?? "The laying exchange"}'s own back price was set aside — backing and laying the same exchange cannot profit.
+                            </div>
+                          )}
                         </div>
                         <div className="rounded-xl bg-purple-50 p-3 dark:bg-purple-950/40">
                           <div className="text-[11px] font-medium uppercase tracking-wide text-purple-500">Lay</div>

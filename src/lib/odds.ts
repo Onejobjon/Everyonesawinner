@@ -67,13 +67,36 @@ export function formatOdds(odds: number): string {
 }
 
 /**
- * Dutching calculator — fixes £10 on the favourite (lowest odds),
+ * Reject a stake that cannot describe money at all.
+ *
+ * There is deliberately NO MAXIMUM. The owner's promise is "users enter any
+ * stake they like — not a fixed £20 — and see exactly what it returns", so a
+ * £100 stake must produce £100-stake numbers. This function used to have a
+ * sibling: every stake was silently scaled down so the largest came to exactly
+ * £20, which meant a user who typed £100 was shown £20 figures and never told.
+ * Removing it is the fix; this guard only rejects what cannot be a stake.
+ *
+ * Excessive prices are handled separately and unchanged by the Odds Sanity Rule
+ * (1.01 ≤ price < 451 — see odds-sanity.ts), never by rescaling the money.
+ */
+function assertUsableStake(stake: number, fn: string): void {
+  if (!Number.isFinite(stake) || stake <= 0) {
+    throw new RangeError(
+      `${fn}: stake must be a positive, finite number (got ${stake})`
+    );
+  }
+}
+
+/**
+ * Dutching calculator — fixes the given stake on the favourite (lowest odds),
  * then calculates variable stakes on other outcomes to equalise the return.
- * All stakes are capped at £20 max — if a calculated stake exceeds £20,
- * all stakes are scaled down proportionally so the max is exactly £20.
+ *
+ * The stakes are returned exactly as calculated for the stake you passed in:
+ * there is no cap and no rescaling, so `totalStake` IS the money you'd place.
  *
  * @param oddsArr - Array of decimal odds for each outcome
  * @param favStake - Fixed stake on the favourite (default £10)
+ * @throws RangeError when favStake is not a positive, finite number
  */
 export function calcDutch(
   oddsArr: number[],
@@ -87,6 +110,8 @@ export function calcDutch(
   overroundPct: number;      // (S - 1) × 100 — bookmaker margin
   isArbitrage: boolean;      // True when guaranteed profit exists
 } {
+  assertUsableStake(favStake, "calcDutch");
+
   // Find the favourite — lowest decimal odds = highest implied probability
   let favIndex = 0;
   for (let i = 1; i < oddsArr.length; i++) {
@@ -97,23 +122,15 @@ export function calcDutch(
   // Guaranteed return = favStake × favourite odds
   const guaranteedReturn = favStake * favOdds;
 
-  // Calculate stakes for each outcome
-  let stakes = oddsArr.map((odds, i) =>
+  // Calculate stakes for each outcome — honour the stake exactly, no cap.
+  const stakes = oddsArr.map((odds, i) =>
     i === favIndex ? favStake : guaranteedReturn / odds
   );
 
-  // Cap max stake at £20 using proportional scaling
-  const maxStake = Math.max(...stakes);
-  const MAX_ALLOWED = 20;
-  if (maxStake > MAX_ALLOWED) {
-    const scale = MAX_ALLOWED / maxStake;
-    stakes = stakes.map((s) => s * scale);
-  }
-
   const totalStake = stakes.reduce((sum, s) => sum + s, 0);
-  // Recalculate guaranteed return: min of (stake × odds) across all outcomes
-  const guaranteedReturnCapped = Math.min(...stakes.map((s, i) => s * oddsArr[i]));
-  const netProfit = guaranteedReturnCapped - totalStake;
+  // Guaranteed return: min of (stake × odds) across all outcomes
+  const guaranteedReturnActual = Math.min(...stakes.map((s, i) => s * oddsArr[i]));
+  const netProfit = guaranteedReturnActual - totalStake;
 
   // Overround still uses the standard formula
   const S = oddsArr.reduce((sum, o) => sum + 1 / o, 0);
@@ -123,7 +140,7 @@ export function calcDutch(
     stakes,
     favIndex,
     totalStake,
-    guaranteedReturn: guaranteedReturnCapped,
+    guaranteedReturn: guaranteedReturnActual,
     netProfit,
     overroundPct,
     isArbitrage: netProfit > 0,
@@ -131,18 +148,19 @@ export function calcDutch(
 }
 
 /**
- * Free bet dutching calculator — places a £10 SNR free bet on the most
+ * Free bet dutching calculator — places the SNR free bet on the most
  * profitable outcome, then calculates cash stakes on all other outcomes
  * to equalise the return. SNR means the stake is NOT returned, so the
  * free bet return = freeBetAmount × (odds - 1).
  *
- * All cash stakes are capped at £20 max — if a calculated stake exceeds £20,
- * all cash stakes are scaled down proportionally so the max is exactly £20.
+ * Cash stakes are returned exactly as calculated for the free bet you passed
+ * in: there is no cap and no rescaling (a £200 free bet gets £200-sized stakes).
  *
  * Tries all outcomes and picks the one that maximises net profit.
  *
  * @param oddsArr - Array of decimal odds for each outcome
  * @param freeBetAmount - Amount of the free bet (default £10)
+ * @throws RangeError when freeBetAmount is not a positive, finite number
  */
 export function calcDutchFreeBet(
   oddsArr: number[],
@@ -157,7 +175,8 @@ export function calcDutchFreeBet(
   overroundPct: number;         // (S - 1) × 100 — bookmaker margin
   isArbitrage: boolean;         // True when guaranteed profit exists
 } {
-  const MAX_ALLOWED = 20;
+  assertUsableStake(freeBetAmount, "calcDutchFreeBet");
+
   let bestResult: {
     stakes: number[];
     freeBetIndex: number;
@@ -173,17 +192,10 @@ export function calcDutchFreeBet(
     // SNR: free bet returns only the profit, not the stake
     const freeBetReturn = freeBetAmount * (fbOdds - 1);
 
-    // Calculate cash stakes for all other outcomes
-    let stakes = oddsArr.map((odds, i) =>
+    // Calculate cash stakes for all other outcomes — honoured exactly, no cap.
+    const stakes = oddsArr.map((odds, i) =>
       i === fbIdx ? 0 : freeBetReturn / odds
     );
-
-    // Cap max cash stake at £20 using proportional scaling
-    const maxStake = Math.max(...stakes);
-    if (maxStake > MAX_ALLOWED) {
-      const scale = MAX_ALLOWED / maxStake;
-      stakes = stakes.map((s) => s * scale);
-    }
 
     const totalCashStake = stakes.reduce((sum, s) => sum + s, 0);
     // Guaranteed return = min of freeBetReturn and (cashStake × odds) for cash outcomes
@@ -263,7 +275,13 @@ export interface LayCalc {
  *   liability = layStake × (layOdds − 1)
  *   profit/loss = backStake × (backOdds − 1) − layStake × (layOdds − 1)
  *
- * Returns null when there's no usable lay price (never fabricate a number).
+ * The stake is used EXACTLY as passed — no cap, no rescaling — so a £100 stake
+ * gets £100-stake figures. `backStake` only has a default for callers that have
+ * no stake of their own; every page passes the user's number.
+ *
+ * Returns null when there's no usable lay price (never fabricate a number), and
+ * also when the stake is not a positive, finite number — an invalid stake is
+ * rejected, never quietly replaced.
  */
 export function calcLay(
   backOdds: number,
@@ -271,6 +289,7 @@ export function calcLay(
   backStake = 20,
   commission = DEFAULT_COMMISSION
 ): LayCalc | null {
+  if (!Number.isFinite(backStake) || backStake <= 0) return null;
   if (!layOdds || layOdds <= commission || backOdds <= 0) return null;
   const layStake = (backStake * backOdds) / (layOdds - commission);
   const liability = layStake * (layOdds - 1);
@@ -294,7 +313,9 @@ export type FreeBetType = "snr" | "sr";
  *   payout = type === "sr" ? backOdds : backOdds − 1
  *   freeBetProfit = stake × payout × (1 − commission) / (layOdds − commission)
  *
- * Returns null when there's no usable lay price (never fabricate a number).
+ * Returns null when there's no usable lay price (never fabricate a number), and
+ * when the stake is not a positive, finite number. The stake itself is used
+ * exactly as passed — no cap and no rescaling.
  * "Retention" = freeBetProfit / stake — how much of the free bet's value you
  * keep. Above 1.0 (100%) means the exchange lay price sits below the bookmaker's
  * back price, which is arb-grade and rare.
@@ -306,6 +327,7 @@ export function calcFreeBetProfit(
   commission = DEFAULT_COMMISSION,
   type: FreeBetType = "snr"
 ): number | null {
+  if (!Number.isFinite(stake) || stake <= 0) return null;
   if (!layOdds || layOdds <= commission || backOdds <= 1) return null;
   const payout = type === "sr" ? backOdds : backOdds - 1;
   return (stake * payout * (1 - commission)) / (layOdds - commission);

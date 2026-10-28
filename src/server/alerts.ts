@@ -36,7 +36,7 @@ import {
   layGap,
   round2,
 } from "../lib/odds";
-import { checkBackLayPair } from "../lib/odds-sanity";
+import { checkBackLayPair, isSameBookmakerKey } from "../lib/odds-sanity";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
@@ -305,12 +305,15 @@ export function findOpportunities(
   skippedInsane: number;
   skippedStarted: number;
   skippedTooSoon: number;
+  /** Rows withheld because the back and the lay came from the same exchange. */
+  skippedSameSource: number;
 } {
   const opps: Opportunity[] = [];
   let skippedSuspects = 0;
   let skippedInsane = 0;
   let skippedStarted = 0;
   let skippedTooSoon = 0;
+  let skippedSameSource = 0;
   const now = Date.now();
   for (const m of matches) {
     // Defense-in-depth on top of the transform guard (which drops started
@@ -337,7 +340,16 @@ export function findOpportunities(
       // withholds sentinel and cross-coverage lay prices, but this worker's
       // on-disk cache can still hold matches transformed by an older build.
       // A row like SHL "back 5.50 / lay 2.56" must never alert.
-      if (checkBackLayPair(back, lay).suspect) {
+      //
+      // The same applies to an exchange that is on BOTH sides of the trade: the
+      // transform excludes the lay source from best-back selection, and this
+      // re-checks it by feed key, so a row like "back 2.66 Betfair / lay 2.70
+      // Betfair" from a stale cache can never be announced as a profit.
+      if (isSameBookmakerKey(o.bookmakerKey, o.layBookmakerKey)) {
+        skippedSameSource++;
+        continue;
+      }
+      if (checkBackLayPair(back, lay, o.bookmakerKey, o.layBookmakerKey).suspect) {
         skippedInsane++;
         continue;
       }
@@ -402,7 +414,7 @@ export function findOpportunities(
     }
     return (b as FreebetOpportunity).freeBetProfit - (a as FreebetOpportunity).freeBetProfit;
   });
-  return { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon };
+  return { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon, skippedSameSource };
 }
 
 // ── Dedup (persisted) ──────────────────────────────────────────────────────
@@ -746,6 +758,7 @@ export async function runAlertCheck(): Promise<{
   skippedInsane: number;
   skippedStarted: number;
   skippedTooSoon: number;
+  skippedSameSource: number;
 }> {
   try {
     await checkSiteHealth();
@@ -761,7 +774,7 @@ export async function runAlertCheck(): Promise<{
   const matches = await getMatches();
   // Exactly one credits line per scan — hit or miss.
   if (lastScanCredits) recordCredits(lastScanCredits);
-  const { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon } =
+  const { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon, skippedSameSource } =
     findOpportunities(matches);
   const seen = loadSeen();
 
@@ -781,7 +794,7 @@ export async function runAlertCheck(): Promise<{
   const cash = opps.filter((o) => o.type === "cash").length;
   const freebet = opps.length - cash;
   log(
-    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} stale rows skipped, ${skippedInsane} insane back/lay rows skipped, skipped started: ${skippedStarted}, too-soon: ${skippedTooSoon}`
+    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} stale rows skipped, ${skippedInsane} insane back/lay rows skipped, ${skippedSameSource} rows with the same exchange on both sides skipped, skipped started: ${skippedStarted}, too-soon: ${skippedTooSoon}`
   );
   return {
     checked: opps.length,
@@ -790,6 +803,7 @@ export async function runAlertCheck(): Promise<{
     skippedInsane,
     skippedStarted,
     skippedTooSoon,
+    skippedSameSource,
   };
 }
 

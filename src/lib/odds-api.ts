@@ -5,7 +5,11 @@
  */
 
 import { calcDutchFreeBet } from "./odds";
-import { checkBackLayPair, isPlausiblePrice } from "./odds-sanity";
+import {
+  checkBackLayPair,
+  excludeLaySource,
+  isPlausiblePrice,
+} from "./odds-sanity";
 
 // The Odds API key is held server-side only (src/server/odds-key.ts) and is
 // never shipped in the client bundle. The client fetches through our own
@@ -74,7 +78,11 @@ export interface MatchOutcome {
   bookmaker: string;
   /** Best decimal odds found */
   odds: number;
-  /** What £20 returns (£20 × odds) */
+  /**
+   * A fixed reference figure (£20 × odds), kept because the row shape is
+   * persisted in caches. It is NOT a cap and NOT what the UI shows: every page
+   * takes the user's own stake and multiplies by the odds itself.
+   */
   return20: number;
   /** Exchange lay odds (decimal) — null when no exchange lay price exists */
   layOdds: number | null;
@@ -98,6 +106,19 @@ export interface MatchOutcome {
   laySuspect?: boolean;
   /** Why the lay price was withheld — shown in the UI / written to logs. */
   laySuspectReason?: string;
+  /**
+   * Feed key of the bookmaker behind `odds` (e.g. "williamhill"). Optional so a
+   * hand-built row still type-checks; the transform always sets it, and the
+   * "same exchange on both sides" rule compares it with `layBookmakerKey`.
+   */
+  bookmakerKey?: string | null;
+  /**
+   * True when the exchange that supplies this row's lay price ALSO quoted the
+   * best back price, and was set aside: `bookmaker`/`odds` above are the best
+   * genuine bookmaker price. Backing and laying the same exchange cannot profit,
+   * so the exchange's own price never becomes the back side (see odds-sanity.ts).
+   */
+  backSourceExcluded?: boolean;
 }
 
 export interface Match {
@@ -127,6 +148,14 @@ export interface Match {
   outcomesWithheld?: number;
   /** How many outcome rows had a lay price withheld by the sanity check. */
   laysWithheld?: number;
+  /**
+   * How many outcomes were dropped because the ONLY back price quoted for them
+   * came from the exchange that supplies the lay price. Backing and laying the
+   * same exchange is a guaranteed loss, so those rows cannot be shown at all —
+   * counted here so the UI can say why rather than silently showing less.
+   * Included in `outcomesWithheld`.
+   */
+  backWithheldAsLaySource?: number;
 }
 
 // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -206,69 +235,134 @@ export function getOddsAgeMs(sportKey = "upcoming"): number | null {
 // ── Transform ──────────────────────────────────────────────────────────────
 
 /**
+ * One outcome's chosen back price: the bookmaker, its feed key, and the price.
+ */
+interface BackPick {
+  outcome: string;
+  backOdds: number;
+  bookmaker: string;
+  bookmakerKey: string;
+  warning?: string;
+}
+
+/**
  * For a given fixture, find the optimal assignment of bookmakers to outcomes
  * where each outcome gets a different bookmaker. Uses brute-force over all
  * valid permutations (max 5 bookmakers × 3 outcomes = 60 permutations).
  *
  * Scores each combination by running through calcDutchFreeBet and picks the
  * one with the highest net profit.
+ *
+ * `excludeBackFor` maps an outcome name (lowercase) to the exchange key that
+ * supplies THAT outcome's lay price. That exchange's back price is removed from
+ * the candidates — backing and laying the same exchange is a guaranteed loss,
+ * not an opportunity (see odds-sanity.ts). Two outcomes are reported back so the
+ * caller can be honest about it:
+ *   • `backFromLaySourceSetAside` — the exchange did quote the best price and
+ *     was set aside for a genuine bookmaker price (the row still has a back price).
+ *   • `droppedAsLaySource` — it was the ONLY quoted price, so the row has no
+ *     usable back side at all and must be withheld. Never fall back to it.
  */
 function bestUniqueBookmakerOdds(
   outcomes: ApiOutcome[],
-  bookmakers: ApiBookmaker[]
-): { outcome: string; backOdds: number; bookmaker: string; warning?: string }[] {
+  bookmakers: ApiBookmaker[],
+  excludeBackFor?: Map<string, string>
+): {
+  picks: BackPick[];
+  droppedAsLaySource: string[];
+  backFromLaySourceSetAside: string[];
+} {
   // Collect distinct outcome names
   const outcomeNames = [...new Set(outcomes.map((o) => o.name))];
 
-  // Build a matrix: for each outcome, list all (bookmaker, odds) pairs
-  const matrix: { outcome: string; options: { bookmaker: string; odds: number }[] }[] =
-    outcomeNames.map((name) => {
-      const options: { bookmaker: string; odds: number }[] = [];
-      for (const bm of bookmakers) {
-        const market = bm.markets.find((m) => m.key === "h2h");
-        if (!market) continue;
-        const outcome = market.outcomes.find(
-          (o) => o.name.toLowerCase() === name.toLowerCase()
-        );
-        if (!outcome) continue;
-        // Sentinel ("no price") / absurd prices must never be treated as the
-        // best available back price — a 1.00 or 451 here would poison the
-        // dutching maths on this match. See odds-sanity.ts.
-        if (!isPlausiblePrice(outcome.price)) continue;
-        options.push({ bookmaker: bm.title, odds: outcome.price });
-      }
-      return { outcome: name, options };
-    });
+  type Candidate = { key: string; bookmaker: string; odds: number };
 
-  // Filter out outcomes that have no bookmaker coverage
+  // Build a matrix: for each outcome, list all (bookmaker, odds) pairs, minus
+  // the exchange that lays that same outcome.
+  const matrix: {
+    outcome: string;
+    options: Candidate[];
+    /** The lay source quoted a price here and was set aside — a bookmaker won. */
+    setAside: boolean;
+    /** The lay source was the ONLY quote here — no usable back price remains. */
+    emptied: boolean;
+  }[] = outcomeNames.map((name) => {
+    const candidates: Candidate[] = [];
+    for (const bm of bookmakers) {
+      const market = bm.markets.find((m) => m.key === "h2h");
+      if (!market) continue;
+      const outcome = market.outcomes.find(
+        (o) => o.name.toLowerCase() === name.toLowerCase()
+      );
+      if (!outcome) continue;
+      // Sentinel ("no price") / absurd prices must never be treated as the
+      // best available back price — a 1.00 or 451 here would poison the
+      // dutching maths on this match. See odds-sanity.ts.
+      if (!isPlausiblePrice(outcome.price)) continue;
+      candidates.push({ key: bm.key, bookmaker: bm.title, odds: outcome.price });
+    }
+    // The lay-source key comes from the row's own lay price, never a guess.
+    const { kept, excluded } = excludeLaySource(
+      candidates,
+      excludeBackFor?.get(name.toLowerCase())
+    );
+    return {
+      outcome: name,
+      options: kept,
+      setAside: excluded.length > 0 && kept.length > 0,
+      emptied: excluded.length > 0 && kept.length === 0,
+    };
+  });
+
+  const droppedAsLaySource = matrix.filter((m) => m.emptied).map((m) => m.outcome);
+  const backFromLaySourceSetAside = matrix
+    .filter((m) => m.setAside)
+    .map((m) => m.outcome);
+
+  // Filter out outcomes that have no bookmaker coverage left
   const validMatrix = matrix.filter((m) => m.options.length > 0);
-  if (validMatrix.length === 0) return [];
+  if (validMatrix.length === 0) {
+    return { picks: [], droppedAsLaySource, backFromLaySourceSetAside };
+  }
 
   // Count unique bookmakers available
   const uniqueBookmakers = new Set<string>();
   for (const m of validMatrix) {
     for (const opt of m.options) {
-      uniqueBookmakers.add(opt.bookmaker);
+      uniqueBookmakers.add(opt.key);
     }
   }
 
+  const bestPerOutcome = (): BackPick[] =>
+    validMatrix.map((m) => {
+      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
+      return {
+        outcome: m.outcome,
+        backOdds: best.odds,
+        bookmaker: best.bookmaker,
+        bookmakerKey: best.key,
+        warning: "Bookmaker availability limited",
+      };
+    });
+
   // If not enough bookmakers for unique assignment, use best-per-outcome with warning
   if (uniqueBookmakers.size < validMatrix.length) {
-    return validMatrix.map((m) => {
-      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
-      return { outcome: m.outcome, backOdds: best.odds, bookmaker: best.bookmaker, warning: "Bookmaker availability limited" };
-    });
+    return {
+      picks: bestPerOutcome(),
+      droppedAsLaySource,
+      backFromLaySourceSetAside,
+    };
   }
 
   // Generate all valid permutations of bookmaker assignments
   // Each outcome gets one bookmaker, no bookmaker reused
-  let bestAssignment: { outcome: string; backOdds: number; bookmaker: string; warning?: string }[] | null = null;
+  let bestAssignment: BackPick[] | null = null;
   let bestProfit = -Infinity;
 
   function generatePermutations(
     idx: number,
     usedBookmakers: Set<string>,
-    current: { outcome: string; backOdds: number; bookmaker: string }[]
+    current: BackPick[]
   ) {
     if (idx === validMatrix.length) {
       const oddsArr = current.map((a) => a.backOdds);
@@ -283,12 +377,17 @@ function bestUniqueBookmakerOdds(
 
     const entry = validMatrix[idx];
     for (const opt of entry.options) {
-      if (usedBookmakers.has(opt.bookmaker)) continue;
-      usedBookmakers.add(opt.bookmaker);
-      current.push({ outcome: entry.outcome, backOdds: opt.odds, bookmaker: opt.bookmaker });
+      if (usedBookmakers.has(opt.key)) continue;
+      usedBookmakers.add(opt.key);
+      current.push({
+        outcome: entry.outcome,
+        backOdds: opt.odds,
+        bookmaker: opt.bookmaker,
+        bookmakerKey: opt.key,
+      });
       generatePermutations(idx + 1, usedBookmakers, current);
       current.pop();
-      usedBookmakers.delete(opt.bookmaker);
+      usedBookmakers.delete(opt.key);
     }
   }
 
@@ -296,13 +395,18 @@ function bestUniqueBookmakerOdds(
 
   // No valid unique assignment found — fallback to best-per-outcome with warning
   if (!bestAssignment) {
-    return validMatrix.map((m) => {
-      const best = m.options.reduce((a, b) => (a.odds > b.odds ? a : b));
-      return { outcome: m.outcome, backOdds: best.odds, bookmaker: best.bookmaker, warning: "Bookmaker availability limited" };
-    });
+    return {
+      picks: bestPerOutcome(),
+      droppedAsLaySource,
+      backFromLaySourceSetAside,
+    };
   }
 
-  return bestAssignment;
+  return {
+    picks: bestAssignment,
+    droppedAsLaySource,
+    backFromLaySourceSetAside,
+  };
 }
 
 /**
@@ -459,9 +563,43 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
     // pair — drop the fixture rather than show half a market.
     if (allOutcomes.length < 2) continue;
 
-    // Outcomes the feed listed but for which nobody quoted a usable back price.
+    // Lay prices are resolved BEFORE the back side is chosen, because the
+    // exchange that supplies a lay must be excluded from that outcome's back
+    // candidates (see odds-sanity.ts): backing and laying the same exchange is
+    // a guaranteed loss, and it used to win "best back price" on 2 of 7 rows.
+    const layByOutcome = new Map<
+      string,
+      ReturnType<typeof findLayOdds>
+    >();
+    const excludeBackFor = new Map<string, string>();
+    for (const o of allOutcomes) {
+      const key = o.name.toLowerCase();
+      const lay = isIceHockeyMatch ? null : findLayOdds(o.name, apiMatch.bookmakers);
+      layByOutcome.set(key, lay);
+      if (lay) excludeBackFor.set(key, lay.layBookmakerKey);
+    }
+
+    const {
+      picks: perOutcome,
+      droppedAsLaySource,
+      backFromLaySourceSetAside,
+    } = bestUniqueBookmakerOdds(allOutcomes, apiMatch.bookmakers, excludeBackFor);
+    if (perOutcome.length === 0) continue;
+
+    // Outcomes whose only back price was the lay exchange are unusable — drop
+    // them entirely rather than reuse the exchange price. They are reported as
+    // withheld so the UI can explain the gap instead of hiding it.
+    const droppedKeys = new Set(droppedAsLaySource.map((n) => n.toLowerCase()));
+    const keptOutcomes = allOutcomes.filter((o) => !droppedKeys.has(o.name.toLowerCase()));
+    if (keptOutcomes.length < 2) continue;
+    const setAsideKeys = new Set(
+      backFromLaySourceSetAside.map((n) => n.toLowerCase())
+    );
+
+    // Outcomes the feed listed but for which nobody quoted a usable back price,
+    // plus the ones withheld above because the exchange was the only quoter.
     const outcomesWithheld = [...allOutcomeNames].filter(
-      (n) => !allOutcomes.some((o) => o.name.toLowerCase() === n)
+      (n) => !keptOutcomes.some((o) => o.name.toLowerCase() === n)
     ).length;
 
     // Build the full per-outcome bookmaker back-odds matrix (kept for the
@@ -479,13 +617,10 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       }
     }
 
-    const perOutcome = bestUniqueBookmakerOdds(allOutcomes, apiMatch.bookmakers);
-    if (perOutcome.length === 0) continue;
-
     // Check if any outcome has a warning (duplicate bookmaker fallback)
     const hasWarning = perOutcome.some((o) => o.warning);
 
-    const sorted = perOutcome.sort((a, b) => {
+    const perOutcomeSorted = perOutcome.sort((a, b) => {
       const aIsHome = a.outcome.toLowerCase() === apiMatch.home_team.toLowerCase();
       const bIsHome = b.outcome.toLowerCase() === apiMatch.home_team.toLowerCase();
       const aIsDraw = a.outcome.toLowerCase() === "draw";
@@ -507,20 +642,31 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       time: formatTime(apiMatch.commence_time),
       commenceTime: apiMatch.commence_time,
       hasLayCoverage: layCoveredLeagues.has(apiMatch.sport_key),
-      outcomes: sorted.map((o) => {
-        const lay = isIceHockeyMatch ? null : findLayOdds(o.outcome, apiMatch.bookmakers);
+      outcomes: perOutcomeSorted.map((o) => {
+        const lay = layByOutcome.get(o.outcome.toLowerCase()) ?? null;
         // Back/lay sanity check (see odds-sanity.ts). A lay price that is a
         // feed sentinel, or that sits far below the bookmaker's back price,
         // describes a different market — withhold it so no surface (Lay Bet
         // Finder, Bet Builder, alerts) can present it as an opportunity, and
         // mark the row so the UI can be honest about the omission.
-        const pair = checkBackLayPair(o.backOdds, lay ? lay.layOdds : null);
+        //
+        // The bookmaker keys are passed too: even if selection ever let the lay
+        // exchange through as the back price, the pair is rejected here.
+        const pair = checkBackLayPair(
+          o.backOdds,
+          lay ? lay.layOdds : null,
+          o.bookmakerKey,
+          lay ? lay.layBookmakerKey : null
+        );
         const layWithheld = Boolean(lay) && pair.suspect;
         if (layWithheld) laysWithheld++;
         return {
           name: o.outcome,
           bookmaker: o.bookmaker,
+          bookmakerKey: o.bookmakerKey,
           odds: o.backOdds,
+          // A fixed reference column only — the UI never prints it, and stakes
+          // are whatever the user enters (there is no £20 assumption anywhere).
           return20: Math.round(20 * o.backOdds * 100) / 100,
           layOdds: lay && !pair.suspect ? lay.layOdds : null,
           laySource: lay && !pair.suspect ? lay.laySource : null,
@@ -528,6 +674,9 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
           backLastUpdate: getBackLastUpdate(o.bookmaker, apiMatch.bookmakers),
           layLastUpdate: lay && !pair.suspect ? lay.layLastUpdate : null,
           bookmakerOdds: matrix.get(o.outcome.toLowerCase()) || [],
+          ...(setAsideKeys.has(o.outcome.toLowerCase())
+            ? { backSourceExcluded: true }
+            : {}),
           ...(layWithheld
             ? { laySuspect: true, laySuspectReason: pair.reason ?? undefined }
             : {}),
@@ -536,6 +685,9 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       ...(hasWarning ? { warning: "Bookmaker availability limited — some outcomes may share the same bookmaker" } : {}),
       ...(outcomesWithheld > 0 ? { outcomesWithheld } : {}),
       ...(laysWithheld > 0 ? { laysWithheld } : {}),
+      ...(droppedAsLaySource.length > 0
+        ? { backWithheldAsLaySource: droppedAsLaySource.length }
+        : {}),
     });
   }
 
