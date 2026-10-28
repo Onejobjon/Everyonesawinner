@@ -331,9 +331,9 @@ export default function Home() {
           <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and exactly what they include. <strong>50% off Pro for your first month.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and nothing can be charged until it does.</span></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
-              {n:"Starter",p:"£9.99",pr:"/month",d:"Perfect for beginners.",f:["Full offer database","Unlimited calculator usage","Profit tracker","Email support"],pop:false,link:"https://buy.stripe.com/aFaaEX3i6119e5h93edQQ06"},
-              {n:"Pro",orig:"£19.99",disc:"£9.99",pr:"/month",d:"For regular users maximising earnings.",f:["Lay Bet Finder (Pro-exclusive)","Everything in Starter","Unlimited offer alerts","Advanced oddsmatcher","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true,link:"https://buy.stripe.com/4gM8wP4ma4dlbX97ZadQQ04"},
-              {n:"Annual",orig:"",disc:"£199",pr:"/year",d:"Best value. Save £40.",f:["Everything in Pro","2 months free","Early access","Priority support"],pop:false,link:"https://buy.stripe.com/fZu9ATdWK1190ergvGdQQ05"},
+              {n:"Starter",p:"£9.99",pr:"/month",d:"Perfect for beginners.",f:["Full offer database","Unlimited calculator usage","Profit tracker","Email support"],pop:false},
+              {n:"Pro",orig:"£19.99",disc:"£9.99",pr:"/month",d:"For regular users maximising earnings.",f:["Lay Bet Finder (Pro-exclusive)","Everything in Starter","Unlimited offer alerts","Advanced oddsmatcher","Auto-calculation","Profit dashboard","Priority support","Sign-up guides"],pop:true},
+              {n:"Annual",orig:"",disc:"£199",pr:"/year",d:"Best value. Save £40.",f:["Everything in Pro","2 months free","Early access","Priority support"],pop:false},
             ].map((plan,i) => (
               <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.pop ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>
                 {plan.pop && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">Most popular</span>}
