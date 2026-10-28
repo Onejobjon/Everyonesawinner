@@ -253,7 +253,7 @@ export default function Home() {
             <a href="#how-it-works" className="rounded-xl border border-gray-300 px-8 py-3.5 text-base font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900 transition-colors">How it works</a>
           </div>
           <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-3 border-y border-gray-200 dark:border-gray-800 py-8">
-            <div><p className="text-3xl font-bold text-indigo-600">£20</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">See exactly what £20 returns on any outcome</p></div>
+            <div><p className="text-3xl font-bold text-indigo-600">Any stake</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Enter whatever you'd actually bet and see exactly what it returns</p></div>
             <div><p className="text-3xl font-bold text-indigo-600">10 min</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Odds refreshed every 10 minutes</p></div>
             <div><p className="text-3xl font-bold text-indigo-600">20+</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">UK bookmakers and exchanges, side by side</p></div>
           </div>
