@@ -39,7 +39,7 @@ const plans: {
   {
     id: "annual",
     name: "Annual",
-    price: "£199",
+    price: "£269.99",
     period: "/year (planned)",
     desc: "Twelve months of Pro at the same tools.",
     features: [

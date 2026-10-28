@@ -136,7 +136,7 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">Best value</span>
               <h3 className="mt-3 text-lg font-semibold">Pro Annual</h3>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold">£199</span>
+                <span className="text-3xl font-extrabold">£269.99</span>
                 <span className="text-sm text-gray-500">/yr</span>
               </div>
               <p className="mt-1 text-xs text-gray-500">Billed once a year (planned)</p>

@@ -335,7 +335,7 @@ export default function Home() {
             {[
               {n:"Starter",p:"£19.99",pr:"/month (planned)",d:"The oddsmatcher and the calculator.",f:["Best Odds Finder (oddsmatcher)","Profit calculator with lay stake and liability","The licence-checked free-bets list"],pop:false},
               {n:"Pro",orig:"",disc:"£29.99",pr:"/month (planned)",d:"Adds the two lay tools.",f:["Everything in Starter","Lay Bet Finder — close single lays, searched on demand","Acca Lay Planner — 2–4 leg lay plans"],pop:true},
-              {n:"Annual",orig:"",disc:"£199",pr:"/year (planned)",d:"Twelve months of Pro.",f:["Everything in Pro","One payment for the year instead of twelve"],pop:false},
+              {n:"Annual",orig:"",disc:"£269.99",pr:"/year (planned)",d:"Twelve months of Pro.",f:["Everything in Pro","One payment for the year instead of twelve"],pop:false},
             ].map((plan,i) => (
               <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.pop ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>
                 {plan.pop && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">Most popular</span>}
