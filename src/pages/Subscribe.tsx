@@ -8,7 +8,6 @@ const plans: {
   period: string;
   desc: string;
   features: string[];
-  link: string;
   popular: boolean;
   orig?: string;
 }[] = [
@@ -24,7 +23,6 @@ const plans: {
       "Profit tracker",
       "Email support",
     ],
-    link: "https://buy.stripe.com/aFaaEX3i6119e5h93edQQ06",
     popular: false,
   },
   {
@@ -44,7 +42,6 @@ const plans: {
       "Priority support",
       "Sign-up guides",
     ],
-    link: "https://buy.stripe.com/4gM8wP4ma4dlbX97ZadQQ04",
     popular: true,
   },
   {
@@ -59,7 +56,6 @@ const plans: {
       "Early access to new features",
       "Priority support",
     ],
-    link: "https://buy.stripe.com/fZu9ATdWK1190ergvGdQQ05",
     popular: false,
   },
 ];
@@ -67,13 +63,6 @@ const plans: {
 export default function Subscribe() {
   const { user } = useAuth();
 
-  const handleSubscribe = (url: string, plan: Plan) => {
-    // Remember which plan the user is buying so /subscribe/success can
-    // assign the right tier when they return from Stripe.
-    localStorage.setItem("eaw_pending_plan", plan);
-    // Open Stripe payment link in new tab
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
 
   if (!user) {
     return (
@@ -120,9 +109,9 @@ export default function Subscribe() {
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Choose your plan</h1>
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            Pick the plan that's right for you. All plans include full access to odds tools and the offer database.
+            These are the plans we intend to offer. Play isn't open yet — we're finishing the payment setup, and nothing can be charged until it does.
             <br />
-            <span className="text-sm">After payment, you'll be redirected to activate your subscription.</span>
+            <span className="text-sm">Starter includes the oddsmatcher and calculator. Pro adds the Lay Bet Finder and the Acca Lay Planner.</span>
           </p>
         </div>
 
@@ -170,17 +159,15 @@ export default function Subscribe() {
                 ))}
               </ul>
               <button
-                onClick={() => handleSubscribe(plan.link, plan.id)}
-                className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold transition-all ${
-                  plan.popular
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700"
-                    : "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300"
-                }`}
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="mt-6 w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500"
               >
-                Subscribe - {plan.price}{plan.period}
+                Checkout opens shortly
               </button>
               <p className="mt-2 text-xs text-gray-400 text-center">
-                Opens Stripe checkout in a new tab
+                Nothing can be charged until checkout opens.
               </p>
             </div>
           ))}
@@ -188,7 +175,7 @@ export default function Subscribe() {
 
         <div className="mt-12 text-center border-t border-gray-200 dark:border-gray-800 pt-8">
           <p className="text-sm text-gray-500">
-            After payment, you'll be sent to <strong>/subscribe/success</strong> to activate your account.
+            Checkout isn't open yet. When it is, a completed payment will be confirmed by our server before any tool unlocks — not by this page.
           </p>
           <p className="mt-2 text-sm text-gray-500">
             Questions? <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 hover:text-indigo-700">Contact support</a>

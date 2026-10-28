@@ -9,8 +9,6 @@ interface PaywallProps {
   tier?: "any" | "pro";
 }
 
-const PRO_LINK = "https://buy.stripe.com/4gM8wP4ma4dlbX97ZadQQ04";
-const ANNUAL_LINK = "https://buy.stripe.com/fZu9ATdWK1190ergvGdQQ05";
 
 function Nav() {
   return (
@@ -119,7 +117,7 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
 
           <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 max-w-3xl mx-auto text-left">
             <div className="rounded-2xl border-2 border-indigo-500 bg-white p-8 shadow-sm dark:bg-gray-950">
-              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">50% OFF first month</span>
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">Planned plan</span>
               <h3 className="mt-3 text-lg font-semibold">Pro Monthly</h3>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-sm font-bold text-gray-400 line-through">£19.99</span>
@@ -132,9 +130,9 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
                 <li>• Everything in Starter</li>
                 <li>• Advanced oddsmatcher</li>
               </ul>
-              <a href={PRO_LINK} target="_blank" rel="noopener noreferrer" className="mt-6 block w-full rounded-xl bg-indigo-600 py-3 text-center text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">
-                Upgrade — £9.99/mo
-              </a>
+              <button type="button" disabled aria-disabled="true" className="mt-6 block w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500">
+                Checkout opens shortly
+              </button>
             </div>
             <div className="rounded-2xl border-2 border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-950">
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">Best value</span>
@@ -150,14 +148,14 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
                 <li>• Everything in Pro</li>
                 <li>• 2 months free</li>
               </ul>
-              <a href={ANNUAL_LINK} target="_blank" rel="noopener noreferrer" className="mt-6 block w-full rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900 transition-all">
-                Upgrade — £199/yr
-              </a>
+              <button type="button" disabled aria-disabled="true" className="mt-6 block w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500">
+                Checkout opens shortly
+              </button>
             </div>
           </div>
 
           <p className="mt-8 text-sm text-gray-500">
-            After payment you'll be redirected to activate — then the Lay Bet Finder unlocks automatically.
+            Checkout isn't open yet — we're finishing the payment setup, and nothing can be charged until it does. These are the plans we intend to offer, not prices you can buy today.
           </p>
         </div>
       </div>

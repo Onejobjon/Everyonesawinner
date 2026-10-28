@@ -52,17 +52,17 @@ export default function SubscribeSuccess() {
         {status === "activating" && (
           <>
             <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent mx-auto" />
-            <h1 className="mt-6 text-2xl font-bold">Activating your subscription...</h1>
+            <h1 className="mt-6 text-2xl font-bold">Checking whether a payment has been confirmed...</h1>
             <p className="mt-2 text-gray-600 dark:text-gray-400">Please wait one moment.</p>
           </>
         )}
 
         {status === "done" && (
           <>
-            <span className="text-6xl">🎉</span>
-            <h1 className="mt-6 text-2xl font-bold">Subscription activated!</h1>
+            <span className="text-6xl">ℹ️</span>
+            <h1 className="mt-6 text-2xl font-bold">We haven't received a payment for this account</h1>
             <p className="mt-2 text-gray-600 dark:text-gray-400">
-              Your account is now active. Redirecting to dashboard in {countdown}s...
+              This page does not activate anything — only our server can confirm a payment, and checkout isn't open yet. Nothing has been charged.
             </p>
             <div className="mt-8 flex gap-4 justify-center">
               <Link to="/dashboard" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
