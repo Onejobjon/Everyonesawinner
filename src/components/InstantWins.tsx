@@ -1,5 +1,5 @@
 /**
- * INSTANT WINS panel — same-day opportunities, already on screen when the page
+ * INSTANT WINS panel — today's GREEN trades, already on screen when the page
  * opens. No click, no search, and (the point) no provider call.
  *
  * It reads `GET /api/instant-wins`, which returns the same-day slice of the last
@@ -7,17 +7,30 @@
  * user's own stake and the SHARED exchange-commission control, so this panel can
  * never disagree with the Lay Bet Finder or the calculator about money.
  *
+ * OWNER REQUIREMENT (2026-11-02): "we need any odds visible, only rule being it
+ * must be green." So there is no odds floor, no odds ceiling and no
+ * qualifying-grade tier here: a row is shown if and only if the trade is
+ * profitable on both sides after commission at the user's stake. A 1.05 and a
+ * 14.0 both belong; a tight-but-unprofitable 2.00/2.05 does not.
+ *
  * Honesty rules this panel keeps:
  *   • "as of HH:MM" from the scan's own timestamp, plus an explicit warning once
  *     the scan is older than STALE_AFTER_MIN — a stale row must never look live.
  *   • No scan data is a STATE ("no scan data yet"), never an empty list that
  *     would read as "no opportunities".
- *   • Every row is labelled qualifying-grade or arbitrage. Most are qualifying.
+ *   • An empty feed still shows its coverage ("looked at N fixtures across M
+ *     sports") so "no green trades" can never be mistaken for "the feed broke".
+ *   • A green row is a FEED price, not a guaranteed fill: exchange liquidity can
+ *     make the lay unachievable at that price, and the panel says so.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { sessionToken, type Match } from "../lib/odds-api";
-import { buildInstantWins, STALE_AFTER_MIN, type InstantWinRow } from "../lib/instant-wins";
+import {
+  buildInstantWins,
+  coverageLine,
+  STALE_AFTER_MIN,
+} from "../lib/instant-wins";
 import { londonDayKey, londonDayLabel, londonTimeLabel } from "../lib/london-day";
 import { money } from "../lib/laybets-common";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "./CommissionControl";
@@ -28,10 +41,17 @@ interface Payload {
   message?: string;
   scannedAt?: string | null;
   ageMinutes?: number | null;
+  oldestPriceAt?: string | null;
+  priceAgeMinutes?: number | null;
   stale?: boolean;
   staleAfterMin?: number;
   fixturesScanned?: number;
+  sportsScanned?: number;
   sameDayFixtures?: number;
+  sameDaySports?: number;
+  sportsInSeason?: number;
+  sportsWithToday?: number;
+  fixturesToday?: number;
   matches?: Match[];
   error?: string;
 }
@@ -50,18 +70,6 @@ function ageWords(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h} hour${h === 1 ? "" : "s"}${m ? ` ${m} minute${m === 1 ? "" : "s"}` : ""}`;
-}
-
-function GradeBadge({ grade }: { grade: InstantWinRow["grade"] }) {
-  return grade === "arbitrage" ? (
-    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-800 dark:bg-green-950 dark:text-green-300">
-      Arbitrage — green cash
-    </span>
-  ) : (
-    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-      Qualifying-grade
-    </span>
-  );
 }
 
 export default function InstantWins() {
@@ -108,9 +116,11 @@ export default function InstantWins() {
     return buildInstantWins(matches, { now, stake: stakeVal, commission });
   }, [payload, now, stakeVal, commission]);
 
-  const scannedAt = payload?.scannedAt ?? null;
-  const asOfTime = scannedAt ? londonTimeLabel(scannedAt) : null;
-  const asOfDay = scannedAt ? londonDayKey(scannedAt) : null;
+  // "As of" is the OLDEST price in the list, not when the loop last ticked:
+  // each sport refreshes on its own clock, so the two are different things.
+  const priceAt = payload?.oldestPriceAt ?? payload?.scannedAt ?? null;
+  const asOfTime = priceAt ? londonTimeLabel(priceAt) : null;
+  const asOfDay = priceAt ? londonDayKey(priceAt) : null;
   const todayKey = londonDayKey(new Date());
   const asOfLabel =
     asOfTime && asOfDay
@@ -120,17 +130,19 @@ export default function InstantWins() {
       : null;
   const stale = Boolean(payload?.stale);
   const staleAfterMin = payload?.staleAfterMin ?? STALE_AFTER_MIN;
+  const coverage = coverageLine(built);
 
   return (
     <section className="mt-8 rounded-2xl border border-purple-200 bg-white p-6 dark:border-purple-900 dark:bg-gray-950">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-            <span>⚡</span> Instant wins — same day
+            <span>⚡</span> Instant wins — today&apos;s green trades
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
-            Already on screen when you open this page — no search, no click. These are the same-day
-            opportunities the scheduled scan last found, priced on your own stake.
+            Already on screen when you open this page — no search, no click. Every sport the scan
+            covers, at <strong>any odds</strong>: the only thing that gets a trade onto this list is
+            that it returns money whichever way the result goes, after commission, on your stake.
           </p>
           <p className="mt-2 inline-block rounded-lg bg-purple-50 px-3 py-1 text-xs font-medium text-purple-800 dark:bg-purple-950/50 dark:text-purple-200">
             Costs <strong>zero credits</strong> to load: this feed reads the last scan&apos;s saved
@@ -163,9 +175,12 @@ export default function InstantWins() {
             {asOfLabel ? (
               <>
                 Prices <strong>as of {asOfLabel}</strong>
-                {typeof payload.ageMinutes === "number" ? ` (${ageWords(payload.ageMinutes)} ago)` : ""} —{" "}
-                {payload.fixturesScanned ?? 0} fixture{(payload.fixturesScanned ?? 0) === 1 ? "" : "s"} in
-                that scan, {built.sameDayFixtures} kicking off today.
+                {typeof payload.priceAgeMinutes === "number"
+                  ? ` (${ageWords(payload.priceAgeMinutes)} ago — the oldest in this list)`
+                  : ""}{" "}
+                —{" "}
+                {built.sameDayFixtures} fixture{built.sameDayFixtures === 1 ? "" : "s"} across{" "}
+                {built.sameDaySports} sport{built.sameDaySports === 1 ? "" : "s"} kicking off today.
               </>
             ) : (
               <>The last scan did not record a time.</>
@@ -173,9 +188,10 @@ export default function InstantWins() {
           </p>
           {stale && (
             <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              ⚠️ Last scan was {ageWords(payload.ageMinutes ?? staleAfterMin)} ago — these prices may
-              have moved. A scan normally runs every 10 minutes, so this one is late; check the price
-              at the bookmaker and the exchange before you place anything.
+              ⚠️ Some prices here are {ageWords(payload.priceAgeMinutes ?? staleAfterMin)} old — they
+              may have moved. The scan refreshes each sport on a credit budget rather than all of
+              them every ten minutes, so a sport can be up to about {staleAfterMin} minutes old.
+              Check the price at the bookmaker and the exchange before you place anything.
             </p>
           )}
           <p className="mt-1 text-[11px] text-gray-400">
@@ -220,24 +236,50 @@ export default function InstantWins() {
           <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">No scan data yet</p>
           <p className="mt-1 text-sm text-gray-500">{payload.message}</p>
           <p className="mt-2 text-sm text-gray-500">
-            This is not &ldquo;no opportunities&rdquo; — it means there is no completed scan to show
+            This is not &ldquo;no green trades&rdquo; — it means there is no completed scan to show
             yet. The scheduled scan runs every 10 minutes; the feed fills in after the first one.
           </p>
         </div>
       )}
 
-      {/* Scanned, but nothing on today. */}
+      {/* Scanned, but nothing green today. Says so in exactly those words, and
+          still shows what the scan covered. */}
       {phase === "ready" && payload?.status === "ok" && built.rows.length === 0 && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-6 dark:border-gray-800 dark:bg-gray-900/50">
           <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-            No same-day opportunities right now — last scanned {asOfLabel ?? "unknown"}
+            No green trades in the last scan
           </p>
-          <p className="mt-1 text-sm text-gray-500">
-            The scan looked at <strong>{payload.fixturesScanned ?? 0}</strong> fixture
-            {(payload.fixturesScanned ?? 0) === 1 ? "" : "s"} and{" "}
-            <strong>{built.sameDayFixtures}</strong> of them kick off today. None of those has a back
-            and lay pair close enough to show.
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            The scan {coverage} — <strong>{built.outcomesConsidered}</strong> outcome
+            {built.outcomesConsidered === 1 ? "" : "s"} priced, and none of them was profitable on
+            both sides after commission at your £{stakeVal} stake.
           </p>
+          <ul className="mt-2 space-y-1 text-xs text-gray-500">
+            <li>
+              {built.noLayPrice} outcome{built.noLayPrice === 1 ? "" : "s"} had no exchange lay price
+              — those cannot be matched at all, so they cannot be green.
+            </li>
+            <li>
+              {built.notGreen} outcome{built.notGreen === 1 ? "" : "s"} had a lay price but was not
+              green at {commLabel} commission; raising or lowering the commission above can move a
+              marginal one either way.
+            </li>
+            {built.withheld > 0 && (
+              <li>
+                {built.withheld} row{built.withheld === 1 ? "" : "s"} withheld by the price sanity
+                check — the lay was far below the bookmaker price, which nearly always means two
+                different markets rather than free money.
+              </li>
+            )}
+          </ul>
+          {typeof payload.fixturesToday === "number" && payload.fixturesToday > 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              Today has {payload.fixturesToday} fixture{payload.fixturesToday === 1 ? "" : "s"} across{" "}
+              {payload.sportsWithToday} sport{payload.sportsWithToday === 1 ? "" : "s"} in total; the
+              scan refreshes each sport on a budget, so it holds prices for{" "}
+              {built.sameDayFixtures} of them right now.
+            </p>
+          )}
           <p className="mt-2 text-sm text-gray-500">
             Prices move constantly — this panel updates on your next visit. You can also search
             specific competitions yourself in the Lay Bet Finder.
@@ -247,7 +289,11 @@ export default function InstantWins() {
 
       {phase === "ready" && payload?.status === "ok" && built.rows.length > 0 && (
         <>
-          <div className="mt-4 overflow-x-auto">
+          <p className="mt-4 text-sm font-medium text-gray-800 dark:text-gray-100">
+            {built.rows.length} green trade{built.rows.length === 1 ? "" : "s"} — the scan {coverage},
+            best return first.
+          </p>
+          <div className="mt-2 overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wide text-gray-400 dark:border-gray-800">
@@ -256,105 +302,78 @@ export default function InstantWins() {
                   <th className="py-2 pr-3 font-medium">Back (bookmaker)</th>
                   <th className="py-2 pr-3 font-medium">Lay (exchange)</th>
                   <th className="py-2 pr-3 font-medium">Gap</th>
-                  <th className="py-2 pr-3 font-medium">Returns on £{stakeVal}</th>
-                  <th className="py-2 font-medium">Grade</th>
+                  <th className="py-2 font-medium">Returns on £{stakeVal}</th>
                 </tr>
               </thead>
               <tbody>
-                {built.rows.map((r) => {
-                  const up = r.profitLoss >= 0;
-                  return (
-                    <tr
-                      key={`${r.matchId}-${r.outcome}`}
-                      className="border-b border-gray-100 align-top last:border-0 dark:border-gray-900"
-                    >
-                      <td className="py-3 pr-3 font-semibold text-gray-800 dark:text-gray-100">
-                        {r.kickoffTime}
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">
-                          {r.home} <span className="font-normal text-gray-400">vs</span> {r.away}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {r.league} · backing <strong>{r.outcome}</strong>
-                        </div>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div className="font-semibold text-gray-900 dark:text-white">
-                          {r.backOdds.toFixed(2)}
-                        </div>
-                        <div className="text-xs text-gray-500">{r.bookmaker}</div>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div className="font-semibold text-purple-700 dark:text-purple-300">
-                          {r.layOdds.toFixed(2)}
-                        </div>
-                        <div className="text-xs text-purple-500">{r.laySource ?? "exchange"}</div>
-                        <div className="text-[11px] text-purple-500">
-                          <CommissionNote pct={commPct} source={r.laySource} />
-                        </div>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <span
-                          className={
-                            r.gap < 0
-                              ? "font-semibold text-green-600 dark:text-green-400"
-                              : "font-semibold text-gray-700 dark:text-gray-200"
-                          }
-                        >
-                          {r.gap > 0 ? "+" : ""}
-                          {r.gap.toFixed(2)}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div
-                          className={
-                            up
-                              ? "font-semibold text-green-600 dark:text-green-400"
-                              : "font-semibold text-red-500 dark:text-red-400"
-                          }
-                        >
-                          {up ? "+" : "−"}
-                          {money(Math.abs(r.profitLoss))}
-                        </div>
-                        <div className="text-[11px] text-gray-400">
-                          lay {money(r.layStake)} · liability {money(r.liability)}
-                        </div>
-                      </td>
-                      <td className="py-3">
-                        <GradeBadge grade={r.grade} />
-                      </td>
-                    </tr>
-                  );
-                })}
+                {built.rows.map((r) => (
+                  <tr
+                    key={`${r.matchId}-${r.outcome}`}
+                    className="border-b border-gray-100 align-top last:border-0 dark:border-gray-900"
+                  >
+                    <td className="py-3 pr-3 font-semibold text-gray-800 dark:text-gray-100">
+                      {r.kickoffTime}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {r.home} <span className="font-normal text-gray-400">vs</span> {r.away}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {r.league} · backing <strong>{r.outcome}</strong>
+                      </div>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <div className="font-semibold text-gray-900 dark:text-white">
+                        {r.backOdds.toFixed(2)}
+                      </div>
+                      <div className="text-xs text-gray-500">{r.bookmaker}</div>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <div className="font-semibold text-purple-700 dark:text-purple-300">
+                        {r.layOdds.toFixed(2)}
+                      </div>
+                      <div className="text-xs text-purple-500">{r.laySource ?? "exchange"}</div>
+                      <div className="text-[11px] text-purple-500">
+                        <CommissionNote pct={commPct} source={r.laySource} />
+                      </div>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <span className="font-semibold text-green-600 dark:text-green-400">
+                        {r.gap > 0 ? "+" : ""}
+                        {r.gap.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="py-3">
+                      <div className="font-semibold text-green-600 dark:text-green-400">
+                        +{money(r.profitLoss)}
+                      </div>
+                      <div className="text-[11px] text-gray-400">
+                        lay {money(r.layStake)} · liability {money(r.liability)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
           <div className="mt-3 space-y-1 text-[11px] text-gray-400">
             <p>
-              <strong>Most of these are qualifying-grade, not arbitrage.</strong> A qualifying row
-              returns slightly less than your stake — that small loss is the normal cost of releasing
-              a free bet or hitting a wagering requirement, and it is what most matched-betting rows
-              are. Only a row whose <em>returns</em> figure is positive (green) is arbitrage.
+              <strong>A green row is a feed price, not a guaranteed fill.</strong> Exchange liquidity
+              can make the lay unachievable at the price shown — the amount matched at that price may
+              be smaller than your stake, so check the available size on the exchange before you
+              commit. If it is not there, the trade is not green at your stake.
             </p>
-            {built.withheld > 0 && (
-              <p>
-                {built.withheld} row{built.withheld === 1 ? "" : "s"} withheld — the exchange lay price
-                was more than 10% below the bookmaker price, which nearly always means two different
-                markets rather than free money.
-              </p>
-            )}
-            {built.laySourceExcluded > 0 && (
-              <p>
-                {built.laySourceExcluded} outcome{built.laySourceExcluded === 1 ? "" : "s"} withheld —
-                the only back price quoted came from the exchange that lays it, and backing and laying
-                the same exchange can only lose.
-              </p>
-            )}
             <p>
-              Figures include {commLabel} exchange commission (adjustable above). Prices come from the
-              scheduled scan, not from a live check made when you opened this page.
+              Every row is priced at your £{stakeVal} stake with {commLabel} exchange commission
+              (adjustable above). No odds floor and no odds ceiling: a short-priced and a long-priced
+              trade are both shown when the money works.
+            </p>
+            <p>
+              Figures come from the scheduled scan, not from a live check made when you opened this
+              page. We can only see pre-match back prices and exchange lay prices — bet-builder and
+              same-game prices are generated by the bookmaker for you personally, so they are not in
+              this feed.
             </p>
           </div>
         </>

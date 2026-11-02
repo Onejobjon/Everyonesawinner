@@ -1,11 +1,13 @@
 /**
  * Opportunity alert worker — server-side (Bun runtime only).
  *
- * Watches for profitable lay-bet opportunities. The cash rule uses the SAME
- * close-lay guard as the /lay-bets finder — all odds with a lay gap under 0.2
- * (see qualifiesForLay) — and only fires an alert when the opportunity is
- * genuinely PROFITABLE (expectedProfit > 0). Ice hockey is excluded at the
- * data layer (its lay odds are nulled in transformMatches).
+ * Watches for GREEN lay-bet opportunities across every sport the vendor covers
+ * for today. The cash rule is the same one the Instant Wins feed uses: the trade
+ * must be profitable on BOTH sides after exchange commission at the alert stake
+ * (calcLay().profitLoss > 0). There is no odds floor, no odds ceiling and no
+ * lay-gap threshold — a green trade at 1.05 alerts exactly like one at 14.0.
+ * Ice hockey is excluded at the data layer (its lay odds are nulled in
+ * transformMatches).
  *
  * Delivery channels (each independent, all disabled until configured):
  *   A. Webhook — POST JSON to ALERT_WEBHOOK_URL with an HMAC-SHA256 signature
@@ -32,7 +34,6 @@ import {
   DEFAULT_COMMISSION,
   calcLay,
   calcFreeBetProfit,
-  qualifiesForLay,
   layGap,
   round2,
 } from "../lib/odds";
@@ -78,8 +79,9 @@ const ACTIONABILITY_BUFFER_MS = 15 * 60_000; // 15 minutes
 // 10-minute odds refresh, so an opportunity is alerted as soon as it is scanned
 // rather than sitting until the next hour (owner directive, 2026-10-27).
 const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, 10);
-// How long a fetched odds snapshot stays "fresh" before the worker re-fetches.
-const CACHE_TTL_MIN = num(process.env.ALERT_CACHE_TTL_MIN, 10);
+// NOTE: there is no single snapshot TTL any more — each SPORT has its own
+// freshness window (SPORT_ODDS_TTL_MIN below), because a same-day sweep is one
+// credit per sport and 20 sports every 10 minutes would burn the month in a day.
 
 // Channel A — webhook
 const WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
@@ -212,68 +214,318 @@ function lastKnownRemaining(): number | null {
   return null;
 }
 
-async function fetchRawMatches(): Promise<unknown[]> {
-  // No key anywhere → fail loudly. Previously this silently produced an empty
-  // scan ("0 opportunities"), which reads like "nothing on today" instead of
-  // "the feed is down".
-  if (!ODDS_API_KEY) throw new Error(oddsKeyProblem() || "ODDS_API_KEY missing");
-  const url = `${BASE}/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const why =
-      res.status === 401 ? " (401 — ODDS_API_KEY rejected)"
-      : res.status === 429 ? " (429 — quota exceeded)"
-      : "";
-    throw new Error(`odds API ${res.status}${why}`);
-  }
-  const remainingHdr = res.headers.get("x-requests-remaining");
-  const lastHdr = res.headers.get("x-requests-last");
-  const remaining = remainingHdr != null && remainingHdr !== "" && !Number.isNaN(Number(remainingHdr))
-    ? Number(remainingHdr)
-    : null;
-  const last = lastHdr != null && lastHdr !== "" && !Number.isNaN(Number(lastHdr))
-    ? Number(lastHdr)
-    : null;
-  if (remaining != null) lastRequestsRemaining = remaining;
-  const raw = (await res.json()) as unknown[];
-  // Cost is recorded here, at the only place a request is actually made.
-  lastScanCredits = { last, remaining, events: Array.isArray(raw) ? raw.length : 0, cache: "miss" };
-  return raw;
+// ── Wide same-day sweep (budgeted) ─────────────────────────────────────────
+//
+// WHY THIS IS NOT `/sports/upcoming/odds/` ANY MORE (measured 2026-11-02):
+// the `upcoming` endpoint answers with events commencing in the next few HOURS,
+// not the rest of the day. The exact URL the worker used to call returned 11
+// events / 3 sports (tennis_atp_paris_masters, basketball_ncaab,
+// soccer_spain_segunda_division), latest kick-off 14:30Z — and passing
+// `commenceTimeFrom`/`commenceTimeTo` changed nothing (11 events again, same
+// three sports). Meanwhile the FREE `/sports/{key}/events/` endpoints showed 55
+// un-started fixtures today across 20 sports. So the narrow window was the
+// limiter, not our filters.
+//
+// THE COST STRUCTURE that follows from that:
+//   • `/sports/?all=false`        — 0 credits (x-requests-last: 0, verified)
+//   • `/sports/{key}/events/`     — 0 credits (79 calls, remaining unchanged)
+//   • `/sports/{key}/odds/`       — 1 credit PER SPORT (billed per request)
+// So a full same-day sweep of 20 sports is 20 credits — 20× the old 1-credit
+// scan. To keep the owner's quota intact the sweep is budgeted rather than
+// widened blindly:
+//   • the free index says WHICH sports have a fixture today (refreshed every
+//     INDEX_TTL_MIN, costs nothing);
+//   • a sport's odds are only re-fetched once its own copy is older than
+//     SPORT_ODDS_TTL_MIN;
+//   • at most MAX_SPORT_FETCHES sports are paid for in one scan, most urgent
+//     kick-off first — so the fixtures closest to starting are always the
+//     freshest, and the rest rotate.
+// At today's measured 20 same-day sports that is ~20 fetches per 90 minutes
+// (~13/hour, ~320/day, ~9.6k/month) instead of 20 credits every 10 minutes
+// (~2,900/day). Exact per-scan spend is logged and rolled up in credits.jsonl.
+const SPORT_ODDS_TTL_MIN = num(process.env.ALERT_SPORT_ODDS_TTL_MIN, 90);
+const MAX_SPORT_FETCHES = Math.max(1, Math.floor(num(process.env.ALERT_MAX_SPORT_FETCHES, 3)));
+const INDEX_TTL_MIN = num(process.env.ALERT_INDEX_TTL_MIN, 30);
+const INDEX_FILE = join(RUN_DIR, "alerts-sports-index.json");
+/** How far ahead the per-sport odds call is asked for. Today's fixtures plus slack. */
+const ODDS_WINDOW_HOURS = 26;
+/** Small gap between free index calls: a concurrency-8 burst earned HTTP 429s. */
+const INDEX_GAP_MS = 90;
+
+interface SportIndexEntry {
+  key: string;
+  title: string;
+  /** Fixtures kicking off today in Europe/London that have not started. */
+  todayFixtures: number;
+  /** Soonest such kick-off (ISO), for priority ordering. */
+  nextKickoff: string | null;
 }
 
-async function getMatches(): Promise<Match[]> {
-  // Reuse a fresh on-disk cache instead of spending quota on every check.
+interface SportsIndex {
+  ts: number;
+  sportsInSeason: number;
+  /** Only sports with at least one same-day fixture — the ones worth paying for. */
+  sports: SportIndexEntry[];
+  totalTodayFixtures: number;
+  /** Free calls that failed (rate limit, network) — coverage is understated, not invented. */
+  failed: number;
+}
+
+interface SportCacheEntry {
+  fetchedAt: number;
+  fixtures: number;
+  events: number;
+}
+
+interface ScanCache {
+  ts: number;
+  data: Match[];
+  perSport?: Record<string, SportCacheEntry>;
+  index?: { ts: number; sportsInSeason: number; sportsWithToday: number; totalTodayFixtures: number };
+}
+
+/** One HTTP GET that also reads the vendor's own credit headers. */
+async function getJson(url: string): Promise<{
+  status: number;
+  last: number | null;
+  remaining: number | null;
+  body: unknown;
+}> {
+  const res = await fetch(url);
+  const remainingHdr = res.headers.get("x-requests-remaining");
+  const lastHdr = res.headers.get("x-requests-last");
+  const remaining =
+    remainingHdr != null && remainingHdr !== "" && !Number.isNaN(Number(remainingHdr))
+      ? Number(remainingHdr)
+      : null;
+  const last =
+    lastHdr != null && lastHdr !== "" && !Number.isNaN(Number(lastHdr)) ? Number(lastHdr) : null;
+  if (remaining != null) lastRequestsRemaining = remaining;
+  if (!res.ok) {
+    await res.text().catch(() => "");
+    return { status: res.status, last, remaining, body: null };
+  }
+  const body = await res.json().catch(() => null);
+  return { status: res.status, last, remaining, body };
+}
+
+function auth(path: string): string {
+  return `${BASE}${path}${path.includes("?") ? "&" : "?"}apiKey=${ODDS_API_KEY}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** London calendar day of an instant, as YYYY-MM-DD. */
+function londonDay(iso: string | Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(typeof iso === "string" ? new Date(iso) : iso);
+}
+
+/**
+ * The free half of the sweep: which sports are in season, and which of them have
+ * a fixture kicking off TODAY (Europe/London) that has not started.
+ *
+ * Costs zero credits. Cached on disk for INDEX_TTL_MIN so a 10-minute scan loop
+ * does not hammer 78 free endpoints every time. A failed call is COUNTED, never
+ * treated as "that sport has nothing on" — an understated coverage number that
+ * says so is honest; a silently short list is not.
+ */
+async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIndex> {
   try {
-    if (existsSync(CACHE_FILE)) {
-      const cached = JSON.parse(readFileSync(CACHE_FILE, "utf8")) as {
-        ts: number;
-        data: Match[];
-      };
-      if (Date.now() - cached.ts < CACHE_TTL_MIN * 60_000) {
-        // A cache hit issues no request, so it costs nothing: record it as 0.
-        lastScanCredits = {
-          last: 0,
-          remaining: lastKnownRemaining(),
-          events: cached.data.length,
-          cache: "hit",
-        };
-        return cached.data;
+    if (existsSync(INDEX_FILE)) {
+      const cached = JSON.parse(readFileSync(INDEX_FILE, "utf8")) as SportsIndex;
+      if (Number.isFinite(cached?.ts) && Date.now() - cached.ts < INDEX_TTL_MIN * 60_000) {
+        return cached;
       }
     }
   } catch {
-    /* stale/corrupt cache — just refetch */
+    /* unreadable index — rebuild it */
   }
 
-  const raw = await fetchRawMatches();
-  const matches = transformMatches(raw as Parameters<typeof transformMatches>[0]);
+  const list = await getJson(auth("/sports/?all=false"));
+  const all = Array.isArray(list.body) ? (list.body as { key?: string; title?: string; active?: boolean }[]) : [];
+  const inSeason = all.filter((s) => s.active !== false && typeof s.key === "string");
 
+  const today = londonDay(now);
+  const sports: SportIndexEntry[] = [];
+  let totalTodayFixtures = 0;
+  let failed = 0;
+
+  for (const s of inSeason) {
+    const key = s.key as string;
+    let r = await getJson(auth(`/sports/${key}/events/?dateFormat=iso`));
+    if (r.status === 429) {
+      // Bursts are what earn a 429 (sequential calls do not); one paced retry.
+      await sleep(2500);
+      r = await getJson(auth(`/sports/${key}/events/?dateFormat=iso`));
+    }
+    if (r.status !== 200 || !Array.isArray(r.body)) {
+      failed++;
+      continue;
+    }
+    const todays = (r.body as { commence_time?: string }[]).filter((e) => {
+      const t = e?.commence_time;
+      if (typeof t !== "string") return false;
+      return londonDay(t) === today && new Date(t).getTime() > now.getTime();
+    });
+    if (todays.length > 0) {
+      const times = todays.map((e) => e.commence_time as string).sort();
+      sports.push({
+        key,
+        title: s.title ?? key,
+        todayFixtures: todays.length,
+        nextKickoff: times[0] ?? null,
+      });
+      totalTodayFixtures += todays.length;
+    }
+    await sleep(INDEX_GAP_MS);
+  }
+
+  const index: SportsIndex = {
+    ts: Date.now(),
+    sportsInSeason: inSeason.length,
+    sports,
+    totalTodayFixtures,
+    failed,
+  };
   try {
     mkdirSync(RUN_DIR, { recursive: true });
-    writeFileSync(CACHE_FILE, JSON.stringify({ ts: Date.now(), data: matches }));
+    writeFileSync(INDEX_FILE, JSON.stringify(index));
+  } catch (e) {
+    log(`sports index write failed: ${String(e)}`);
+  }
+  log(
+    `coverage index: ${inSeason.length} sports in season, ${sports.length} with a fixture today, ` +
+      `${totalTodayFixtures} same-day fixtures${failed ? `, ${failed} sports index calls failed` : ""} (0 credits)`,
+  );
+  return index;
+}
+
+/**
+ * Read the scan cache, widening it: refresh the free index, then pay for odds for
+ * the sports that (a) have a same-day fixture, (b) whose cached odds are older
+ * than SPORT_ODDS_TTL_MIN, most urgent kick-off first, up to MAX_SPORT_FETCHES.
+ *
+ * The cache holds what the scan SAW — every fixture for a fetched sport, whether
+ * or not it has a lay price, and whether or not it is green. The green test
+ * happens when the feed is built, never here.
+ */
+async function getMatches(): Promise<Match[]> {
+  if (!ODDS_API_KEY) throw new Error(oddsKeyProblem() || "ODDS_API_KEY missing");
+
+  let cache: ScanCache = { ts: 0, data: [], perSport: {} };
+  try {
+    if (existsSync(CACHE_FILE)) {
+      const parsed = JSON.parse(readFileSync(CACHE_FILE, "utf8")) as Partial<ScanCache>;
+      if (Array.isArray(parsed?.data)) {
+        cache = {
+          ts: typeof parsed.ts === "number" ? parsed.ts : 0,
+          data: parsed.data as Match[],
+          perSport: (parsed.perSport ?? {}) as Record<string, SportCacheEntry>,
+          index: parsed.index,
+        };
+      }
+    }
+  } catch {
+    /* unreadable cache — rebuild below */
+  }
+
+  const index = await fetchSportsIndex();
+
+  // Most urgent first: the sport whose next same-day fixture starts soonest is
+  // the one a user can still act on, so it gets the freshest prices.
+  const queue = [...index.sports]
+    .filter((s) => {
+      const entry = cache.perSport?.[s.key];
+      if (!entry) return true;
+      return Date.now() - entry.fetchedAt >= SPORT_ODDS_TTL_MIN * 60_000;
+    })
+    .sort((a, b) => (a.nextKickoff ?? "9").localeCompare(b.nextKickoff ?? "9"));
+
+  const from = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  const to = new Date(Date.now() + ODDS_WINDOW_HOURS * 3600_000).toISOString().replace(/\.\d+Z$/, "Z");
+
+  let spent = 0;
+  let fetched = 0;
+  let remaining = lastKnownRemaining();
+  const perSport: Record<string, SportCacheEntry> = { ...(cache.perSport ?? {}) };
+  let data = [...cache.data];
+
+  for (const sport of queue.slice(0, MAX_SPORT_FETCHES)) {
+    const path =
+      `/sports/${sport.key}/odds/?regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal` +
+      `&commenceTimeFrom=${from}&commenceTimeTo=${to}`;
+    let r = await getJson(auth(path));
+    if (r.status === 429) {
+      await sleep(2500);
+      r = await getJson(auth(path));
+    }
+    if (r.status !== 200 || !Array.isArray(r.body)) {
+      log(`sport fetch failed: ${sport.key} HTTP ${r.status}`);
+      continue;
+    }
+    spent += r.last ?? 0;
+    if (r.remaining != null) remaining = r.remaining;
+    const matches = transformMatches(r.body as Parameters<typeof transformMatches>[0]);
+    // Replace this sport's slice; keep every other sport exactly as cached.
+    data = data.filter((m) => m.sportKey !== sport.key).concat(matches);
+    perSport[sport.key] = {
+      fetchedAt: Date.now(),
+      fixtures: matches.length,
+      events: (r.body as unknown[]).length,
+    };
+    fetched++;
+  }
+
+  // Prune what can no longer be shown or traded: started fixtures and sports
+  // that are no longer in season. Keeps the cache from growing without bound.
+  const nowMs = Date.now();
+  const inSeason = new Set(index.sports.map((s) => s.key));
+  data = data.filter((m) => {
+    const t = Date.parse(m.commenceTime);
+    if (Number.isFinite(t) && t <= nowMs) return false;
+    if (m.sportKey && perSport[m.sportKey] && !inSeason.has(m.sportKey)) return false;
+    return true;
+  });
+
+  const next: ScanCache = {
+    ts: Date.now(),
+    data,
+    perSport,
+    index: {
+      ts: index.ts,
+      sportsInSeason: index.sportsInSeason,
+      sportsWithToday: index.sports.length,
+      totalTodayFixtures: index.totalTodayFixtures,
+    },
+  };
+  try {
+    mkdirSync(RUN_DIR, { recursive: true });
+    writeFileSync(CACHE_FILE, JSON.stringify(next));
   } catch (e) {
     log(`cache write failed: ${String(e)}`);
   }
-  return matches;
+
+  // `last` is now the TOTAL credits this scan spent (0..MAX_SPORT_FETCHES), not
+  // a single request's cost — the sum of the vendor's own x-requests-last values.
+  lastScanCredits = {
+    last: spent,
+    remaining: remaining ?? lastKnownRemaining(),
+    events: data.length,
+    cache: fetched === 0 ? "hit" : "miss",
+  };
+  log(
+    `sweep: ${fetched} sport${fetched === 1 ? "" : "s"} refreshed (${spent} credit${spent === 1 ? "" : "s"}), ` +
+      `${queue.length - fetched} due, ${data.length} fixtures held, ` +
+      `${index.sports.length} sports with a fixture today / ${index.totalTodayFixtures} fixtures`,
+  );
+  return data;
 }
 
 // ── Filter ─────────────────────────────────────────────────────────────────
@@ -322,7 +574,7 @@ export function findOpportunities(
   for (const m of matches) {
     // Defense-in-depth on top of the transform guard (which drops started
     // matches at fetch): the worker's on-disk cache can still hold a match for
-    // up to CACHE_TTL_MIN after it kicks off, so re-check commence_time here.
+    // between sweeps after it kicks off, so re-check commence_time here.
     const kickoffMs = Date.parse(m.commenceTime);
     if (Number.isFinite(kickoffMs) && kickoffMs <= now) {
       skippedStarted++;
@@ -374,9 +626,12 @@ export function findOpportunities(
         detectedAt: new Date().toISOString(),
       };
 
-      // GREEN CASH — close-lay qualifying profit on all odds with gap < 0.2
-      // (qualifiesForLay no longer caps back odds).
-      if (qualifiesForLay(back, lay, commission)) {
+      // GREEN CASH — the ONLY admission rule, in the worker as on the feed:
+      // profitable on both sides after commission at this stake. No odds floor,
+      // no odds ceiling, no lay-gap threshold (MAX_LAY_GAP is deliberately not
+      // consulted here: a 1.05 or a 14.0 green trade must alert, and a tight but
+      // unprofitable pair must not).
+      {
         const c = calcLay(back, lay, BACK_STAKE, commission);
         if (c && c.profitLoss > 0) {
           opps.push({
@@ -594,10 +849,6 @@ interface TelegramResponse {
   description?: string;
   parameters?: { retry_after?: number };
   result?: { message_id?: number };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 // Throttle: ~300ms between Telegram sends, so a burst of alerts never trips
@@ -870,7 +1121,9 @@ export function alertStatus() {
     telegram: Boolean(TG_TOKEN && TG_CHAT_ID),
     telegramTokenSet: Boolean(TG_TOKEN),
     intervalMin: CHECK_INTERVAL_MIN,
-    cacheTtlMin: CACHE_TTL_MIN,
+    sportOddsTtlMin: SPORT_ODDS_TTL_MIN,
+    maxSportFetchesPerScan: MAX_SPORT_FETCHES,
+    indexTtlMin: INDEX_TTL_MIN,
     oddsApiKey: Boolean(ODDS_API_KEY),
     requestsRemaining: lastRequestsRemaining,
     lastScanCredits,
@@ -892,7 +1145,7 @@ export function startAlertWorker(): void {
     return;
   }
   const ms = CHECK_INTERVAL_MIN * 60_000;
-  log(`alert worker started (every ${CHECK_INTERVAL_MIN}m, cache TTL ${CACHE_TTL_MIN}m)`);
+  log(`alert worker started (every ${CHECK_INTERVAL_MIN}m, per-sport odds TTL ${SPORT_ODDS_TTL_MIN}m, max ${MAX_SPORT_FETCHES} sport fetches/scan)`);
   const tick = () => runAlertCheck().catch((e) => log(`check error: ${String(e)}`));
   setTimeout(tick, 5_000); // first check shortly after boot
   setInterval(tick, ms);

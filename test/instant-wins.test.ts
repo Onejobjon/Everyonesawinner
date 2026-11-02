@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildInstantWins,
+  coverageLine,
   selectSameDayMatches,
   STALE_AFTER_MIN,
 } from "../src/lib/instant-wins";
@@ -82,7 +83,10 @@ describe("ITEM 1 — Instant Wins is same-day only", () => {
   });
 
   test("the build reports what the scan looked at and what survived the day filter", () => {
-    const built = buildInstantWins([TODAY_LATER, TOMORROW, NEXT_WEEK, TODAY_STARTED], {
+    const green = match("2026-11-02T15:00:00Z", {
+      outcomes: [outcome({ odds: 2.1, layOdds: 2.0 })],
+    });
+    const built = buildInstantWins([green, TOMORROW, NEXT_WEEK, TODAY_STARTED], {
       now: NOW,
       stake: 20,
     });
@@ -109,9 +113,12 @@ describe("ITEM 1 — Instant Wins is same-day only", () => {
   });
 
   test("rows are priced with the shared calcLay at the user's stake — no £20 cap", () => {
-    const built = buildInstantWins([TODAY_LATER], { now: NOW, stake: 100, commission: 0.05 });
+    const green = match("2026-11-02T15:00:00Z", {
+      outcomes: [outcome({ odds: 2.1, layOdds: 2.0 })],
+    });
+    const built = buildInstantWins([green], { now: NOW, stake: 100, commission: 0.05 });
     const row = built.rows[0];
-    const expected = calcLay(2.0, 2.05, 100, 0.05)!;
+    const expected = calcLay(2.1, 2.0, 100, 0.05)!;
     expect(row.layStake).toBeCloseTo(expected.layStake, 10);
     expect(row.liability).toBeCloseTo(expected.liability, 10);
     expect(row.profitLoss).toBeCloseTo(expected.profitLoss, 10);
@@ -119,17 +126,115 @@ describe("ITEM 1 — Instant Wins is same-day only", () => {
     expect(row.layStake).toBeGreaterThan(90);
   });
 
-  test("a qualifying row and an arbitrage row are labelled differently", () => {
-    // back 2.00 / lay 2.05 is a small qualifying loss at any stake.
-    const qualifying = buildInstantWins([TODAY_LATER], { now: NOW, stake: 20, commission: 0.02 });
-    expect(qualifying.rows[0].grade).toBe("qualifying");
-    expect(qualifying.rows[0].profitLoss).toBeLessThan(0);
+  test("GREEN IS THE ONLY ADMISSION RULE — a qualifying-grade row is excluded", () => {
+    // back 2.00 / lay 2.05 is a small qualifying loss at any stake. It is a
+    // perfectly normal matched-betting row, and it is NOT shown in this feed.
+    const built = buildInstantWins([TODAY_LATER], { now: NOW, stake: 20, commission: 0.02 });
+    expect(built.rows).toHaveLength(0);
+    expect(built.notGreen).toBe(1);
+    expect(built.outcomesConsidered).toBe(1);
+    // The money is still computed — it is just not admitted.
+    expect(calcLay(2.0, 2.05, 20, 0.02)!.profitLoss).toBeLessThan(0);
+  });
 
-    // lay BELOW back = green cash.
-    const arbMatch = match("2026-11-02T15:00:00Z", { outcomes: [outcome({ odds: 2.1, layOdds: 2.0 })] });
-    const arb = buildInstantWins([arbMatch], { now: NOW, stake: 20, commission: 0.02 });
-    expect(arb.rows[0].grade).toBe("arbitrage");
-    expect(arb.rows[0].profitLoss).toBeGreaterThan(0);
+  test("a green trade at odds 1.05 is shown (no odds floor)", () => {
+    const short = match("2026-11-02T15:00:00Z", {
+      outcomes: [outcome({ odds: 1.05, layOdds: 1.03 })],
+    });
+    const built = buildInstantWins([short], { now: NOW, stake: 20, commission: 0.02 });
+    expect(built.rows).toHaveLength(1);
+    expect(built.rows[0].backOdds).toBe(1.05);
+    expect(built.rows[0].profitLoss).toBeGreaterThan(0);
+    expect(built.rows[0].gap).toBeLessThan(0);
+  });
+
+  test("a green trade at odds 14.0 is shown (no odds ceiling)", () => {
+    const long = match("2026-11-02T15:00:00Z", {
+      outcomes: [outcome({ odds: 14.0, layOdds: 13.5 })],
+    });
+    const built = buildInstantWins([long], { now: NOW, stake: 20, commission: 0.02 });
+    expect(built.rows).toHaveLength(1);
+    expect(built.rows[0].backOdds).toBe(14.0);
+    expect(built.rows[0].profitLoss).toBeGreaterThan(0);
+  });
+
+  test("a lay gap above the finder's 0.2 threshold is irrelevant — only the money decides", () => {
+    // Gap is +1.5, which the Lay Bet Finder would reject outright, but at these
+    // prices the trade is still green, so this feed must show it.
+    const wide = match("2026-11-02T15:00:00Z", {
+      outcomes: [outcome({ odds: 2.0, layOdds: 3.5 })],
+    });
+    expect(buildInstantWins([wide], { now: NOW, stake: 20 }).rows).toHaveLength(0);
+    // ...and the same gap with prices that DO pay both ways is admitted.
+    const paid = match("2026-11-02T15:00:00Z", {
+      outcomes: [outcome({ odds: 4.0, layOdds: 3.9 })],
+    });
+    const built = buildInstantWins([paid], { now: NOW, stake: 20 });
+    expect(built.rows).toHaveLength(1);
+    expect(built.rows[0].gap).toBeLessThan(0);
+  });
+
+  test("commission flips a marginal row out of green", () => {
+    // back 2.00 / lay 1.95 pays both ways with no commission, and stops paying
+    // once 10% is taken from the lay winnings.
+    const marginal = match("2026-11-02T15:00:00Z", {
+      outcomes: [outcome({ odds: 2.0, layOdds: 1.95 })],
+    });
+    const free = buildInstantWins([marginal], { now: NOW, stake: 20, commission: 0 });
+    expect(free.rows).toHaveLength(1);
+    expect(free.rows[0].profitLoss).toBeGreaterThan(0);
+
+    const taxed = buildInstantWins([marginal], { now: NOW, stake: 20, commission: 0.1 });
+    expect(taxed.rows).toHaveLength(0);
+    expect(taxed.notGreen).toBe(1);
+  });
+
+  test("the coverage line reports fixtures and sports, so an empty feed is not a broken one", () => {
+    const tennis = match("2026-11-02T12:00:00Z", {
+      matchId: "t1",
+      sportKey: "tennis_atp_paris_masters",
+      league: "ATP Paris Masters",
+    });
+    const tennis2 = match("2026-11-02T13:00:00Z", {
+      matchId: "t2",
+      sportKey: "tennis_atp_paris_masters",
+      league: "ATP Paris Masters",
+    });
+    const soccer = match("2026-11-02T19:00:00Z", { matchId: "s1", sportKey: "soccer_epl" });
+    const tomorrow = match("2026-11-03T19:00:00Z", { matchId: "s2", sportKey: "soccer_epl" });
+
+    const built = buildInstantWins([tennis, tennis2, soccer, tomorrow], { now: NOW, stake: 20 });
+    expect(built.rows).toHaveLength(0); // all three are qualifying-grade
+    expect(built.fixturesScanned).toBe(4);
+    expect(built.sportsScanned).toBe(2);
+    expect(built.sameDayFixtures).toBe(3); // the 3rd soccer fixture is tomorrow
+    expect(built.sameDaySports).toBe(2);
+    expect(coverageLine(built)).toBe("looked at 3 fixtures across 2 sports");
+  });
+
+  test("an outcome with no lay price is counted, not silently dropped", () => {
+    const noLay = match("2026-11-02T15:00:00Z", {
+      outcomes: [outcome({ layOdds: null, laySource: null })],
+    });
+    const built = buildInstantWins([noLay], { now: NOW, stake: 20 });
+    expect(built.rows).toHaveLength(0);
+    expect(built.noLayPrice).toBe(1);
+    expect(built.notGreen).toBe(0);
+  });
+
+  test("rows are sorted by profit at the user's stake, best first", () => {
+    const small = match("2026-11-02T12:00:00Z", {
+      matchId: "small",
+      outcomes: [outcome({ odds: 2.05, layOdds: 2.0 })],
+    });
+    const big = match("2026-11-02T13:00:00Z", {
+      matchId: "big",
+      outcomes: [outcome({ odds: 3.0, layOdds: 2.8 })],
+    });
+    const built = buildInstantWins([small, big], { now: NOW, stake: 20, commission: 0.02 });
+    expect(built.rows).toHaveLength(2);
+    expect(built.rows[0].matchId).toBe("big");
+    expect(built.rows[0].profitLoss).toBeGreaterThan(built.rows[1].profitLoss);
   });
 
   test("sanity rules are inherited, not re-implemented", () => {
@@ -150,6 +255,53 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
     return { dir, file };
   }
 
+  test("staleness follows the OLDEST per-sport price, not when the scan ran", () => {
+    // The scan ticked a minute ago, but this sport's odds were fetched two hours
+    // ago: the row is stale and the page must say so.
+    const old = NOW.getTime() - 120 * 60_000;
+    const { dir, file } = tempCache(
+      JSON.stringify({
+        ts: NOW.getTime() - 60_000,
+        data: [TODAY_LATER],
+        perSport: { soccer_epl: { fetchedAt: old, fixtures: 1, events: 1 } },
+      }),
+    );
+    try {
+      const p = readInstantWins({ file, now: NOW });
+      expect(p.ageMinutes).toBe(1); // the loop is healthy...
+      expect(p.priceAgeMinutes).toBe(120); // ...but the price is not
+      expect(p.stale).toBe(true);
+      expect(p.oldestPriceAt).toBe(new Date(old).toISOString());
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the server payload carries the coverage numbers the page prints", () => {
+    const ts = NOW.getTime() - 60_000;
+    const tennis = match("2026-11-02T12:00:00Z", { matchId: "t1", sportKey: "tennis_atp_paris_masters" });
+    const soccer = match("2026-11-02T19:00:00Z", { matchId: "s1", sportKey: "soccer_epl" });
+    const { dir, file } = tempCache(
+      JSON.stringify({
+        ts,
+        data: [tennis, soccer, TOMORROW],
+        index: { ts, sportsInSeason: 78, sportsWithToday: 20, totalTodayFixtures: 55 },
+      }),
+    );
+    try {
+      const p = readInstantWins({ file, now: NOW });
+      expect(p.sportsScanned).toBe(2); // tennis + soccer (tomorrow's is also soccer)
+      expect(p.sameDaySports).toBe(2);
+      expect(p.sameDayFixtures).toBe(2);
+      expect(p.sportsInSeason).toBe(78);
+      expect(p.sportsWithToday).toBe(20);
+      expect(p.fixturesToday).toBe(55);
+      expect(p.message).toContain("2 fixtures kicking off today across 2 sports");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a fresh scan is not stale", () => {
     const ts = NOW.getTime() - 5 * 60_000;
     const { dir, file } = tempCache(JSON.stringify({ ts, data: [TODAY_LATER, TOMORROW] }));
@@ -167,12 +319,16 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
   });
 
   test("a cache older than the staleness window is flagged stale", () => {
-    const ts = NOW.getTime() - 25 * 60_000;
+    // Derived from the constant, not hard-coded: the window moved from 20 to 45
+    // minutes when the scan became a budgeted per-sport sweep, and a test pinned
+    // to "25" would have quietly tested nothing after that change.
+    const age = STALE_AFTER_MIN + 5;
+    const ts = NOW.getTime() - age * 60_000;
     const { dir, file } = tempCache(JSON.stringify({ ts, data: [TODAY_LATER] }));
     try {
       const p = readInstantWins({ file, now: NOW });
       expect(p.status).toBe("ok");
-      expect(p.ageMinutes).toBe(25);
+      expect(p.ageMinutes).toBe(age);
       expect(p.stale).toBe(true);
       expect(p.staleAfterMin).toBe(STALE_AFTER_MIN);
     } finally {
