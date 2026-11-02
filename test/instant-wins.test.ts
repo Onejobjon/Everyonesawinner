@@ -496,3 +496,42 @@ describe("ITEM 2 — the Lay Bet Finder's date filter and its day boundaries", (
     expect(londonDayKey("2026-07-01T23:30:00Z")).toBe("2026-07-02"); // BST: 00:30 next day
   });
 });
+
+describe("REGRESSION — the Norrie row the owner saw must never appear", () => {
+  // Reported from the live dashboard on 2026-11-02: a Cameron Norrie tennis row
+  // was shown in the instant-win feed with back 1.44 and lay 1.46. That is a
+  // QUALIFYING LOSS of £0.40 on a £20 stake, not a green trade — the lay price
+  // is ABOVE the back price. Showing it as green is the worst failure this feed
+  // can have, so it is pinned here with the owner's own numbers.
+  test("back 1.44 / lay 1.46 is a loss, not a green, and is excluded", () => {
+    const norrie = match("2026-11-02T13:00:00Z", {
+      home: "Cameron Norrie",
+      away: "Someone Else",
+      outcomes: [outcome({ name: "Cameron Norrie", odds: 1.44, layOdds: 1.46 })],
+    });
+    const built = buildInstantWins([norrie], { now: NOW, stake: 20, commission: 0.02 });
+    expect(built.rows).toHaveLength(0);
+    expect(built.notGreen).toBe(1);
+  });
+
+  test("the arithmetic behind that exclusion, spelled out", () => {
+    // back £20 at 1.44 → £8.80 profit if it wins; lay stake £20 at 1.46 →
+    // £9.20 liability. Both sides lose £0.40. Nothing about stake or commission
+    // can turn this into a green trade, because lay > back.
+    const r = calcLay(1.44, 1.46, 20, 0.02);
+    expect(r).not.toBeNull();
+    expect(r!.profitLoss).toBeLessThan(0);
+    expect(Math.abs(r!.profitLoss - -0.4)).toBeLessThan(0.01);
+  });
+
+  test("a genuine green at the same short odds still passes", () => {
+    // 1.46 back / 1.44 lay — the mirror image — IS green and must survive the fix.
+    const green = match("2026-11-02T13:00:00Z", {
+      outcomes: [outcome({ name: "Home", odds: 1.46, layOdds: 1.44 })],
+    });
+    const built = buildInstantWins([green], { now: NOW, stake: 20, commission: 0.02 });
+    expect(built.rows).toHaveLength(1);
+    expect(built.rows[0].profitLoss).toBeGreaterThan(0);
+    expect(built.rows[0].layOdds).toBeLessThan(built.rows[0].backOdds);
+  });
+});
