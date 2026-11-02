@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import PageHeader from "../components/PageHeader";
 import Paywall from "../components/Paywall";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "../components/CommissionControl";
 
@@ -36,20 +36,10 @@ export default function Calculator() {
 
   return (
     <Paywall title="the profit calculator">
-      <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
-        <nav className="border-b border-gray-200 bg-white/90 dark:border-gray-800 dark:bg-gray-950/90">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            <Link to="/" className="flex items-center gap-2">
-              <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">EAW</span>
-              <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
-            </Link>
-            <Link to="/" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">← Back to Home</Link>
-          </div>
-        </nav>
-
-        <div className="mx-auto max-w-3xl px-6 py-12">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Profit Calculator</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">Enter your stake and odds. We'll show the lay stake, the liability, and what you're left with if the back bet wins or the lay does.</p>
+      <PageHeader
+        title="Profit Calculator"
+        subtitle="Enter your stake and odds. We'll show the lay stake, the liability, and what you're left with if the back bet wins or the lay does."
+      >
 
           <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-950">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -120,8 +110,7 @@ export default function Calculator() {
               <strong>💡 Tip:</strong> The closer the odds are together, the more you'll keep. Try to pick matches where the bookmaker and exchange prices are nearly the same.
             </div>
           </div>
-        </div>
-      </div>
+      </PageHeader>
     </Paywall>
   );
 }

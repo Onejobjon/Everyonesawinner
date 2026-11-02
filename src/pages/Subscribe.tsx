@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import PageHeader from "../components/PageHeader";
 import { useAuth, type Plan } from "../lib/auth";
 
 const plans: {
@@ -56,56 +57,38 @@ export default function Subscribe() {
 
   if (!user) {
     return (
-      <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif] flex items-center justify-center">
+      <PageHeader title="Sign in to subscribe" subtitle="Create an account or sign in to choose a plan.">
         <div className="text-center">
-          <span className="text-5xl">🔒</span>
-          <h1 className="mt-4 text-2xl font-bold">Sign in to subscribe</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">Create an account or sign in to choose a plan.</p>
           <div className="mt-6 flex gap-4 justify-center">
             <Link to="/login" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">Sign in</Link>
             <Link to="/signup" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">Create account</Link>
           </div>
         </div>
-      </div>
+      </PageHeader>
     );
   }
 
   if (user?.subscription) {
     return (
-      <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif] flex items-center justify-center">
-        <div className="text-center">
-          <span className="text-5xl">✅</span>
-          <h1 className="mt-4 text-2xl font-bold">You're already subscribed!</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">Your plan is active. Head to the dashboard to start using the tools.</p>
-          <Link to="/dashboard" className="mt-6 inline-block rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">Go to Dashboard</Link>
-        </div>
-      </div>
+      <PageHeader title="You're already subscribed!" subtitle="Your plan is active. Head to the dashboard to start using the tools.">
+        <Link to="/dashboard" className="mt-6 inline-block rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">Go to Dashboard</Link>
+      </PageHeader>
     );
   }
 
   return (
-    <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
-      <nav className="border-b border-gray-200 bg-white/90 dark:border-gray-800 dark:bg-gray-950/90">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">EAW</span>
-            <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
-          </Link>
-          <Link to="/dashboard" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">Dashboard →</Link>
-        </div>
-      </nav>
-
-      <div className="mx-auto max-w-5xl px-6 py-16">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Choose your plan</h1>
-          <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            These are the plans we intend to offer. Play isn't open yet — we're finishing the payment setup, and no payment can be taken until it does.
-            <br />
-            <span className="text-sm">Starter includes the oddsmatcher and calculator. Pro adds the Lay Bet Finder and the Acca Lay Planner.</span>
-          </p>
-        </div>
-
-        <div className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-3">
+    <PageHeader
+      title="Choose your plan"
+      subtitle={
+        <>
+          These are the plans we intend to offer. Play isn't open yet — we're finishing the payment setup, and no payment can be taken until it does.
+          <span className="mt-2 block text-sm">
+            Starter includes the oddsmatcher and calculator. Pro adds the Lay Bet Finder and the Acca Lay Planner.
+          </span>
+        </>
+      }
+    >
+        <div className="mt-4 grid grid-cols-1 gap-8 lg:grid-cols-3">
           {plans.map((plan, i) => (
             <div
               key={i}
@@ -159,7 +142,6 @@ export default function Subscribe() {
             Questions? <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 hover:text-indigo-700">Contact support</a>
           </p>
         </div>
-      </div>
-    </div>
+    </PageHeader>
   );
 }

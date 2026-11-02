@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { getMatches, type Match } from "../lib/odds-api";
 import { calcDutch, calcDutchFreeBet } from "../lib/odds";
 import EmailCapture from "../components/EmailCapture";
+import PageHeader from "../components/PageHeader";
 
 function FeaturedPicks() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -31,7 +32,7 @@ function FeaturedPicks() {
 
   return (
     <section className="py-20 md:py-28">
-      <div className="mx-auto max-w-7xl px-6">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Today's Best Picks</h2>
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">The highest returning matches right now.</p>
@@ -120,7 +121,7 @@ function SportSections() {
 
   return (
     <section className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
-      <div className="mx-auto max-w-7xl px-6">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Browse by League & Sport</h2>
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Pick a sport and start finding the best odds from top UK bookmakers.</p>
@@ -148,45 +149,10 @@ function SportSections() {
   );
 }
 
-function Nav() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-200/80 bg-white/90 backdrop-blur-md dark:border-gray-800/80 dark:bg-gray-950/90">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">EAW</span>
-          <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
-        </Link>
-        <div className="hidden md:flex items-center gap-8">
-          <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Features</a>
-          <Link to="/free-bets" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">🎁 Free Bets</Link>
-          <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Best Odds</Link>
-          <Link to="/lay-bets" className="text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 transition-colors">⚡ Lay Bets</Link>
-          <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">Sign in</Link>
-          <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">Get Started</Link>
-        </div>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2 text-gray-600 dark:text-gray-400" aria-label="Toggle menu">
-          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
-      </div>
-      {menuOpen && (
-        <div className="md:hidden border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4 flex flex-col gap-4">
-          <a href="#features" className="text-sm font-medium text-gray-600 dark:text-gray-400">Features</a>
-          <Link to="/free-bets" className="text-sm font-medium text-gray-600 dark:text-gray-400">🎁 Free Bets</Link>
-          <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 dark:text-gray-400">Best Odds</Link>
-          <Link to="/lay-bets" className="text-sm font-medium text-purple-600 dark:text-purple-400">⚡ Lay Bets</Link>
-          <Link to="/login" className="text-sm font-medium text-gray-600 dark:text-gray-400">Sign in</Link>
-          <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white text-center">Get Started</Link>
-        </div>
-      )}
-    </nav>
-  );
-}
-
 function Footer() {
   return (
     <footer className="border-t border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50">
-      <div className="mx-auto max-w-7xl px-6 py-12">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 py-12">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           <div className="col-span-2 md:col-span-1">
             <Link to="/" className="flex items-center gap-2">
@@ -233,38 +199,41 @@ function Footer() {
 
 export default function Home() {
   return (
-    <div className="min-h-dvh page-bg text-gray-900 dark:text-gray-100 font-['Inter',system-ui,sans-serif]">
-      <Nav />
-      
-      {/* Hero */}
-      <section className="relative overflow-hidden pt-32 pb-20 md:pt-40 md:pb-28">
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(45%_40%_at_50%_60%,rgba(99,102,241,0.12),transparent)]"></div>
-        <div className="mx-auto max-w-7xl px-6 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300 mb-8">
-            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+    <PageHeader home flush>
+      {/*
+        Hero — the ONLY dark band on the site, and it is local to this section.
+        It carries its own light text (text-white / text-gray-300 / indigo-300)
+        so nothing here relies on a page-wide photo, and no body copy below it
+        ever sits on a dark surface.
+      */}
+      <section className="relative overflow-hidden bg-gray-900">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_55%_at_50%_0%,rgba(99,102,241,0.30),transparent)]"></div>
+        <div className="relative mx-auto max-w-5xl px-4 py-16 text-center text-white sm:px-6 md:py-24">
+          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/10 px-4 py-1.5 text-sm font-medium text-indigo-200">
+            <span className="h-2 w-2 rounded-full bg-green-400"></span>
             18+ • Legal in the UK • Not risk-free
           </div>
-          <h1 className="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl">
-            Turn <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Free Bets</span> Into Cash
+          <h1 className="mx-auto max-w-4xl text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+            Turn <span className="bg-gradient-to-r from-indigo-300 to-purple-300 bg-clip-text text-transparent">Free Bets</span> Into Cash
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600 dark:text-gray-400 sm:text-xl">
+          <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-300 sm:text-xl">
             Everyone's A Winner finds free bet offers and shows you how to turn them into cash. No guesswork: we lay out the terms we can check, say plainly which ones we can't, and show you what a matched bet returns before you stake a penny.
           </p>
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="#pricing" className="rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all">View Plans →</a>
-            <a href="#how-it-works" className="rounded-xl border border-gray-300 px-8 py-3.5 text-base font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900 transition-colors">How it works</a>
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <a href="#pricing" className="rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-500 transition-all">View Plans →</a>
+            <a href="#how-it-works" className="rounded-xl border border-white/30 px-8 py-3.5 text-base font-semibold text-white hover:bg-white/10 transition-colors">How it works</a>
           </div>
-          <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-3 border-y border-gray-200 dark:border-gray-800 py-8">
-            <div><p className="text-3xl font-bold text-indigo-600">Any stake</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Enter whatever you'd actually bet and see exactly what it returns</p></div>
-            <div><p className="text-3xl font-bold text-indigo-600">10 min</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Odds refreshed every 10 minutes</p></div>
-            <div><p className="text-3xl font-bold text-indigo-600">20+</p><p className="mt-1 text-sm text-gray-600 dark:text-gray-400">UK bookmakers and exchanges, side by side</p></div>
+          <div className="mt-16 grid grid-cols-1 gap-8 border-y border-white/15 py-8 sm:grid-cols-3">
+            <div><p className="text-3xl font-bold text-indigo-300">Any stake</p><p className="mt-1 text-sm text-gray-300">Enter whatever you'd actually bet and see exactly what it returns</p></div>
+            <div><p className="text-3xl font-bold text-indigo-300">10 min</p><p className="mt-1 text-sm text-gray-300">Odds refreshed every 10 minutes</p></div>
+            <div><p className="text-3xl font-bold text-indigo-300">20+</p><p className="mt-1 text-sm text-gray-300">UK bookmakers and exchanges, side by side</p></div>
           </div>
         </div>
       </section>
 
       {/* Free bets banner → offers page */}
       <section className="py-12 md:py-16">
-        <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <Link
             to="/free-bets"
             className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-8 sm:flex-row sm:px-10 dark:border-indigo-900 dark:from-indigo-950 dark:to-purple-950 hover:shadow-md transition-all"
@@ -290,7 +259,7 @@ export default function Home() {
 
       {/* Features */}
       <section id="features" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
-        <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">What the tools do</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Everything listed here exists today. We handle the maths; you decide the stake.</p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
@@ -313,7 +282,7 @@ export default function Home() {
 
       {/* How it works */}
       <section id="how-it-works" className="py-20 md:py-28">
-        <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">How it works</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">It's simpler than you think. Here's how to turn free bets into profit.</p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 md:grid-cols-4">
             {[{n:"01",t:"Sign up",d:"Create an account with a bookmaker through our easy links. Many give you a free bet just for joining."},{n:"02",t:"Place your bet",d:"Use your stake (or free bet) at the bookmaker on a team or outcome with good odds."},{n:"03",t:"Cover your bet",d:"Place a second bet on a betting exchange that balances the first one. Our calculator tells you the exact amount."},{n:"04",t:"Collect your profit",d:"One bet wins, the other loses — but they're balanced so perfectly that you make money either way."}].map((s,i) => (
@@ -329,7 +298,7 @@ export default function Home() {
 
       {/* Pricing */}
       <section id="pricing" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
-        <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
           <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and what each one would include. <strong>No plan can be bought yet.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and no payment can be taken until it does.</span></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
@@ -364,7 +333,7 @@ export default function Home() {
 
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
-        <div className="mx-auto max-w-3xl px-6">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6">
           <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Frequently asked questions</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400">Straight answers, including the ones that cost us a sale.</p></div>
           <div className="mt-12 space-y-4">
             {["Is earning from free bets legal?","How much money can I make?","Do I need any experience?","Is the profit really tax-free?","How much money do I need to start?","Why do I get fewer free-bet alerts than I used to?"].map((q,i) => (
@@ -379,7 +348,7 @@ export default function Home() {
 
       {/* CTA */}
       <section className="py-20 md:py-28 bg-gradient-to-br from-indigo-600 to-purple-700">
-        <div className="mx-auto max-w-3xl px-6 text-center">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 text-center">
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Start turning free bets into profit today</h2>
           <p className="mt-4 text-lg text-indigo-100">Every offer, every outcome — see the exact return before you place a bet.</p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -391,6 +360,6 @@ export default function Home() {
 
       <EmailCapture source="homepage" />
       <Footer />
-    </div>
+    </PageHeader>
   );
 }

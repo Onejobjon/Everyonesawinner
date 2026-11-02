@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { getMatches, type Match } from "../lib/odds-api";
 import { calcDutchFreeBet } from "../lib/odds";
 import EmailCapture from "../components/EmailCapture";
+import PageHeader from "../components/PageHeader";
 import offersData from "../content/free-bets-offers.json";
 import { licenceEvidence, minOddsLabel, type FreeBetOffer } from "../lib/free-bets";
 import { LicenceLine } from "../components/LicenceLine";
@@ -51,25 +52,6 @@ const ALL_OFFERS = (offersData.offers as Offer[]).filter(
   (o) => !DROPPED.has(o.bookmaker),
 );
 
-// ── Nav ────────────────────────────────────────────────────────────────────
-function Nav() {
-  return (
-    <nav className="border-b border-gray-200 bg-white/90 dark:border-gray-800 dark:bg-gray-950/90">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">EAW</span>
-          <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link to="/signup" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors">
-            Get Started
-          </Link>
-        </div>
-      </div>
-    </nav>
-  );
-}
-
 // ── Free oddsmatcher preview (blurred profits, cached odds only) ───────────
 function OddsPreview() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -102,7 +84,7 @@ function OddsPreview() {
 
   return (
     <section className="py-16 md:py-20">
-      <div className="mx-auto max-w-7xl px-6">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Today's matches, at a glance</h2>
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
@@ -193,30 +175,23 @@ export default function FreeBets() {
   }, [search, section]);
 
   return (
-    <div className="min-h-dvh page-bg text-gray-900 dark:text-gray-100 font-['Inter',system-ui,sans-serif]">
-      <Nav />
-
-      {/* Hero */}
-      <section className="py-16 md:py-20">
-        <div className="mx-auto max-w-7xl px-6 text-center">
-          <h1 className="mx-auto max-w-3xl text-4xl font-extrabold tracking-tight sm:text-5xl">
-            Free bet offers, all in one place
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-gray-600 dark:text-gray-400">
-            {ALL_OFFERS.length} listed welcome offers from UK, Irish and global bookmakers — set out in plain terms. Where we quote an estimate, its assumptions are shown; where we can't, we say so rather than guess.
+    <PageHeader
+      flush
+      title="Free bet offers, all in one place"
+      subtitle={`${ALL_OFFERS.length} listed welcome offers from UK, Irish and global bookmakers — set out in plain terms. Where we quote an estimate, its assumptions are shown; where we can't, we say so rather than guess.`}
+    >
+      <div className="mx-auto max-w-5xl px-4 sm:px-6">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-left text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <p>{meta.disclaimer}</p>
+          <p className="mt-2 text-amber-700 dark:text-amber-300">
+            Last verified: {meta.lastVerified}. A small number of previously listed operators were removed after failing a live link check.
           </p>
-          <div className="mt-8 mx-auto max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-left text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-            <p>{meta.disclaimer}</p>
-            <p className="mt-2 text-amber-700 dark:text-amber-300">
-              Last verified: {meta.lastVerified}. A small number of previously listed operators were removed after failing a live link check.
-            </p>
-          </div>
         </div>
-      </section>
+      </div>
 
       {/* Offers table */}
       <section className="pb-16 md:pb-20">
-        <div className="mx-auto max-w-7xl px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
           {/* Search + filters */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative sm:w-80">
@@ -360,6 +335,6 @@ export default function FreeBets() {
       <footer className="border-t border-gray-200 py-10 text-center text-sm text-gray-500 dark:border-gray-800">
         <p>© {new Date().getFullYear()} Everyone's A Winner. All rights reserved.</p>
       </footer>
-    </div>
+    </PageHeader>
   );
 }

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import PageHeader from "../components/PageHeader";
 import source from "../content/how-we-check-offers.md?raw";
 
 /**
@@ -94,18 +95,17 @@ function inline(text: string): React.ReactNode[] {
 
 const BLOCKS = parse(source);
 
+// The page title is the markdown's own h1 — kept verbatim, rendered by
+// PageHeader instead of inline, so this page has the same head as every other.
+const TITLE =
+  BLOCKS.map((b) => (b.kind === "h1" ? b.text : null)).find((t): t is string => t !== null) ??
+  "How we check offers";
+
 export default function HowWeCheckOffers() {
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950">
-      <section className="mx-auto max-w-3xl px-6 py-12">
+    <PageHeader title={TITLE}>
         {BLOCKS.map((b, i) => {
-          if (b.kind === "h1") {
-            return (
-              <h1 key={i} className="mb-6 text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-                {b.text}
-              </h1>
-            );
-          }
+          if (b.kind === "h1") return null;
           if (b.kind === "h2") {
             return (
               <h2 key={i} className="mt-8 mb-3 text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -140,7 +140,6 @@ export default function HowWeCheckOffers() {
             the offers we list
           </Link>
         </p>
-      </section>
-    </div>
+    </PageHeader>
   );
 }

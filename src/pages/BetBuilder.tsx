@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
 import { DEFAULT_COMMISSION } from "../lib/odds";
 import { sequentialLayPlan, sequentialLayPlanPaid, type AccaPlan } from "../lib/acca";
 import {
@@ -8,6 +7,7 @@ import {
   type Match,
   type MatchOutcome,
 } from "../lib/odds-api";
+import PageHeader from "../components/PageHeader";
 import Paywall from "../components/Paywall";
 import Markdown from "../components/Markdown";
 import accaGuide from "../content/acca-betting-guide.md?raw";
@@ -305,26 +305,10 @@ export default function BetBuilder() {
 
   return (
     <Paywall tier="pro" title="the Bet Builder">
-      <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
-        <nav className="border-b border-gray-200 bg-white/90 dark:border-gray-800 dark:bg-gray-950/90">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            <Link to="/" className="flex items-center gap-2">
-              <span className="rounded-lg bg-purple-600 p-2 text-white font-bold text-lg">EAW</span>
-              <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
-            </Link>
-            <div className="flex items-center gap-4">
-              <Link to="/lay-bets" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400">⚡ Lay Bets</Link>
-              <Link to="/oddsmatcher" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400">Best Odds</Link>
-              <Link to="/dashboard" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">Dashboard →</Link>
-            </div>
-          </div>
-        </nav>
-
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-          <h1 className="text-3xl font-bold tracking-tight">Bet Builder</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Combine 2–4 legs from different matches into one bet, with a done-for-you sequential lay plan that locks in the same profit whether the bet wins or any leg loses.
-          </p>
+      <PageHeader
+        title="Bet Builder"
+        subtitle="Combine 2–4 legs from different matches into one bet, with a done-for-you sequential lay plan that locks in the same profit whether the bet wins or any leg loses."
+      >
 
           {/* Bet mode toggle: free bet (SNR) or paid (own money) */}
           <div className="mt-5 rounded-xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-900 dark:bg-purple-950/30">
@@ -615,8 +599,7 @@ export default function BetBuilder() {
               <div className="mt-4"><Markdown source={accaGuide} /></div>
             </details>
           </section>
-        </div>
-      </div>
-    </Paywall>
+    </PageHeader>
+  </Paywall>
   );
 }

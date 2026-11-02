@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import PageHeader from "../components/PageHeader";
 import { useAuth } from "../lib/auth";
 
 export default function SubscribeSuccess() {
@@ -37,53 +38,50 @@ export default function SubscribeSuccess() {
     }
   }, []);
 
+  const TITLES = {
+    activating: "Checking whether a payment has been confirmed...",
+    done: "We haven't received a payment for this account",
+    error: "Something went wrong",
+  } as const;
+
   return (
-    <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif] flex items-center justify-center">
-      <div className="max-w-md px-6 text-center">
-        {status === "activating" && (
-          <>
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent mx-auto" />
-            <h1 className="mt-6 text-2xl font-bold">Checking whether a payment has been confirmed...</h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">Please wait one moment.</p>
-          </>
-        )}
+    <PageHeader
+      title={TITLES[status]}
+      subtitle={
+        status === "activating"
+          ? "Please wait one moment."
+          : status === "done"
+            ? "This page does not activate anything — only our server can confirm a payment, and checkout isn't open yet. No payment has been taken."
+            : "We couldn't activate your subscription. Try again or contact support."
+      }
+    >
+      {status === "activating" && (
+        <div className="flex justify-center py-12">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+        </div>
+      )}
 
-        {status === "done" && (
-          <>
-            <span className="text-6xl">ℹ️</span>
-            <h1 className="mt-6 text-2xl font-bold">We haven't received a payment for this account</h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">
-              This page does not activate anything — only our server can confirm a payment, and checkout isn't open yet. No payment has been taken.
-            </p>
-            <div className="mt-8 flex gap-4 justify-center">
-              <Link to="/dashboard" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
-                Go to Dashboard
-              </Link>
-              <Link to="/oddsmatcher" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">
-                Start matching
-              </Link>
-            </div>
-          </>
-        )}
+      {status === "done" && (
+        <div className="mt-8 flex flex-wrap gap-4">
+          <Link to="/dashboard" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
+            Go to Dashboard
+          </Link>
+          <Link to="/oddsmatcher" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">
+            Start matching
+          </Link>
+        </div>
+      )}
 
-        {status === "error" && (
-          <>
-            <span className="text-6xl">❌</span>
-            <h1 className="mt-6 text-2xl font-bold">Something went wrong</h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">
-              We couldn't activate your subscription. Try again or contact support.
-            </p>
-            <div className="mt-8 flex gap-4 justify-center">
-              <Link to="/subscribe" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
-                Try again
-              </Link>
-              <a href="mailto:support@everyonesawinner.uk" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">
-                Contact support
-              </a>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+      {status === "error" && (
+        <div className="mt-8 flex flex-wrap gap-4">
+          <Link to="/subscribe" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
+            Try again
+          </Link>
+          <a href="mailto:support@everyonesawinner.uk" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">
+            Contact support
+          </a>
+        </div>
+      )}
+    </PageHeader>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import PageHeader from "../components/PageHeader";
 import Paywall from "../components/Paywall";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "../components/CommissionControl";
 
@@ -286,29 +286,17 @@ export default function SameMatch() {
 
   return (
     <Paywall tier="pro" title="the Same-Match Planner">
-      <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
-        <nav className="border-b border-gray-200 bg-white/90 dark:border-gray-800 dark:bg-gray-950/90">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            <Link to="/" className="flex items-center gap-2">
-              <span className="rounded-lg bg-purple-600 p-2 text-lg font-bold text-white">EAW</span>
-              <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
-            </Link>
-            <div className="flex items-center gap-4">
-              <Link to="/lay-bets" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400">⚡ Lay Bets</Link>
-              <Link to="/bet-builder" className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400">Bet Builder</Link>
-              <Link to="/dashboard" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">Dashboard →</Link>
-            </div>
-          </div>
-        </nav>
-
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-          <h1 className="text-3xl font-bold tracking-tight">Same-Match Planner</h1>
-          <p className="mt-2 max-w-3xl text-gray-600 dark:text-gray-400">
+      <PageHeader
+        title="Same-Match Planner"
+        subtitle={
+          <>
             Build bets that can only land on <strong>one</strong> scoreline, then lay that one scoreline on the
             exchange. Home win + over 0.5 goals + under 1.5 goals can only be 1-0 — so the bet is backed at your
             bookmaker and 1-0 is laid as a single selection on the exchange.
-          </p>
-          <p className="mt-2 max-w-3xl text-sm text-purple-700 dark:text-purple-300">
+          </>
+        }
+      >
+          <p className="text-sm text-purple-700 dark:text-purple-300">
             Every plan on this page pins exactly one scoreline and needs exactly one lay. Anything that could land on
             two scorelines never appears here — not with a warning, not greyed out. It is discarded.
           </p>
@@ -823,8 +811,7 @@ export default function SameMatch() {
               </li>
             </ul>
           </section>
-        </div>
-      </div>
-    </Paywall>
+    </PageHeader>
+  </Paywall>
   );
 }

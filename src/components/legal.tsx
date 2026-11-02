@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import PageHeader from "./PageHeader";
 
 /**
  * Shared furniture for the two legal pages (/privacy and /terms).
@@ -24,11 +25,7 @@ export function LegalLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950">
-      <section className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="mb-6 text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-          {title}
-        </h1>
+    <PageHeader title={title}>
         <div className="mb-8 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/40">
           <p className="text-sm leading-6 text-amber-900 dark:text-amber-200">
             <strong className="font-semibold">Plain English, not a legal document.</strong>{" "}
@@ -50,8 +47,7 @@ export function LegalLayout({
             the offers we list
           </Link>
         </p>
-      </section>
-    </div>
+    </PageHeader>
   );
 }
 
