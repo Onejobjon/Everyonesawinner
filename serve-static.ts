@@ -11,8 +11,10 @@ import { runEventFetch, parseMarkets, isCatalogueSport } from "./src/server/same
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser, findByEmail } from "./src/server/users";
 import { resolveSession, revokeSession } from "./src/server/sessions";
-import { requireProSession, requirePaidSession } from "./src/server/pro-gate";
-import { readInstantWins } from "./src/server/instant-wins";
+import { requireProSession, requirePaidSession, requireOwnerSession } from "./src/server/pro-gate";
+import { readInstantWins, feedDiagnostics, candidateCacheFiles } from "./src/server/instant-wins";
+import { readGreenHistory } from "./src/server/green-history";
+import { pushSnapshot, rememberSnapshot, SNAPSHOT_HEADER, verifyBridgeToken } from "./src/server/scan-bridge";
 import { handleStripeEvent, verifyStripeSignature } from "./src/server/stripe-webhook";
 
 // Port is configurable: the platform now runs its own dev server on 3000, so
@@ -72,7 +74,18 @@ const server = Bun.serve({
 
     // Diagnostic: does this runtime hold GITHUB_TOKEN? Boolean + env key
     // NAMES only (values are never exposed).
+    //
+    // OWNER ONLY (2026-11-02): it lists the environment's variable names, which
+    // is reconnaissance for anyone else — and it is machinery, not a customer
+    // feature. Same 404 as everything else the owner keeps to himself.
     if (url.pathname === "/api/git-sync-status") {
+      const gate = await requireOwnerSession(req);
+      if (!gate.ok) {
+        return Response.json(
+          { error: "not_found", message: "Not found." },
+          { status: gate.status, headers: { "cache-control": "no-store" } },
+        );
+      }
       const names = Object.keys(process.env).filter((k) =>
         /TOKEN|SECRET|KEY|GITHUB|VERCEL/i.test(k),
       );
@@ -307,9 +320,102 @@ const server = Bun.serve({
       }
     }
 
-    // Non-secret alert-config status (channel presence + schedule only).
+    // OPERATIONS STATUS — OWNER ONLY (2026-11-02).
+    //
+    // This used to answer anyone on the public internet: when the scanner last
+    // ran, whether Telegram is configured, the schedule, the credit state. The
+    // owner's instruction: that is his information, not a customer feature.
+    //
+    // The gate is the OWNER identity (ownerEmails() + a real server session),
+    // not "any paid" and not "any Pro". Everyone else gets the same 404 the SPA
+    // fallback would give for a path that does not exist, with no schedule or
+    // channel detail in the body.
     if (url.pathname === "/api/alert-status") {
-      return Response.json(alertStatus());
+      const gate = await requireOwnerSession(req);
+      if (!gate.ok) {
+        console.warn(`[alert-status] refused — ${gate.error}`);
+        return Response.json(
+          { error: "not_found", message: "Not found." },
+          { status: gate.status, headers: { "cache-control": "no-store" } },
+        );
+      }
+      return Response.json(alertStatus(), { headers: { "cache-control": "no-store" } });
+    }
+
+    // FEED DIAGNOSTICS — OWNER ONLY. What this process can actually see: the
+    // paths it resolves, whether each one exists and reads, the last snapshot it
+    // was pushed, and the last push attempt. Built after the published host
+    // answered "no scan data yet" while the scanner was healthy, with no way to
+    // tell from outside which path it had resolved.
+    if (url.pathname === "/api/feed-diagnostics") {
+      const gate = await requireOwnerSession(req);
+      if (!gate.ok) {
+        return Response.json(
+          { error: "not_found", message: "Not found." },
+          { status: gate.status, headers: { "cache-control": "no-store" } },
+        );
+      }
+      return Response.json(feedDiagnostics(), { headers: { "cache-control": "no-store" } });
+    }
+
+    // SCAN SNAPSHOT — the receiving end of the bridge (src/server/scan-bridge.ts).
+    //
+    // The scan runs on the machine that writes `.run/`, and the published copy of
+    // this site cannot read that machine's disk. So after every scan the machine
+    // that did the work POSTs the snapshot here; this process keeps it in memory
+    // (and best-effort on disk) and `/api/instant-wins` serves from it.
+    //
+    // Auth: an HMAC derived from the shared owner secret — never the secret
+    // itself. ZERO credits: this endpoint only stores what it was given.
+    if (url.pathname === "/api/scan-snapshot") {
+      if (req.method !== "POST") {
+        return Response.json({ error: "method_not_allowed" }, { status: 405 });
+      }
+      const presented = req.headers.get(SNAPSHOT_HEADER);
+      if (!verifyBridgeToken(presented)) {
+        console.warn("[scan-snapshot] refused — bad or missing bridge token");
+        return Response.json({ error: "not_found", message: "Not found." }, { status: 404 });
+      }
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid_json" }, { status: 400 });
+      }
+      const parsed = (body ?? {}) as { cache?: { ts?: unknown; data?: unknown }; greens?: unknown; pushedAt?: unknown };
+      if (
+        typeof parsed.cache?.ts !== "number" ||
+        !Array.isArray(parsed.cache?.data)
+      ) {
+        return Response.json({ error: "invalid_snapshot" }, { status: 400 });
+      }
+      const snapshot = {
+        cache: parsed.cache,
+        greens: parsed.greens ?? null,
+        pushedAt: typeof parsed.pushedAt === "string" ? parsed.pushedAt : new Date().toISOString(),
+      };
+      rememberSnapshot(snapshot);
+      // Best effort on disk: some deployments are read-only, and memory above is
+      // the store the feed actually depends on.
+      let persisted = false;
+      try {
+        const target = candidateCacheFiles()[0];
+        const { mkdirSync, writeFileSync } = await import("node:fs");
+        const { dirname } = await import("node:path");
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, JSON.stringify(parsed.cache));
+        persisted = true;
+      } catch (e) {
+        console.warn(`[scan-snapshot] could not persist to disk: ${String(e)}`);
+      }
+      const fixtures = (parsed.cache.data as unknown[]).length;
+      console.log(
+        `[scan-snapshot] accepted ${fixtures} fixtures, scan ${new Date(parsed.cache.ts).toISOString()} (disk=${persisted}, credits=0)`,
+      );
+      return Response.json(
+        { ok: true, fixtures, persisted, receivedAt: new Date().toISOString() },
+        { headers: { "cache-control": "no-store" } },
+      );
     }
 
     // Lead capture — persists name/email/source/date to a durable JSON file
@@ -546,6 +652,41 @@ const server = Bun.serve({
 
 console.log(`Serving dist/ on http://${HOST}:${PORT}`);
 logOddsKeyState("serve-static boot");
+
+/**
+ * Push the scan we hold to the published host(s) — the sending end of the bridge
+ * (src/server/scan-bridge.ts).
+ *
+ * Called after every scan (src/server/alerts.ts) and once on boot, so a restart
+ * of THIS machine repopulates the published feed without waiting for a scan.
+ * ZERO credits: it copies a file the scan already paid for.
+ */
+async function pushCurrentSnapshot(reason: string): Promise<void> {
+  try {
+    const { readFileSync, existsSync } = await import("node:fs");
+    const file = candidateCacheFiles().find((f) => existsSync(f));
+    if (!file) {
+      console.log(`[scan-snapshot] nothing to push (${reason}): no scan file here`);
+      return;
+    }
+    const cache = JSON.parse(readFileSync(file, "utf8")) as unknown;
+    const report = await pushSnapshot(
+      { cache, greens: readGreenHistory(), pushedAt: new Date().toISOString() },
+      {},
+    );
+    console.log(
+      `[scan-snapshot] push (${reason}): ${report.delivered ? "delivered" : "FAILED"} ` +
+        `${report.fixtures} fixtures` +
+        (report.skipped ? ` — ${report.skipped}` : ` — ${report.attempts.map((a) => `${a.url} ${a.status ?? a.detail}`).join("; ")}`),
+    );
+  } catch (e) {
+    console.warn(`[scan-snapshot] push (${reason}) failed: ${String(e)}`);
+  }
+}
+
+if (process.env.SCAN_PUSH_DISABLED !== "1") {
+  void pushCurrentSnapshot("boot");
+}
 
 // Start the opportunity alert worker (no-op unless a channel is configured).
 // The alert worker normally runs INSIDE this server (state/health endpoint on

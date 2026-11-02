@@ -38,6 +38,8 @@ import {
   round2,
 } from "../lib/odds";
 import { checkBackLayPair, isSameBookmakerKey } from "../lib/odds-sanity";
+import { readGreenHistory, recordGreens } from "./green-history";
+import { pushSnapshot } from "./scan-bridge";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
@@ -152,6 +154,8 @@ interface BaseOpportunity {
   outcome: string;
   backOdds: number;
   layOdds: number;
+  /** The exchange laid against (for the greens history; null when unknown). */
+  laySource?: string | null;
   gap: number;
   detectedAt: string;
 }
@@ -622,6 +626,7 @@ export function findOpportunities(
         outcome: o.name,
         backOdds: back,
         layOdds: lay,
+        laySource: o.laySource ?? null,
         gap: layGap(back, lay),
         detectedAt: new Date().toISOString(),
       };
@@ -1081,6 +1086,60 @@ export async function runAlertCheck(): Promise<{
     }
   }
   saveSeen(seen);
+
+  // ── GREENS HISTORY (owner, 2026-11-02) ───────────────────────────────────
+  // Greens are rare and they are the proof the subscription is worth paying for.
+  // Every green row this scan found is appended once (deduped inside the module),
+  // so the page can say "N found in the last 30 days" on a quiet day too.
+  // ZERO CREDITS: these rows already passed through the scan.
+  try {
+    const greenRows = opps
+      .filter((o): o is CashOpportunity => o.type === "cash")
+      .map((o) => ({
+        sport: (matches.find((m) => m.matchId === o.matchId)?.sportKey ?? "") as string,
+        match: o.match,
+        outcome: o.outcome,
+        bookmaker: o.bookmaker,
+        backOdds: o.backOdds,
+        exchange: o.laySource ?? null,
+        layOdds: o.layOdds,
+        commission: ALERT_COMMISSION,
+      }));
+    const rec = recordGreens(greenRows);
+    if (greenRows.length > 0) {
+      log(
+        `greens history: ${rec.appended} new, ${rec.duplicates} repeat${rec.duplicates === 1 ? "" : "s"} of an already-recorded trade, ${rec.notGreen} not green (dropped)`,
+      );
+    }
+  } catch (e) {
+    log(`greens history write failed: ${String(e)}`);
+  }
+
+  // ── PUSH THE SNAPSHOT TO THE PUBLISHED SITE (ITEM 1, 2026-11-02) ─────────
+  // The published copy of the site runs on a different filesystem and cannot read
+  // this machine's `.run/`, which is why its feed said "no scan data yet" while
+  // this scan was healthy. Push what we already paid for; the receiving host
+  // keeps it in memory and serves the feed from there. ZERO extra credits.
+  try {
+    const cacheFile = join(RUN_DIR, "alerts-cache.json");
+    if (existsSync(cacheFile)) {
+      const cache = JSON.parse(readFileSync(cacheFile, "utf8")) as unknown;
+      const report = await pushSnapshot({
+        cache,
+        greens: readGreenHistory(),
+        pushedAt: new Date().toISOString(),
+      });
+      log(
+        `snapshot push: ${report.delivered ? "delivered" : "FAILED"} ${report.fixtures} fixtures` +
+          (report.skipped
+            ? ` — ${report.skipped}`
+            : ` — ${report.attempts.map((a) => `${a.url} ${a.status ?? a.detail}`).join("; ")}`),
+      );
+    }
+  } catch (e) {
+    log(`snapshot push failed: ${String(e)}`);
+  }
+
   const cash = opps.filter((o) => o.type === "cash").length;
   const freebet = opps.length - cash;
   log(

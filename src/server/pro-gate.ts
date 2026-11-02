@@ -26,14 +26,18 @@
  * `ok` plus a Pro plan. Change one, change the other.
  */
 import { resolveSession } from "./sessions";
-import { findByEmail } from "./users";
+import { findByEmail, ownerEmails } from "./users";
 
 export type ProGate =
   | { ok: true; email: string }
   | {
       ok: false;
-      /** 401 = not signed in / expired, 403 = signed in but not Pro, 503 = cannot verify. */
-      status: 401 | 403 | 503;
+      /**
+       * 401 = not signed in / expired, 403 = signed in but not Pro, 503 = cannot
+       * verify, 404 = not for you (used by owner-only surfaces, which must not
+       * even confirm they exist).
+       */
+      status: 401 | 403 | 404 | 503;
       error: string;
       /** Plain language for the page; never an error code on its own. */
       message: string;
@@ -198,5 +202,50 @@ export async function requirePaidSession(
     };
   }
 
+  return { ok: true, email };
+}
+
+/**
+ * Verify that this request comes from the OWNER — not merely a paid or Pro
+ * account.
+ *
+ * WHY (owner instruction, 2026-11-02): `/api/alert-status` answered anyone with
+ * when the scanner last ran, whether Telegram is configured and on what schedule.
+ * That is the owner's operations information, not a customer feature, and it was
+ * on the public internet. Being a subscriber must not be enough to read it.
+ *
+ * "Owner" means the identity the owner logs in with: an address in
+ * `ownerEmails()` (src/server/users.ts) resolved from a real server-side session,
+ * with `OWNER_PASSWORD` set. If the secret is unset the seat fails CLOSED — the
+ * same rule authenticateUserJson() uses, so an unconfigured environment cannot
+ * hand out operations data.
+ *
+ * A refusal is a 404 whose body says nothing: a stranger should not learn that
+ * the endpoint exists, let alone what it reports.
+ */
+export async function requireOwnerSession(req: Request): Promise<ProGate> {
+  const notFound: ProGate = {
+    ok: false,
+    status: 404,
+    error: "not_found",
+    message: "Not found.",
+  };
+  const token = bearerToken(req);
+  if (!token) return notFound;
+  if (!process.env.OWNER_PASSWORD?.trim()) return notFound;
+
+  let email: string;
+  try {
+    const session = await resolveSession(token);
+    if (!session) return notFound;
+    const user = await findByEmail(session.email);
+    if (!user) return notFound;
+    email = user.email;
+  } catch (e) {
+    // Cannot verify => say nothing. An owner-only surface never falls open.
+    console.error(`[owner-gate] account store unavailable: ${String(e)}`);
+    return notFound;
+  }
+  if (!ownerEmails().includes(email.trim().toLowerCase())) return notFound;
   return { ok: true, email };
 }
