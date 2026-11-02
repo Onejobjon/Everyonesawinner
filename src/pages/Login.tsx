@@ -28,14 +28,14 @@ export default function Login() {
       setError(err);
       return;
     }
-    // After login: if subscribed → dashboard, else → pricing
-    const currentUser = JSON.parse(localStorage.getItem("eaw_session") || "{}");
-    if (currentUser?.subscription) {
-      navigate("/dashboard");
-    } else if (redirect && redirect !== "/") {
+    // After login: everyone lands on the free bet offers page, unless they were
+    // sent here from a specific page that needs a session. The instant-wins feed
+    // lives on the dashboard and is for people who already know the mechanics, so
+    // it is no longer the default destination.
+    if (redirect && redirect !== "/") {
       navigate(redirect);
     } else {
-      navigate("/#pricing");
+      navigate("/free-bets");
     }
   };
 

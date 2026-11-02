@@ -22,12 +22,12 @@ export default function SubscribeSuccess() {
       localStorage.removeItem("eaw_pending_plan");
       setStatus("done");
 
-      // Redirect to dashboard after 3 seconds
+      // Redirect to the free bet offers after 3 seconds
       const timer = setInterval(() => {
         setCountdown((c) => {
           if (c <= 1) {
             clearInterval(timer);
-            navigate("/dashboard", { replace: true });
+            navigate("/free-bets", { replace: true });
             return 0;
           }
           return c - 1;
@@ -63,8 +63,8 @@ export default function SubscribeSuccess() {
 
       {status === "done" && (
         <div className="mt-8 flex flex-wrap gap-4">
-          <Link to="/dashboard" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
-            Go to Dashboard
+          <Link to="/free-bets" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
+            Go to free bets
           </Link>
           <Link to="/oddsmatcher" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">
             Start matching
