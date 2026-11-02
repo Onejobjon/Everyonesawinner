@@ -149,9 +149,14 @@ export default async function handler(req: any, res: any): Promise<void> {
       return;
     }
     const meBody = (await me.json().catch(() => null)) as
-      | { ok?: boolean; user?: { plan?: string | null } }
+      | { ok?: boolean; user?: { plan?: string | null; entitled?: boolean } }
       | null;
     const plan = meBody?.user?.plan ?? null;
+    // ENTITLED, not merely "has a plan": /api/me applies the one rule in
+    // src/server/entitlement.ts (known plan + active status + paid period not
+    // ended, or inside the failed-payment grace window). A plan whose period has
+    // ended must not open a credit-spending tool.
+    const entitled = meBody?.user?.entitled === true;
     if (!meBody?.ok) {
       send(
         {
@@ -162,7 +167,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       );
       return;
     }
-    if (plan !== "pro" && plan !== "annual") {
+    if (!entitled || (plan !== "pro" && plan !== "annual")) {
       send(
         {
           error: "pro_required",

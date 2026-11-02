@@ -105,10 +105,14 @@ export default async function handler(req: any, res: any): Promise<void> {
       return;
     }
     const meBody = (await me.json().catch(() => null)) as
-      | { ok?: boolean; user?: { plan?: string | null; subscription?: boolean } }
+      | { ok?: boolean; user?: { plan?: string | null; entitled?: boolean } }
       | null;
     const plan = meBody?.user?.plan ?? null;
-    const paid = plan === "starter" || plan === "pro" || plan === "annual" || meBody?.user?.subscription === true;
+    // ENTITLED (the one rule in src/server/entitlement.ts): a plan alone is not
+    // access — the paid period must not have ended and the status must be live.
+    const paid =
+      meBody?.user?.entitled === true &&
+      (plan === "starter" || plan === "pro" || plan === "annual");
     if (!meBody?.ok) {
       send(
         {

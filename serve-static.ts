@@ -17,6 +17,7 @@ import { ensureScanOnOpen, scanOnOpenState } from "./src/server/scan-on-open";
 import { readGreenHistory } from "./src/server/green-history";
 import { pushSnapshot, rememberSnapshot, SNAPSHOT_HEADER, verifyBridgeToken } from "./src/server/scan-bridge";
 import { handleStripeEvent, verifyStripeSignature } from "./src/server/stripe-webhook";
+import { resolveSportParam, REJECTED_SPORT_MESSAGE } from "./src/lib/sport-params";
 
 // Port is configurable: the platform now runs its own dev server on 3000, so
 // the alert host runs alongside it on PORT (default 3000 for the VPS recipe).
@@ -104,6 +105,19 @@ const server = Bun.serve({
     // Odds proxy — fetches live odds server-side so the API key never ships
     // to the client. Query: ?sport=<sportKey> (default "upcoming").
     if (url.pathname === "/api/odds") {
+      // WHICH COMPETITIONS MAY BE ASKED FOR — checked BEFORE the key check and
+      // before any provider request. The query string used to be pasted straight
+      // into the paid upstream URL, so every new value was a fresh cache key and
+      // a fresh credit; an anonymous caller could burn the month's allowance one
+      // loop at a time. Anything outside the catalogue is refused here, which
+      // costs zero credits. (api/odds.ts carries the same rule — change both.)
+      const sport = resolveSportParam(url.searchParams.get("sport"));
+      if (!sport) {
+        return Response.json(
+          { error: "sport_not_supported", message: REJECTED_SPORT_MESSAGE },
+          { status: 400, headers: { "cache-control": "no-store" } },
+        );
+      }
       // No key anywhere → say so out loud (503 + log), never a silent empty list.
       if (!ODDS_API_KEY) {
         console.error(`[odds-key] /api/odds refused — ${oddsKeyProblem()}`);
@@ -116,7 +130,6 @@ const server = Bun.serve({
           { status: 503, headers: { "cache-control": "no-store" } },
         );
       }
-      const sport = url.searchParams.get("sport") || "upcoming";
       const target =
         sport === "upcoming"
           ? `https://api.the-odds-api.com/v4/sports/upcoming/odds/?apiKey=${ODDS_API_KEY}&regions=uk&markets=h2h&oddsFormat=decimal`
@@ -600,13 +613,26 @@ const server = Bun.serve({
         if (!found) {
           return Response.json({ ok: false, error: "Account not found" }, { status: 401 });
         }
+        // THE ENTITLEMENT ANSWER, from the one rule in src/server/entitlement.ts
+        // (via findByEmail → toPublic). `entitled` replaced a stored
+        // `subscription` boolean that could disagree with the server gates and
+        // never expired. The dates are here so the page can tell a customer when
+        // their access ends — and so the grace email can quote a real date.
         return Response.json({
           ok: true,
           user: {
             name: found.name,
             email: found.email,
-            subscription: found.subscription,
+            entitled: found.entitled,
+            // DEPRECATED alias, same value: a browser still running the previous
+            // bundle reads `subscription`, and during the few minutes between a
+            // server restart and the next publish the two must not disagree.
+            // Remove once the `entitled` client is the only one in the wild.
+            subscription: found.entitled,
             plan: found.plan,
+            subscriptionStatus: found.subscriptionStatus,
+            currentPeriodEnd: found.currentPeriodEnd,
+            graceEndsAt: found.graceEndsAt,
             token,
           },
         });

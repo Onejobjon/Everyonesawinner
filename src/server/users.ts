@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { ensureSchema, hasDatabase, query } from "./db-pg";
 import { issueSession } from "./sessions";
+import { isEntitled, type Plan, type SubscriptionState } from "./entitlement";
 
 /**
  * Server-side user store. Accounts persist to a JSON file (`.run/users.json`
@@ -16,22 +17,46 @@ import { issueSession } from "./sessions";
  * connected — same caveat documented on the leads store.
  */
 
+/**
+ * One account as stored. `subscription` is deliberately GONE: access is no
+ * longer a boolean somebody sets, it is derived by isEntitled() (see
+ * src/server/entitlement.ts) from the plan, the Stripe status and the date the
+ * paid period ends. A boolean with no end date was how one payment bought Pro
+ * for ever.
+ */
 export interface StoredUser {
   name: string;
   email: string;
   salt: string;
   passwordHash: string;
-  subscription: boolean;
-  plan: "starter" | "pro" | "annual" | null;
+  plan: Plan | null;
+  /** Stripe subscription status: active | trialing | past_due | canceled | … */
+  subscriptionStatus: string | null;
+  /** When the period the customer has paid for ends (ISO 8601). */
+  currentPeriodEnd: string | null;
+  /** When the failed-payment grace window closes (ISO 8601). */
+  graceEndsAt: string | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
   createdAt: string;
 }
 
-/** The user shape returned to the client (never includes the hash/salt). */
+/**
+ * The user shape returned to the client (never includes the hash/salt).
+ *
+ * `entitled` is THE answer to "may this account use the paid tools", computed by
+ * the one rule in entitlement.ts. The browser renders it and never recomputes
+ * it from a local flag — a local boolean is a second opinion, and two opinions
+ * is how a customer ends up paying for a locked door.
+ */
 export interface PublicUser {
   name: string;
   email: string;
-  subscription: boolean;
-  plan: "starter" | "pro" | "annual" | null;
+  entitled: boolean;
+  plan: Plan | null;
+  subscriptionStatus: string | null;
+  currentPeriodEnd: string | null;
+  graceEndsAt: string | null;
   token: string;
 }
 
@@ -114,21 +139,28 @@ function isOwnerSeat(email: string): boolean {
   return ownerEmails().includes(email.trim().toLowerCase());
 }
 
+/** The entitlement inputs for one stored record (owner seat included). */
+export function stateOf(record: StoredUser): SubscriptionState {
+  const ownerSeat = isOwnerSeat(record.email);
+  return {
+    plan: ownerSeat ? "pro" : record.plan ?? null,
+    status: ownerSeat ? "active" : record.subscriptionStatus ?? null,
+    currentPeriodEnd: record.currentPeriodEnd ?? null,
+    graceEndsAt: record.graceEndsAt ?? null,
+    ownerSeat,
+  };
+}
+
 function toPublic(record: StoredUser): PublicUser {
-  if (isOwnerSeat(record.email)) {
-    return {
-      name: record.name,
-      email: record.email,
-      subscription: true,
-      plan: "pro",
-      token: newToken(),
-    };
-  }
+  const state = stateOf(record);
   return {
     name: record.name,
     email: record.email,
-    subscription: record.subscription,
-    plan: record.plan,
+    entitled: isEntitled(state),
+    plan: state.plan,
+    subscriptionStatus: state.status,
+    currentPeriodEnd: state.currentPeriodEnd,
+    graceEndsAt: state.graceEndsAt,
     token: newToken(),
   };
 }
@@ -161,9 +193,14 @@ function registerUserJson(name: string, email: string, password: string): Public
     salt,
     passwordHash: hashPassword(password, salt),
     // Owner seats are comped Pro: they are not customers and must never be
-    // blocked behind a subscription that billing has not built yet.
-    subscription: owner,
+    // blocked behind a subscription that billing has not built yet. The comp is
+    // expressed by stateOf() (ownerSeat), not by a stored boolean.
     plan: owner ? "pro" : null,
+    subscriptionStatus: null,
+    currentPeriodEnd: null,
+    graceEndsAt: null,
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
     createdAt: new Date().toISOString(),
   };
   users[cleanEmail] = record;
@@ -194,8 +231,12 @@ function authenticateUserJson(email: string, password: string): PublicUser {
       email: cleanEmail,
       salt,
       passwordHash: hashPassword(password, salt),
-      subscription: true,
       plan: "pro",
+      subscriptionStatus: null,
+      currentPeriodEnd: null,
+      graceEndsAt: null,
+      stripeCustomerId: record?.stripeCustomerId ?? null,
+      stripeSubscriptionId: record?.stripeSubscriptionId ?? null,
       createdAt: record?.createdAt || new Date().toISOString(),
     };
     users[cleanEmail] = record;
@@ -245,8 +286,20 @@ interface UserRow {
   name: string;
   password_hash: string;
   salt: string;
-  plan: "starter" | "pro" | "annual" | null;
+  plan: Plan | null;
   subscription_status: string | null;
+  current_period_end: string | Date | null;
+  grace_ends_at: string | Date | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+}
+
+/** Postgres timestamps arrive as Date or string depending on the driver. */
+function isoOrNull(v: string | Date | null | undefined): string | null {
+  if (v == null) return null;
+  if (v instanceof Date) return Number.isFinite(v.getTime()) ? v.toISOString() : null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
 function rowToStored(row: UserRow): StoredUser {
@@ -255,11 +308,19 @@ function rowToStored(row: UserRow): StoredUser {
     email: row.email,
     salt: row.salt,
     passwordHash: row.password_hash,
-    subscription: isOwnerSeat(row.email) || row.subscription_status === "active" || row.subscription_status === "trialing",
-    plan: isOwnerSeat(row.email) ? "pro" : row.plan,
+    plan: row.plan,
+    subscriptionStatus: row.subscription_status,
+    currentPeriodEnd: isoOrNull(row.current_period_end),
+    graceEndsAt: isoOrNull(row.grace_ends_at),
+    stripeCustomerId: row.stripe_customer_id,
+    stripeSubscriptionId: row.stripe_subscription_id,
     createdAt: new Date().toISOString(),
   };
 }
+
+/** The columns rowToStored() needs — keep in step with the SELECTs below. */
+const USER_COLUMNS =
+  "email, name, password_hash, salt, plan, subscription_status, current_period_end, grace_ends_at, stripe_customer_id, stripe_subscription_id";
 
 async function registerUserDb(name: string, email: string, password: string): Promise<PublicUser> {
   await ensureSchema();
@@ -279,7 +340,7 @@ async function registerUserDb(name: string, email: string, password: string): Pr
     `INSERT INTO users (email, name, password_hash, salt, plan)
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (lower(email)) DO NOTHING
-     RETURNING email, name, password_hash, salt, plan, subscription_status`,
+     RETURNING ${USER_COLUMNS}`,
     [cleanEmail, cleanName, hashPassword(pw, salt), salt, isOwnerSeat(cleanEmail) ? "pro" : null],
   );
   if (rows.length === 0) throw new Error("An account with that email already exists.");
@@ -291,7 +352,7 @@ async function authenticateUserDb(email: string, password: string): Promise<Publ
   const cleanEmail = (email ?? "").trim().toLowerCase();
   const pw = password ?? "";
   let rows = await query<UserRow>(
-    `SELECT email, name, password_hash, salt, plan, subscription_status FROM users WHERE lower(email) = $1`,
+    `SELECT ${USER_COLUMNS} FROM users WHERE lower(email) = $1`,
     [cleanEmail],
   );
   // Owner seat: controlled by the server secret alone (same rule as the JSON
@@ -307,7 +368,7 @@ async function authenticateUserDb(email: string, password: string): Promise<Publ
              salt = EXCLUDED.salt,
              plan = 'pro',
              subscription_status = COALESCE(users.subscription_status, 'active')
-       RETURNING email, name, password_hash, salt, plan, subscription_status`,
+       RETURNING ${USER_COLUMNS}`,
       [cleanEmail, "Jon (owner)", hashPassword(pw, salt), salt],
     );
     console.log(`[users] owner seat refreshed in Postgres for ${cleanEmail}`);
@@ -345,33 +406,156 @@ export async function authenticateUser(email: string, password: string): Promise
   return { ...user, token: await issueSession(user.email) };
 }
 
-/** Record a plan change (Stripe webhook / manual comp). */
-export async function setPlan(
+/**
+ * A patch to one account's billing state.
+ *
+ * `undefined` means "leave this field alone"; `null` means "clear it". That
+ * distinction is the whole point: a Stripe event that carries no period end must
+ * not wipe the period end we already know, and a cancellation must be able to
+ * clear it deliberately.
+ */
+export interface SubscriptionPatch {
+  plan?: Plan | null;
+  status?: string | null;
+  currentPeriodEnd?: string | null;
+  graceEndsAt?: string | null;
+  customerId?: string | null;
+  subscriptionId?: string | null;
+}
+
+/**
+ * Write billing state for one account.
+ *
+ * Returns TRUE when the account was updated, FALSE when there is no account
+ * with that email. A write that FAILS THROWS — never a quiet success. (Before
+ * 2026-11-02 the JSON path did `if (!record) return;` and logged success
+ * regardless: a payer whose Stripe email differed from their account email paid
+ * and got nothing, and nothing anywhere said so.)
+ */
+export async function updateSubscription(
   email: string,
-  plan: "starter" | "pro" | "annual" | null,
-  subscriptionStatus: string | null = plan ? "active" : null,
-  stripeIds: { customerId?: string | null; subscriptionId?: string | null } = {},
-): Promise<void> {
+  patch: SubscriptionPatch,
+): Promise<boolean> {
   const cleanEmail = (email ?? "").trim().toLowerCase();
+  if (!cleanEmail) return false;
+
   if (hasDatabase()) {
     await ensureSchema();
-    await query(
-      `UPDATE users SET plan = $2, subscription_status = $3,
-         stripe_customer_id = COALESCE($4, stripe_customer_id),
-         stripe_subscription_id = COALESCE($5, stripe_subscription_id)
-       WHERE lower(email) = $1`,
-      [cleanEmail, plan, subscriptionStatus, stripeIds.customerId ?? null, stripeIds.subscriptionId ?? null],
+    const sets: string[] = [];
+    const params: unknown[] = [cleanEmail];
+    const put = (column: string, value: unknown) => {
+      params.push(value);
+      sets.push(`${column} = $${params.length}`);
+    };
+    if (patch.plan !== undefined) put("plan", patch.plan);
+    if (patch.status !== undefined) put("subscription_status", patch.status);
+    if (patch.currentPeriodEnd !== undefined) put("current_period_end", patch.currentPeriodEnd);
+    if (patch.graceEndsAt !== undefined) put("grace_ends_at", patch.graceEndsAt);
+    if (patch.customerId !== undefined) put("stripe_customer_id", patch.customerId);
+    if (patch.subscriptionId !== undefined) put("stripe_subscription_id", patch.subscriptionId);
+    if (sets.length === 0) return true; // nothing to write
+    const rows = await query<{ email: string }>(
+      `UPDATE users SET ${sets.join(", ")} WHERE lower(email) = $1 RETURNING email`,
+      params,
     );
-    return;
+    return rows.length > 0;
   }
+
   warnNonDurableOnce();
   const users = loadUsers();
   const record = users[cleanEmail];
-  if (!record) return;
-  record.plan = plan;
-  record.subscription = subscriptionStatus === "active" || subscriptionStatus === "trialing";
+  if (!record) return false;
+  if (patch.plan !== undefined) record.plan = patch.plan;
+  if (patch.status !== undefined) record.subscriptionStatus = patch.status;
+  if (patch.currentPeriodEnd !== undefined) record.currentPeriodEnd = patch.currentPeriodEnd;
+  if (patch.graceEndsAt !== undefined) record.graceEndsAt = patch.graceEndsAt;
+  if (patch.customerId !== undefined) record.stripeCustomerId = patch.customerId;
+  if (patch.subscriptionId !== undefined) record.stripeSubscriptionId = patch.subscriptionId;
   users[cleanEmail] = record;
-  saveUsers(users);
+  saveUsers(users); // throws on a failed write — the caller must hear about it
+  return true;
+}
+
+/**
+ * Find the account a Stripe object belongs to, by the ids we stored.
+ *
+ * WHY: Stripe does not put our customer's email on a subscription object, so
+ * every `customer.subscription.*` event was being ignored (the handler looked
+ * for `metadata.email` and gave up). The stored Stripe customer id is the link
+ * that always exists once checkout has completed.
+ */
+export async function findEmailByStripeIds(ids: {
+  customerId?: string | null;
+  subscriptionId?: string | null;
+}): Promise<string | null> {
+  const customerId = ids.customerId || null;
+  const subscriptionId = ids.subscriptionId || null;
+  if (!customerId && !subscriptionId) return null;
+
+  if (hasDatabase()) {
+    await ensureSchema();
+    const rows = await query<{ email: string }>(
+      `SELECT email FROM users
+        WHERE ($1::text IS NOT NULL AND stripe_customer_id = $1)
+           OR ($2::text IS NOT NULL AND stripe_subscription_id = $2)
+        LIMIT 1`,
+      [customerId, subscriptionId],
+    );
+    return rows[0]?.email ?? null;
+  }
+
+  const users = loadUsers();
+  for (const record of Object.values(users)) {
+    if (customerId && record.stripeCustomerId === customerId) return record.email;
+    if (subscriptionId && record.stripeSubscriptionId === subscriptionId) return record.email;
+  }
+  return null;
+}
+
+/** A manual comp with no end date given lasts this long. */
+const MANUAL_COMP_DAYS = 30;
+
+/**
+ * Record a plan change by hand (a comp, a fix, a test fixture).
+ *
+ * Stripe events do NOT come through here — they use updateSubscription(), which
+ * carries the real period end from the event. A hand-set plan has no Stripe
+ * period to quote, so unless the caller supplies one it grants MANUAL_COMP_DAYS
+ * from now: an account with a plan and no period end is not entitled under
+ * entitlement.ts, and a comp that silently locks the owner out of his own tools
+ * would be its own bug.
+ *
+ * Returns true when an account was updated, false when there is none.
+ */
+export async function setPlan(
+  email: string,
+  plan: Plan | null,
+  subscriptionStatus: string | null = plan ? "active" : null,
+  opts: {
+    customerId?: string | null;
+    subscriptionId?: string | null;
+    currentPeriodEnd?: string | null;
+  } = {},
+): Promise<boolean> {
+  if (plan == null) {
+    return updateSubscription(email, {
+      plan: null,
+      status: subscriptionStatus,
+      currentPeriodEnd: null,
+      graceEndsAt: null,
+    });
+  }
+  const periodEnd =
+    opts.currentPeriodEnd ??
+    new Date(Date.now() + MANUAL_COMP_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  return updateSubscription(email, {
+    plan,
+    status: subscriptionStatus,
+    currentPeriodEnd: periodEnd,
+    graceEndsAt: null,
+    ...(opts.customerId !== undefined ? { customerId: opts.customerId } : {}),
+    ...(opts.subscriptionId !== undefined ? { subscriptionId: opts.subscriptionId } : {}),
+  });
 }
 
 /** Mark a login timestamp (Postgres only; the JSON store keeps createdAt). */
@@ -389,7 +573,7 @@ export async function findByEmail(email: string): Promise<PublicUser | null> {
   if (hasDatabase()) {
     await ensureSchema();
     const rows = await query<UserRow>(
-      `SELECT email, name, password_hash, salt, plan, subscription_status FROM users WHERE lower(email) = $1`,
+      `SELECT ${USER_COLUMNS} FROM users WHERE lower(email) = $1`,
       [cleanEmail],
     );
     return rows[0] ? toPublic(rowToStored(rows[0])) : null;

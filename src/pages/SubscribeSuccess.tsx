@@ -67,7 +67,8 @@ export default function SubscribeSuccess() {
   }, [sessionStatus, refresh]);
 
   const checking = sessionStatus === "checking" || (sessionStatus === "authed" && !user);
-  const active = sessionStatus === "authed" && !!user?.subscription;
+  // The server's answer, not the browser's hope: `entitled` comes from /api/me.
+  const active = sessionStatus === "authed" && !!user?.entitled;
   const serverUnreachable = sessionStatus === "error";
 
   async function checkAgain() {

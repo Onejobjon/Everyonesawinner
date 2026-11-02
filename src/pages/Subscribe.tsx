@@ -67,7 +67,7 @@ export default function Subscribe() {
     );
   }
 
-  if (user?.subscription) {
+  if (user?.entitled) {
     return (
       <PageHeader title="You're already subscribed!" subtitle="Your plan is active. Head to the dashboard to start using the tools.">
         <Link to="/dashboard" className="mt-6 inline-block rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">Go to Dashboard</Link>

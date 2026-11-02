@@ -16,7 +16,15 @@ import {
 // /api/odds proxy, which attaches the key + fixed params (regions/markets).
 
 // Exchange sources for lay odds, in order of preference.
-const LAY_SOURCES = ["betfair_ex_uk", "smarkets"];
+//
+// SMARKETS IS DELIBERATELY ABSENT (owner directive 2026-11-02). Their API terms
+// (v1.1, 16/10/2026) forbid using their prices to benchmark markets and forbid
+// redistributing prices without written approval — an odds-comparison product
+// is exactly that. The feed may still return Smarkets prices inside our
+// vendor's Betfair licence, but this product must never turn one into a lay
+// quote: a Smarkets h2h_lay market is ignored by findLayOdds() and by the
+// league lay-coverage pass below. Betfair is the only lay source.
+const LAY_SOURCES: readonly string[] = ["betfair_ex_uk"];
 
 // Paid tier (20K credits/mo). Cache to keep the burn predictable.
 // Cache in memory (per session) + localStorage (across page loads).
@@ -86,9 +94,9 @@ export interface MatchOutcome {
   return20: number;
   /** Exchange lay odds (decimal) — null when no exchange lay price exists */
   layOdds: number | null;
-  /** Source of the lay odds ("Betfair" or "Smarkets") — null when no lay data */
+  /** Source of the lay odds ("Betfair") — null when no lay data */
   laySource: string | null;
-  /** Exchange bookmaker key providing the lay odds ("betfair_ex_uk" | "smarkets") — null when no lay data */
+  /** Exchange bookmaker key providing the lay odds ("betfair_ex_uk") — null when no lay data */
   layBookmakerKey: string | null;
   /** ISO last_update of the back bookmaker's h2h market — null when unknown */
   backLastUpdate: string | null;
@@ -135,7 +143,7 @@ export interface Match {
   commenceTime: string;
   /** All available outcomes (2 for most sports, 3 for soccer) */
   outcomes: MatchOutcome[];
-  /** Whether this match's league has genuine exchange lay coverage (Betfair/Smarkets quoting h2h_lay) */
+  /** Whether this match's league has genuine exchange lay coverage (Betfair quoting h2h_lay) */
   hasLayCoverage: boolean;
   /** Warning message if bookmaker availability is limited */
   warning?: string;
@@ -452,8 +460,8 @@ function getLeagueKey(sportKey: string): string {
 }
 
 /**
- * Find real exchange lay odds for an outcome. Prefers Betfair, falls back to
- * Smarkets. Returns null (never a fabricated number) when no lay price exists.
+ * Find real exchange lay odds for an outcome. Betfair only — see LAY_SOURCES.
+ * Returns null (never a fabricated number) when no lay price exists.
  */
 function findLayOdds(
   outcomeName: string,
@@ -512,9 +520,10 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
   const now = Date.now();
 
   // First pass: which leagues (sport_keys) have genuine exchange lay coverage —
-  // Betfair or Smarkets quoting an h2h_lay market with a usable price for at
-  // least one match. The alert worker uses this to skip sparse-coverage leagues
-  // outright for the free-bet rule (a lone stale quote is not real coverage).
+  // Betfair quoting an h2h_lay market with a usable price for at least one
+  // match. A Smarkets h2h_lay market never counts (see LAY_SOURCES). The alert
+  // worker uses this to skip sparse-coverage leagues outright for the free-bet
+  // rule (a lone stale quote is not real coverage).
   const layCoveredLeagues = new Set<string>();
   for (const apiMatch of data) {
     if (

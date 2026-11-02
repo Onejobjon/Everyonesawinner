@@ -16,9 +16,12 @@
  * Only after 1–4 do we reach the catalogue read or any provider request, so a
  * rejected caller costs ZERO credits.
  *
- * "Pro" means plan `pro` or `annual` (Pro monthly / Pro Annual), matching
- * `isProPlan()` in src/lib/auth.tsx. The owner seat is stored with plan `pro`
- * (src/server/users.ts), so it passes without a special case here.
+ * "Pro" means ENTITLED (src/server/entitlement.ts — known plan, active status,
+ * paid period not ended, or inside the failed-payment grace window) AND plan
+ * `pro` or `annual`. Being on a plan is no longer enough on its own: a plan with
+ * no paid period, or a period that has ended, is not access. The owner seat is
+ * entitled by identity (src/server/users.ts), so it passes without a special
+ * case here.
  *
  * The Vercel deployment cannot import from `src/` (a relative import once took
  * a function down at load), so `api/odds-leagues.ts` carries its own copy of the
@@ -83,6 +86,7 @@ export async function requireProSession(
 
   let email: string;
   let plan: unknown;
+  let entitled = false;
   try {
     const session = await resolveSession(token);
     if (!session) {
@@ -104,6 +108,8 @@ export async function requireProSession(
     }
     email = user.email;
     plan = user.plan;
+    // The ONE rule (src/server/entitlement.ts), computed from the account record.
+    entitled = user.entitled;
   } catch (e) {
     // Fail CLOSED: if we cannot verify the caller, nobody gets the paid data.
     console.error(`[pro-gate] account store unavailable: ${String(e)}`);
@@ -116,7 +122,7 @@ export async function requireProSession(
     };
   }
 
-  if (!isProPlanValue(plan)) {
+  if (!entitled || !isProPlanValue(plan)) {
     return {
       ok: false,
       status: 403,
@@ -158,7 +164,7 @@ export async function requirePaidSession(
   }
   let email: string;
   let plan: unknown;
-  let subscription: unknown;
+  let entitled = false;
   try {
     const session = await resolveSession(token);
     if (!session) {
@@ -180,7 +186,8 @@ export async function requirePaidSession(
     }
     email = user.email;
     plan = user.plan;
-    subscription = (user as { subscription?: unknown }).subscription;
+    // Same single rule as requireProSession — see src/server/entitlement.ts.
+    entitled = user.entitled;
   } catch (e) {
     // Fail CLOSED: an unverifiable caller gets nothing.
     console.error(`[paid-gate] account store unavailable: ${String(e)}`);
@@ -193,7 +200,7 @@ export async function requirePaidSession(
     };
   }
 
-  if (!isPaidPlanValue(plan) && subscription !== true) {
+  if (!entitled || !isPaidPlanValue(plan)) {
     return {
       ok: false,
       status: 403,

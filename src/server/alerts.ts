@@ -539,8 +539,9 @@ async function getMatches(): Promise<Match[]> {
 
 /**
  * Free-bet freshness guard. A free-bet >100% row is only trustworthy when:
- *   (a) its league has genuine exchange lay coverage (Betfair/Smarkets quoting
- *       h2h_lay), and
+ *   (a) its league has genuine exchange lay coverage (Betfair quoting h2h_lay —
+ *       Smarkets is never a lay source, see LAY_SOURCES in src/lib/odds-api.ts),
+ *       and
  *   (b) both the back and lay prices have last_update timestamps within 60 min
  *       of each other.
  * Stale/sparse exchange lay data (minor leagues) can show lay < back and would

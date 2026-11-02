@@ -6,8 +6,21 @@ interface User {
   email: string;
   name: string;
   token: string;
-  subscription: boolean; // true if user has paid
-  plan: Plan | null;     // which tier they're on
+  /**
+   * May this account use the paid tools? Decided by the SERVER (GET /api/me →
+   * src/server/entitlement.ts: known plan + live status + a paid period that has
+   * not ended, or inside the failed-payment grace window). The browser never
+   * recomputes it and never stores its own opinion: a local boolean is a second
+   * opinion, and a second opinion is how a customer pays for a locked door.
+   */
+  entitled: boolean;
+  plan: Plan | null; // which tier they're on
+  /** When the paid period ends (ISO) — null for the owner's comped seat. */
+  currentPeriodEnd?: string | null;
+  /** Stripe status: active | trialing | past_due | canceled | … */
+  subscriptionStatus?: string | null;
+  /** While a renewal is failing, access continues until this date (ISO). */
+  graceEndsAt?: string | null;
 }
 
 /**
@@ -27,7 +40,6 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<string | null>;
   signup: (name: string, email: string, password: string) => Promise<string | null>;
   logout: () => void;
-  activateSubscription: (plan: Plan) => void;
   /** Re-ask the server what this session's plan and subscription are. */
   refresh: () => Promise<void>;
   /** True only when the server has confirmed the session. */
@@ -179,19 +191,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("eaw_session");
   };
 
-  /**
-   * Local, optimistic only: the subscribe-success page uses this for a nicer
-   * message. It can NEVER unlock a tool — the paywall asks /api/me, which reads
-   * the plan from the account record, and that only changes when billing says so.
-   */
-  const activateSubscription = (plan: Plan) => {
-    if (!user) return;
-    setUser({ ...user, subscription: true, plan });
-  };
+  // NOTE (2026-11-02): there used to be an `activateSubscription()` here that
+  // set `subscription: true` in the browser. Nothing calls it any more, and it
+  // is deliberately gone: entitlement is the server's answer (see the User type
+  // above). Access changes when billing says so, and only then.
 
   return (
     <AuthContext.Provider
-      value={{ user, sessionStatus, login, signup, logout, activateSubscription, refresh, checkAuth }}
+      value={{ user, sessionStatus, login, signup, logout, refresh, checkAuth }}
     >
       {children}
     </AuthContext.Provider>

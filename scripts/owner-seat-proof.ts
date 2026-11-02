@@ -24,7 +24,9 @@ async function attempt(password: string): Promise<{ ok: boolean; plan?: string |
   const { authenticateUser } = await import("../src/server/users.ts");
   try {
     const u = await authenticateUser(OWNER, password);
-    return { ok: true, plan: u.plan, sub: u.subscription };
+    // `entitled` replaced the old `subscription` boolean (2026-11-02): access is
+    // now the server's single entitlement rule, not a stored flag.
+    return { ok: true, plan: u.plan, sub: u.entitled };
   } catch (e) {
     return { ok: false, err: e instanceof Error ? e.message : String(e) };
   }

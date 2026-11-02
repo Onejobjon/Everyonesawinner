@@ -60,8 +60,11 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
     return null; // redirecting to /login
   }
 
-  // Logged in but no subscription → show paywall screen
-  if (!user?.subscription) {
+  // Logged in but NOT ENTITLED → show paywall screen. `entitled` is the server's
+  // answer (GET /api/me → src/server/entitlement.ts), not a local flag: it is
+  // false when the paid period has ended, when a subscription was cancelled and
+  // ran out, and when a failed payment's grace window has closed.
+  if (!user?.entitled) {
     return (
       <PageHeader
         title={`Subscribe to access ${title || "this tool"}`}

@@ -12,7 +12,7 @@
  *   1. no token            -> 401
  *   2. forged token        -> 401   (this is the localforage forgery that used to work)
  *   3. genuine signup      -> 200 with a 64-hex server token
- *   4. that token          -> 200 and subscription:false (a non-paying account)
+ *   4. that token          -> 200 and entitled:false (a non-paying account)
  *   5. owner + wrong pw    -> 401  (even when OWNER_PASSWORD is set)
  *   6. owner + secret      -> 200, plan pro   (skipped if OWNER_PASSWORD unset)
  *   7. webhook endpoint    -> never 200 without a valid signature
@@ -60,9 +60,9 @@ async function main(): Promise<void> {
 
   if (token) {
     const me = await get("/api/me", token);
-    const body = (await me.json().catch(() => ({}))) as { user?: { subscription?: boolean; plan?: string | null } };
+    const body = (await me.json().catch(() => ({}))) as { user?: { entitled?: boolean; plan?: string | null } };
     check(
-      me.status === 200 && body?.user?.subscription === false && (body?.user?.plan ?? null) === null,
+      me.status === 200 && body?.user?.entitled === false && (body?.user?.plan ?? null) === null,
       "genuine non-paying account is reported as non-paying",
       `http ${me.status}`,
     );
@@ -84,9 +84,9 @@ async function main(): Promise<void> {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: ownerEmail, password: ownerPw }),
     });
-    const body = (await ok.json().catch(() => ({}))) as { user?: { plan?: string | null; subscription?: boolean } };
+    const body = (await ok.json().catch(() => ({}))) as { user?: { plan?: string | null; entitled?: boolean } };
     check(
-      ok.status === 200 && body?.user?.plan === "pro" && body?.user?.subscription === true,
+      ok.status === 200 && body?.user?.plan === "pro" && body?.user?.entitled === true,
       "owner logs in with OWNER_PASSWORD and gets pro",
       `http ${ok.status}`,
     );
