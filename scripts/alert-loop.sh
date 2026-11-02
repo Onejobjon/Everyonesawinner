@@ -19,7 +19,8 @@
 # the platform boots the dev server (`bun run dev`), so a rebuilt machine gets
 # the worker back without anyone touching a terminal.
 set -u
-cd "$(dirname "$0")/.."
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "$HERE/.."
 REPO="$PWD"
 SECRETS="/home/team/shared/.secrets/telegram.env"
 LOG="$REPO/.run/alerts.log"
@@ -27,20 +28,25 @@ INTERVAL="${ALERT_INTERVAL_SEC:-600}"   # every 10 min — alerts as soon as sca
 RETRY_FAST="${ALERT_RETRY_SEC:-15}"      # quick retry when a tick crashes
 mkdir -p .run
 
-# Single instance via PID file (NOT flock): an flock FD would be inherited by
-# the `bun` scan child, so killing the shell would leave the lock held and every
-# restart would exit "already running" — a real deadlock we hit on 2026-10-27.
-# A PID file has no inheritance problem: when the shell dies the PID is reused
-# or dead, and `kill -0` tells us so.
+# shellcheck disable=SC1091
+. "$HERE/pidfile.sh"
+
+# Single instance. A PID number alone is not an identity: after a machine
+# replacement the kernel hands the same numbers to unrelated processes, and the
+# old check ("kill -0 says alive") then blocked every restart for four and a half
+# days. pid_is_ours() also matches the process's own command line.
 LOCK="$REPO/.run/alert-loop.pid"
 if [ -f "$LOCK" ]; then
-  other="$(cat "$LOCK" 2>/dev/null || true)"
-  if [ -n "$other" ] && kill -0 "$other" 2>/dev/null; then
+  other="$(read_pidfile "$LOCK")"
+  if pid_is_ours "$other" "alert-loop"; then
     echo "[alert-loop $(date -u +%FT%TZ)] already running (pid $other) — exiting"
     exit 0
   fi
+  if [ -n "$other" ]; then
+    echo "[alert-loop $(date -u +%FT%TZ)] stale pidfile (pid $other is not this loop — machine replaced?) — starting anyway"
+  fi
 fi
-echo "$BASHPID" > "$LOCK"
+write_pidfile "$LOCK"
 trap 'rm -f "$LOCK"' EXIT
 
 # Load the owner's Telegram credentials from the 0600 file.

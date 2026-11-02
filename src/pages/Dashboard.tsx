@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import Paywall from "../components/Paywall";
+import InstantWins from "../components/InstantWins";
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -29,6 +30,11 @@ export default function Dashboard() {
             </div>
             <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">✅ Active</span>
           </div>
+
+          {/* INSTANT WINS — the pre-loaded same-day feed. Top of the page because
+              the whole point is that it is already there when you arrive. Paid
+              tier (any plan), not Pro-only: the old pre-loaded list never was. */}
+          <InstantWins />
 
           <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-950">

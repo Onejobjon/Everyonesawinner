@@ -11,7 +11,8 @@ import { runEventFetch, parseMarkets, isCatalogueSport } from "./src/server/same
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser, findByEmail } from "./src/server/users";
 import { resolveSession, revokeSession } from "./src/server/sessions";
-import { requireProSession } from "./src/server/pro-gate";
+import { requireProSession, requirePaidSession } from "./src/server/pro-gate";
+import { readInstantWins } from "./src/server/instant-wins";
 import { handleStripeEvent, verifyStripeSignature } from "./src/server/stripe-webhook";
 
 // Port is configurable: the platform now runs its own dev server on 3000, so
@@ -256,6 +257,54 @@ const server = Bun.serve({
           (result.credits.remaining != null ? `, ${result.credits.remaining} left` : ""),
       );
       return Response.json(result, { headers: { "cache-control": "no-store" } });
+    }
+
+    // INSTANT WINS — the same-day feed the dashboard loads on open.
+    //
+    // THE CREDIT RULE: this branch performs NO fetch and never touches the odds
+    // provider. It reads the file the scheduled scan already wrote
+    // (`.run/alerts-cache.json`) and returns the same-day slice of it, so opening
+    // the page costs ZERO credits however many times it is loaded.
+    //
+    // Paid-tier gate (Starter and above) — it is not a Pro tool, but it is not
+    // public either. The gate runs before the file read.
+    if (url.pathname === "/api/instant-wins") {
+      const gate = await requirePaidSession(req, "the instant-win feed");
+      if (!gate.ok) {
+        console.warn(`[instant-wins] refused ${url.pathname} — ${gate.error}`);
+        return Response.json(
+          { error: gate.error, message: gate.message },
+          { status: gate.status, headers: { "cache-control": "no-store" } },
+        );
+      }
+      try {
+        const payload = readInstantWins();
+        console.log(
+          `[instant-wins] status=${payload.status} age=${payload.ageMinutes ?? "-"}m stale=${payload.stale} ` +
+            `fixtures=${payload.fixturesScanned} sameDay=${payload.sameDayFixtures} credits=0`,
+        );
+        return Response.json(payload, { headers: { "cache-control": "no-store" } });
+      } catch (e) {
+        // A read failure is a STATE, not a 500: the page says "no scan data yet".
+        console.error(`[instant-wins] read failed: ${String(e)}`);
+        return Response.json(
+          {
+            ok: true,
+            status: "no_scan",
+            reason: "unreadable",
+            message:
+              "No scan data yet — the last scan's file could not be read, so there is nothing to show. Nothing was fetched to fill the gap.",
+            scannedAt: null,
+            ageMinutes: null,
+            stale: false,
+            staleAfterMin: 20,
+            fixturesScanned: 0,
+            sameDayFixtures: 0,
+            matches: [],
+          },
+          { headers: { "cache-control": "no-store" } },
+        );
+      }
     }
 
     // Non-secret alert-config status (channel presence + schedule only).

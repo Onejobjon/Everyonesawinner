@@ -21,16 +21,20 @@ import { spawn } from "node:child_process";
  * start a worker on the build machine).
  */
 function alertWorkerBoot(): Plugin {
-  // The loop takes an flock, so starting it when it is already running is a
-  // no-op (it exits immediately). That makes "just try to start it" the safest
-  // possible health check — no pidfile archaeology, no pattern matching.
-  const spawnLoop = () => {
+  // The supervisor takes a PID-identity lock, so starting it when it is already
+  // running is a no-op (it exits immediately). That makes "just try to start it"
+  // the safest possible health check — no pidfile archaeology, no pattern matching.
+  //
+  // `mkdir -p .run` comes FIRST: the redirect below needs the directory to exist,
+  // and on a freshly replaced machine it may not. A failed redirect killed the
+  // whole command silently, which is one of the ways the worker stayed dead.
+  const spawnDetached = (command: string) => {
     try {
-      const child = spawn(
-        "bash",
-        ["-c", "exec bash scripts/alert-keepalive.sh >> .run/alerts.log 2>&1"],
-        { cwd: process.cwd(), detached: true, stdio: "ignore" }
-      );
+      const child = spawn("bash", ["-c", `mkdir -p .run; exec ${command}`], {
+        cwd: process.cwd(),
+        detached: true,
+        stdio: "ignore",
+      });
       child.unref();
       return true;
     } catch (e) {
@@ -40,16 +44,30 @@ function alertWorkerBoot(): Plugin {
     }
   };
 
+  const spawnLoop = () =>
+    spawnDetached("bash scripts/alert-keepalive.sh >> .run/alerts.log 2>&1");
+
+  // The gap alarm: one message per stall, nothing while scans are landing. It is
+  // started here as well as from the supervisor so that a dead supervisor cannot
+  // also silence the alarm about it.
+  const spawnGapAlarm = () =>
+    spawnDetached("bun scripts/alert-gap-alarm.ts >> .run/alerts.log 2>&1");
+
   return {
     name: "eaw-alert-worker-boot",
     apply: "serve",
     configureServer() {
-      if (spawnLoop()) console.log("[eaw] alert worker boot hook fired (scripts/alert-loop.sh)");
-      // Self-healing: every 60s make sure the loop is alive. Because the loop
-      // holds an flock this is a cheap no-op while it is running, and a restart
-      // within a minute if anything killed it. This lives inside the dev server
-      // process, which the platform always keeps up.
-      const timer = setInterval(spawnLoop, 60_000);
+      if (spawnLoop()) console.log("[eaw] alert worker boot hook fired (scripts/alert-keepalive.sh)");
+      spawnGapAlarm();
+      // Self-healing: every 60s make sure the supervisor is alive. Because it
+      // holds a PID-identity lock this is a cheap no-op while it is running, and
+      // a restart within a minute if anything killed it. This lives inside the
+      // dev server process, which the platform always keeps up — including after
+      // a machine replacement.
+      const timer = setInterval(() => {
+        spawnLoop();
+        spawnGapAlarm();
+      }, 60_000);
       if (typeof timer.unref === "function") timer.unref();
     },
   };

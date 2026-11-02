@@ -98,6 +98,10 @@ const CACHE_FILE = join(RUN_DIR, "alerts-cache.json");
 const SEEN_FILE = join(RUN_DIR, "alerts-seen.json");
 const LOG_FILE = join(RUN_DIR, "alerts.log");
 const HEALTH_FILE = join(RUN_DIR, "alerts-health.json");
+// Written on every COMPLETED scan (hit or miss). The odds cache below only
+// updates on a cache miss, so it cannot answer "is the worker still scanning?" —
+// this file can, and the gap alarm (src/server/gap-alarm.ts) reads it.
+const LAST_SCAN_FILE = join(RUN_DIR, "alerts-last-scan.json");
 // Append-only, one JSON object per scan: how spend is measured instead of guessed.
 const CREDITS_FILE = join(RUN_DIR, "credits.jsonl");
 const SEEN_MAX = 4000; // cap the persisted dedup set so it can't grow unbounded
@@ -751,6 +755,41 @@ function recordCredits(c: ScanCredits): void {
 
 // ── Orchestration ──────────────────────────────────────────────────────────
 
+/**
+ * Record that a scan COMPLETED. Deliberately not the odds cache: that file only
+ * changes when a scan misses the cache, so a working worker serving cache hits
+ * would look dead to anything watching it. This marker moves on every scan, and
+ * it is what the gap alarm measures silence against.
+ */
+function recordScanComplete(result: {
+  checked: number;
+  alerted: number;
+  skippedTooSoon: number;
+  skippedStarted: number;
+}): void {
+  try {
+    mkdirSync(RUN_DIR, { recursive: true });
+    writeFileSync(
+      LAST_SCAN_FILE,
+      JSON.stringify({ ts: new Date().toISOString(), ...result }),
+      "utf8",
+    );
+  } catch (e) {
+    log(`last-scan marker write failed: ${String(e)}`);
+  }
+}
+
+/** ISO time of the last completed scan, or null when none has been recorded. */
+export function lastScanAt(): string | null {
+  try {
+    if (!existsSync(LAST_SCAN_FILE)) return null;
+    const parsed = JSON.parse(readFileSync(LAST_SCAN_FILE, "utf8")) as { ts?: unknown };
+    return typeof parsed?.ts === "string" ? parsed.ts : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function runAlertCheck(): Promise<{
   checked: number;
   alerted: number;
@@ -796,6 +835,14 @@ export async function runAlertCheck(): Promise<{
   log(
     `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} stale rows skipped, ${skippedInsane} insane back/lay rows skipped, ${skippedSameSource} rows with the same exchange on both sides skipped, skipped started: ${skippedStarted}, too-soon: ${skippedTooSoon}`
   );
+  // A scan COMPLETED — move the marker the gap alarm watches. Written after the
+  // log line so "check done" and the marker always agree.
+  recordScanComplete({
+    checked: opps.length,
+    alerted,
+    skippedTooSoon,
+    skippedStarted,
+  });
   return {
     checked: opps.length,
     alerted,
@@ -806,7 +853,6 @@ export async function runAlertCheck(): Promise<{
     skippedSameSource,
   };
 }
-
 export function hasAlertChannel(): boolean {
   return Boolean(
     WEBHOOK_URL || (EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM) || (TG_TOKEN && TG_CHAT_ID),
@@ -828,6 +874,8 @@ export function alertStatus() {
     oddsApiKey: Boolean(ODDS_API_KEY),
     requestsRemaining: lastRequestsRemaining,
     lastScanCredits,
+    // When the last scan COMPLETED — what the gap alarm measures silence against.
+    lastScanAt: lastScanAt(),
     rules: {
       cash: true, // GREEN CASH — cash qualifying profit > 0
       freebet: true, // FREE BET 100%+ — SNR free bet retains more than its stake

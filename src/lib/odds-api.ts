@@ -795,7 +795,7 @@ interface LeagueSearchPayload {
  * does not trust the copy in localStorage) — this is only how the token gets
  * there. Returns "" when there is no usable stored session.
  */
-function sessionToken(): string {
+export function sessionToken(): string {
   try {
     const stored = localStorage.getItem("eaw_session");
     if (!stored) return "";

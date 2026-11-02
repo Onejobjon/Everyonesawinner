@@ -22,8 +22,28 @@ import TwoUpGuideSection from "../components/TwoUpGuideSection";
 import { twoUpNoteForOutcome } from "../lib/two-up";
 import { getIcon, money } from "../lib/laybets-common";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "../components/CommissionControl";
+import { kickoffFallsOn, londonDayKey, londonDayLabel, parseDayKey, resolveDayKeys, type DayMode } from "../lib/london-day";
 
 const DEFAULT_STAKE = "20"; // cash qualifying back stake (user-editable)
+
+/**
+ * Which day of fixtures to SHOW. Defaults to Today.
+ *
+ * The filter runs on what came back — it never widens the request, so the cost
+ * quoted before the click (1 credit per competition) is still exactly what is
+ * spent. That is deliberate: a date control that quietly asked the provider for
+ * more would make the price on the button a lie.
+ */
+const DAY_MODES: { value: DayMode; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "tomorrow", label: "Tomorrow" },
+  { value: "next7", label: "Next 7 days" },
+  { value: "date", label: "A specific date" },
+];
+
+function isDayMode(v: unknown): v is DayMode {
+  return v === "today" || v === "tomorrow" || v === "next7" || v === "date";
+}
 
 // v2: the saved controls now include the selected competitions (v1 saved a
 // "sport" category that no longer exists), so old state is deliberately ignored.
@@ -73,12 +93,16 @@ interface Persisted {
   stake: string;
   minOdds: string;
   leagues: string[];
+  dayMode: DayMode;
+  dayDate: string;
 }
 
 const DEFAULT_PERSISTED: Persisted = {
   stake: DEFAULT_STAKE,
   minOdds: "1.5",
   leagues: DEFAULT_KEYS,
+  dayMode: "today",
+  dayDate: "",
 };
 
 /** Parse a positive stake amount (empty/invalid → fallback). */
@@ -105,6 +129,8 @@ function loadPersisted(): Persisted {
         stake: typeof p.stake === "string" && p.stake.length > 0 ? p.stake : DEFAULT_STAKE,
         minOdds: typeof p.minOdds === "string" ? p.minOdds : DEFAULT_PERSISTED.minOdds,
         leagues: leagues.length > 0 ? leagues.slice(0, MAX_LEAGUES) : DEFAULT_KEYS,
+        dayMode: isDayMode(p.dayMode) ? p.dayMode : "today",
+        dayDate: typeof p.dayDate === "string" && parseDayKey(p.dayDate) ? p.dayDate : "",
       };
     }
   } catch {
@@ -138,6 +164,13 @@ export default function LayBets() {
 
   const [selected, setSelected] = useState<string[]>(persisted.leagues);
 
+  // Which day to show. Defaults to Today (the weekend problem: a search used to
+  // dump fixtures days away into one list with no way to say which day you wanted).
+  const [dayMode, setDayMode] = useState<DayMode>(persisted.dayMode);
+  const [dayDate, setDayDate] = useState<string>(
+    () => persisted.dayDate || londonDayKey(new Date()) || "",
+  );
+
   // ONE shared exchange commission, persisted across pages. 2% by default
   // (owner directive), adjustable — Betfair charges per market, so the rate has
   // to be the user's, and every figure below is labelled with it.
@@ -155,8 +188,8 @@ export default function LayBets() {
 
   // Persist last-used controls across visits.
   useEffect(() => {
-    persist({ stake, minOdds: minOddsText, leagues: selected });
-  }, [stake, minOddsText, selected]);
+    persist({ stake, minOdds: minOddsText, leagues: selected, dayMode, dayDate });
+  }, [stake, minOddsText, selected, dayMode, dayDate]);
 
   const toggleLeague = (key: string) => {
     setSelected((prev) => {
@@ -192,6 +225,32 @@ export default function LayBets() {
 
   const searchMatches = result?.matches ?? [];
 
+  // ── Which day is on screen ────────────────────────────────────────────────
+  // Day boundaries are Europe/London calendar dates (the same helper the Instant
+  // Wins feed uses), so "Today" means today for a UK user whatever this machine's
+  // timezone says.
+  const todayKey = londonDayKey(new Date()) ?? "";
+  const dayKeys = useMemo(
+    () => resolveDayKeys(dayMode, dayDate, new Date()),
+    [dayMode, dayDate, todayKey],
+  );
+
+  const dayLabel = useMemo(() => {
+    if (dayMode === "next7") {
+      if (dayKeys.length < 7) return "Next 7 days";
+      return `Next 7 days (${londonDayLabel(dayKeys[0])} – ${londonDayLabel(dayKeys[6])})`;
+    }
+    const key = dayKeys[0];
+    if (!key) return "Today";
+    const prefix = dayMode === "today" ? "Today — " : dayMode === "tomorrow" ? "Tomorrow — " : "";
+    return `${prefix}${londonDayLabel(key)}`;
+  }, [dayMode, dayKeys]);
+
+  /** Fixtures that fall inside the chosen day(s) — the count shown on the page. */
+  const dayMatches = useMemo(() => {
+    return searchMatches.filter((m) => kickoffFallsOn(m.commenceTime, dayKeys));
+  }, [searchMatches, dayKeys]);
+
   const results = useMemo(() => {
     const rows: LayOpportunity[] = [];
     // Rows where the feed quoted a lay price but the back/lay sanity check
@@ -203,7 +262,7 @@ export default function LayBets() {
     // guaranteed loss, so those rows cannot be shown at all — counted so the
     // page can say why instead of quietly returning fewer rows.
     let laySourceExcluded = 0;
-    const sorted = [...searchMatches].sort(
+    const sorted = [...dayMatches].sort(
       (a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime()
     );
     for (const m of sorted) {
@@ -226,7 +285,7 @@ export default function LayBets() {
       return a.gap - b.gap;
     });
     return { singles: rows, withheld, laySourceExcluded };
-  }, [searchMatches, minOdds, stakeVal, commission]);
+  }, [dayMatches, minOdds, stakeVal, commission]);
 
   const bestProfit =
     results.singles.length > 0 ? round2(results.singles[0].lay.profitLoss) : 0;
@@ -337,6 +396,59 @@ export default function LayBets() {
             )}
           </div>
 
+          {/* Which day — a filter on the RESULTS, never on the request. */}
+          <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Which day</h2>
+                <p className="text-xs text-gray-500">
+                  Fixtures are matched by kick-off time in UK time (Europe/London). Defaults to today.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1 dark:bg-gray-900">
+                  {DAY_MODES.map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => setDayMode(m.value)}
+                      aria-pressed={dayMode === m.value}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                        dayMode === m.value
+                          ? "bg-white text-purple-700 shadow-sm dark:bg-gray-800 dark:text-purple-300"
+                          : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                {dayMode === "date" && (
+                  <label className="block">
+                    <span className="sr-only">Choose a date</span>
+                    <input
+                      type="date"
+                      value={dayDate}
+                      onChange={(e) => setDayDate(e.target.value)}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+            <p className="mt-2 text-xs font-medium text-purple-700 dark:text-purple-300" role="status">
+              Showing <strong>{dayLabel}</strong>
+              {result
+                ? ` — ${dayMatches.length} fixture${dayMatches.length === 1 ? "" : "s"} matched`
+                : " — nothing searched yet"}
+            </p>
+            <p className="mt-1 text-[11px] text-gray-400">
+              The day filter only filters what the search brings back. It does not change the request,
+              so the cost shown on the Search button is still exactly what is spent — a date choice can
+              never quietly buy more data.
+            </p>
+          </div>
+
           {/* Controls: stake / min odds / search */}
           <div className="mt-4 grid grid-cols-2 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
@@ -442,7 +554,8 @@ export default function LayBets() {
                   {(result.elapsedMs / 1000).toFixed(1)}s
                 </strong>{" "}
                 — {result.fixtures} fixture{result.fixtures === 1 ? "" : "s"} read, {results.singles.length} close-lay row
-                {results.singles.length === 1 ? "" : "s"} found. Credits spent:{" "}
+                {results.singles.length === 1 ? "" : "s"} found. Showing <strong>{dayLabel}</strong>:{" "}
+                {dayMatches.length} fixture{dayMatches.length === 1 ? "" : "s"} matched. Credits spent:{" "}
                 <strong>{credits(result.credits.spent)}</strong>
                 {result.credits.measured ? " (measured by the odds feed)" : " (estimated — the feed did not report per-request cost)"}
                 {result.credits.remaining != null ? ` · ${result.credits.remaining.toLocaleString()} left on the account` : ""}.
@@ -495,15 +608,41 @@ export default function LayBets() {
             </p>
           )}
 
-          {phase === "done" && result && results.singles.length === 0 && (
+          {phase === "done" && result && results.singles.length === 0 && dayMatches.length === 0 && (
+            <div className="mt-8 rounded-xl border border-gray-200 bg-white p-8 text-left dark:border-gray-800 dark:bg-gray-950">
+              <div className="flex items-start gap-3">
+                <span className="text-4xl">📅</span>
+                <div>
+                  <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+                    No fixtures on {dayLabel}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-500">
+                    The search read <strong>{result.fixtures}</strong> fixture
+                    {result.fixtures === 1 ? "" : "s"} from {answered.length} competition
+                    {answered.length === 1 ? "" : "s"}, and none of them kicks off on the day you have
+                    chosen. That is a date result, not an empty table — the credits are already spent,
+                    so try another day without searching again.
+                  </p>
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-500">
+                    <li>Switch to <strong>Next 7 days</strong> to see everything this search returned.</li>
+                    <li>Or pick the specific date you care about.</li>
+                    <li>Searching again would cost {credits(costNow)} and is not needed for this.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {phase === "done" && result && results.singles.length === 0 && dayMatches.length > 0 && (
             <div className="mt-8 rounded-xl border border-gray-200 bg-white p-8 text-left dark:border-gray-800 dark:bg-gray-950">
               <div className="flex items-start gap-3">
                 <span className="text-4xl">🔍</span>
                 <div>
                   <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">No close lays match these settings</p>
                   <p className="mt-1 text-sm text-gray-500">
-                    The search read <strong>{result.fixtures}</strong> fixture{result.fixtures === 1 ? "" : "s"} from{" "}
-                    {answered.length} competition{answered.length === 1 ? "" : "s"}.
+                    Showing <strong>{dayLabel}</strong>: {dayMatches.length} fixture
+                    {dayMatches.length === 1 ? "" : "s"} matched out of the {result.fixtures} the search
+                    read from {answered.length} competition{answered.length === 1 ? "" : "s"}.
                   </p>
                   <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-500">
                     {minOdds > 1 && <li>Lower the minimum back odds.</li>}
@@ -589,7 +728,7 @@ export default function LayBets() {
                 })}
               </div>
               <p className="mt-4 text-xs text-gray-400">
-                Showing {results.singles.length} close-lay opportunities. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair or Smarkets — each row names its source). Figures use your £{stakeVal} back stake and include {commLabel} exchange commission (adjustable above).
+                Showing {results.singles.length} close-lay opportunities on <strong>{dayLabel}</strong>. Lay = betting <strong>against</strong> the outcome on the exchange (Betfair or Smarkets — each row names its source). Figures use your £{stakeVal} back stake and include {commLabel} exchange commission (adjustable above).
               </p>
             </>
           )}

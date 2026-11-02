@@ -123,3 +123,80 @@ export async function requireProSession(
 
   return { ok: true, email };
 }
+
+/** Plans that unlock the any-tier (paid, not Pro-only) tools. */
+export function isPaidPlanValue(plan: unknown): boolean {
+  return plan === "starter" || plan === "pro" || plan === "annual";
+}
+
+/**
+ * Verify that this request comes from ANY paid account (Starter or above).
+ *
+ * Used by the Instant Wins feed: it is not a Pro tool — the pre-loaded list never
+ * was — but it is still a paid surface, so the endpoint checks the session itself
+ * instead of trusting the Paywall, which is UI and not a lock.
+ *
+ * Costs nothing to refuse: this gate runs before the cache file is read, and the
+ * feed never spends a credit either way.
+ */
+export async function requirePaidSession(
+  req: Request,
+  what = "this page",
+): Promise<ProGate> {
+  const token = bearerToken(req);
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      error: "not_signed_in",
+      message: `Sign in to see ${what}. Nothing was fetched and nothing was charged.`,
+    };
+  }
+  let email: string;
+  let plan: unknown;
+  let subscription: unknown;
+  try {
+    const session = await resolveSession(token);
+    if (!session) {
+      return {
+        ok: false,
+        status: 401,
+        error: "session_expired",
+        message: `Your session has expired — sign in again to see ${what}. Nothing was fetched and nothing was charged.`,
+      };
+    }
+    const user = await findByEmail(session.email);
+    if (!user) {
+      return {
+        ok: false,
+        status: 401,
+        error: "account_not_found",
+        message: `We could not find the account behind that session. Sign in again to see ${what}. Nothing was fetched.`,
+      };
+    }
+    email = user.email;
+    plan = user.plan;
+    subscription = (user as { subscription?: unknown }).subscription;
+  } catch (e) {
+    // Fail CLOSED: an unverifiable caller gets nothing.
+    console.error(`[paid-gate] account store unavailable: ${String(e)}`);
+    return {
+      ok: false,
+      status: 503,
+      error: "account_unavailable",
+      message:
+        "We could not check your account, so nothing was shown. Nothing was fetched and nothing was charged.",
+    };
+  }
+
+  if (!isPaidPlanValue(plan) && subscription !== true) {
+    return {
+      ok: false,
+      status: 403,
+      error: "subscription_required",
+      message: `${what[0].toUpperCase()}${what.slice(1)} is part of the paid tools. Choose a plan to see it. Nothing was fetched and nothing was charged.`,
+    };
+  }
+
+  return { ok: true, email };
+}

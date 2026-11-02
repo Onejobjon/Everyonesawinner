@@ -14,21 +14,31 @@
 #
 #   setsid nohup bash scripts/alert-keepalive.sh >> .run/alerts.log 2>&1 < /dev/null &
 set -u
-cd "$(dirname "$0")/.." || exit 1
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "$HERE/.." || exit 1
 mkdir -p .run
 ALERT_PORT="${ALERT_PORT:-3100}"
 
-# Single instance via PID file (an flock FD would be inherited by children and
-# deadlock restarts — see alert-loop.sh).
+# PID identity, not PID numbers — see scripts/pidfile.sh for the 4.5-day outage
+# this fixes (a stale pidfile on a replaced machine pointed at an unrelated
+# process, so every restart attempt said "already running" and exited).
+# shellcheck disable=SC1091
+. "$HERE/pidfile.sh"
+
+# Single instance. A PID file alone is not enough (numbers get reused across a
+# machine replacement), so the check also matches the process's own command line.
 KLOCK=".run/alert-keepalive.pid"
 if [ -f "$KLOCK" ]; then
-  other="$(cat "$KLOCK" 2>/dev/null || true)"
-  if [ -n "$other" ] && kill -0 "$other" 2>/dev/null; then
+  other="$(read_pidfile "$KLOCK")"
+  if pid_is_ours "$other" "alert-keepalive"; then
     echo "[alert-keepalive $(date -u +%FT%TZ)] already running (pid $other) — exiting"
     exit 0
   fi
+  if [ -n "$other" ]; then
+    echo "[alert-keepalive $(date -u +%FT%TZ)] stale pidfile (pid $other is not this supervisor — machine replaced?) — starting anyway"
+  fi
 fi
-echo "$BASHPID" > "$KLOCK"
+write_pidfile "$KLOCK"
 trap 'rm -f "$KLOCK"' EXIT
 
 SECRETS="/home/team/shared/.secrets/telegram.env"
@@ -57,17 +67,28 @@ ensure_status_host() {
 ensure_scan_loop() {
   local pidfile=".run/alert-loop.pid" other=""
   if [ -f "$pidfile" ]; then
-    other="$(cat "$pidfile" 2>/dev/null || true)"
-    if [ -n "$other" ] && kill -0 "$other" 2>/dev/null; then
+    other="$(read_pidfile "$pidfile")"
+    if pid_is_ours "$other" "alert-loop"; then
       return 0
+    fi
+    if [ -n "$other" ]; then
+      echo "[alert-keepalive $(date -u +%FT%TZ)] stale scan-loop pidfile (pid $other is not the scan loop) — restarting it"
     fi
   fi
   echo "[alert-keepalive $(date -u +%FT%TZ)] scan loop not running — starting it"
   setsid nohup bash scripts/alert-loop.sh >> .run/alerts.log 2>&1 < /dev/null &
 }
 
+# GAP ALARM — one message per stall, never a heartbeat. Runs from the supervisor
+# AND from the dev-server boot hook, so a dead scan loop cannot silence it. It
+# sends nothing at all while scans are landing.
+check_gap_alarm() {
+  bun scripts/alert-gap-alarm.ts >> .run/alerts.log 2>&1 || true
+}
+
 while true; do
   ensure_status_host
   ensure_scan_loop
+  check_gap_alarm
   sleep 60
 done
