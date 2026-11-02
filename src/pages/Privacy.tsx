@@ -153,9 +153,10 @@ export default function Privacy() {
           we send odds requests to them. Those requests contain no personal data about you.
         </li>
         <li>
-          <strong className="font-semibold text-gray-900 dark:text-gray-100">Stripe</strong> — only
-          if a payment is ever completed. Stripe would then hold your payment details under its own
-          privacy notice; we would never see your card number.
+          <strong className="font-semibold text-gray-900 dark:text-gray-100">Stripe</strong> — our
+          payment provider, used only when you take out a subscription. Your card details are entered
+          on Stripe's own page and held by Stripe under its privacy notice; we never see your card
+          number. We receive the email address and plan attached to the payment, and nothing else.
         </li>
         <li>
           <strong className="font-semibold text-gray-900 dark:text-gray-100">
