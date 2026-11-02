@@ -9,7 +9,7 @@
 
 An **acca** (short for accumulator) is one bet made of several picks that all have to win. Bookmakers push them hard — and hand out acca-specific free bets and insurance offers — because they're great for the bookmaker.
 
-Matched betting on an acca means **laying each leg one at a time** on Betfair, in order, instead of laying the whole thing at once. Done right, you turn an acca free bet into a **guaranteed slice of cash** — roughly 70–80% of its value — whichever way the games go.
+Matched betting on an acca means **laying each leg one at a time** on Betfair, in order, instead of laying the whole thing at once. Done right, you turn an acca free bet into a **locked-in slice of cash**, whichever way the games go. How big that slice is depends on the odds and the commission: the worked example below — three legs at 2.00, laid at 2.05, with **5% commission** — keeps **75%** of a £20 free bet.
 
 ---
 
@@ -92,7 +92,7 @@ You lay them in sequence, like this:
 | 2 | Match 2 | 2.00 | 2.05 | £33.25 | £34.91 |
 | 3 | Match 3 | 2.00 | 2.05 | £70.00 | £73.50 |
 
-Each lay stake is sized so that whether that leg wins or loses, you finish in the same place — that's what locks in the £15. Check it by hand: add up the three liabilities (£16.58 + £34.91 + £73.50 = **£125.00**), and £140 − £125 = **£15.00**.
+Each lay stake is sized so that whether that leg wins or loses, you finish in the same place — that's what locks in the £15. Check it by hand: the three liabilities are £16.58, £34.91 and £73.50, and £140 minus those leaves **£15.00** — the planner's figure, give or take a penny from rounding each lay stake to the nearest penny before you place it.
 
 **The result:** if all three legs win, the free bet pays £140 and your three lay liabilities total £125.00 — leaving **£15.00**. If a leg loses at any point, that leg's lay wins and you still finish about **£15.00** up.
 
@@ -131,8 +131,8 @@ You **can't** matched-bet these, because:
 
 ## Honest Expectations
 
-- **Aim to retain 70–80% of a free bet's value.** The £20 example above keeps £15 (75%). That's the realistic target, not 100%.
-- **Accas can beat the 70–80% rule of thumb.** When every leg is laid at a tight gap, laying leg-by-leg can retain more — the Acca Finder shows the exact retained profit for every plan, so judge each acca by its own numbers.
+- **Retention is the share of the free-bet stake you keep** — retained profit divided by the free-bet stake, not a share of what the acca would have paid. The example above keeps £15.00 of a £20 free bet, which is 75% at **5% commission**. At **2% commission** the same plan keeps £15.75 (79%), and the same three legs at 1.50 (laid at 1.55) keep £12.07 (60%). The Acca Finder prints both figures for every plan, so judge each acca by its own numbers.
+- **There is no fixed percentage to aim at.** Retention moves with the odds, the lay prices and your commission rate, so the number to trust is the one printed against the plan you are about to place.
 - **The gap matters.** The closer the lay odds are to the back odds, the more you keep. Wide gaps quietly eat your profit.
 - **You need exchange funds for the later legs.** If the acca survives to leg 3, be ready to cover that £73.50 liability.
 - **Odds move between legs.** By the time leg 2 kicks off, leg 2's lay odds may have shifted. Re-check before you lay each leg.
@@ -149,7 +149,7 @@ You **can't** matched-bet these, because:
 
 ---
 
-*Disclaimer: Matched betting involves placing bets on sporting events. You must be 18+. Always gamble responsibly. Everyone's A Winner provides tools and education — you are responsible for your own actions. Betfair's commission rate (5%) is accurate at time of writing but may change; always check the current terms on the exchange.*
+*Disclaimer: Matched betting involves placing bets on sporting events. You must be 18+. Always gamble responsibly. Everyone's A Winner provides tools and education — you are responsible for your own actions. The exchange commission rate used in this guide's worked example is 5%; exchange commission varies by market and can change, so check your own rate on the exchange before you place a bet.*
 
 ---
 

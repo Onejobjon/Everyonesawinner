@@ -178,7 +178,7 @@ export default function FreeBets() {
     <PageHeader
       flush
       title="Free bet offers, all in one place"
-      subtitle={`${ALL_OFFERS.length} listed welcome offers from UK, Irish and global bookmakers — set out in plain terms. Where we quote an estimate, its assumptions are shown; where we can't, we say so rather than guess.`}
+      subtitle={`${ALL_OFFERS.length} listed welcome offers from UK, Irish and global bookmakers — set out in plain terms. We don't quote an expected profit on any row, because what a free bet is worth depends on the odds you match at and the commission you pay. Where we couldn't read an offer's terms, we say so rather than guess.`}
     >
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-left text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">

@@ -6,7 +6,7 @@
   "totalOffers": 37,
   "ukIeCount": 30,
   "globalCount": 7,
-  "disclaimer": "Checked 2026-10-27 for whether each bookmaker's own page could be read — not for whether the offer is still running. No offer on this page is confirmed live except where marked. Profit estimates are labelled estimates with their assumptions shown, never a promise. Always check the bookmaker's current terms before depositing.",
+  "disclaimer": "Checked 2026-10-27 for whether each bookmaker's own page could be read — not for whether the offer is still running. No offer on this page is confirmed live except where marked. We do not quote an expected profit for any offer: what a free bet is worth depends on the odds you match at and the commission you pay. Always check the bookmaker's current terms before depositing.",
   "audit": {
    "date": "2026-10-27",
    "method": "All 61 offer URLs requested from this machine on 2026-10-27 with HTTP status and final URL recorded. An offer counts as verified or changed only where the bookmaker's own page showed the terms.",
@@ -17,7 +17,7 @@
     "withdrawn": 0,
     "unverifiable": 59
    },
-   "estProfitPolicy": "59 of 61 profit figures removed outright. 2 replaced with a labelled estimate that shows its working (qualifying loss + SNR conversion at 5% commission). No figure returns unless it is derived from the offer's own stated terms.",
+   "estProfitPolicy": "All profit figures removed: no row carries one. A free bet's value depends on the odds you match at and the commission you pay, so every row reads 'not quoted — depends on the odds you match at'. A figure may only return if it is derived from the offer's own stated terms at a stated commission, with the working recorded in content/free-bets-audit-2026-10-27.md.",
    "biggestFinding": "Only 2 of 61 offers could be re-read against the bookmaker's own page, and BOTH had changed. The remaining 59 are unverifiable from here: 41 of 61 URLs refused or geo-blocked a non-UK IP, and most of the rest served a homepage with no readable offer panel. The page cannot claim any of these offers is live today.",
    "qualityWarning": "About 30 rows share one identical shape (£10 free bet, min odds 1.50, expires 30 days) and several operators (WeBringTheFun, Cobbler, Vegas Land, RedZone, CasinoDaddy, Rabona, Black Type) are not UK-licensed or do not resolve at all. These read as placeholder rows rather than researched offers.",
    "nextSteps": "Re-research from a UK IP (or with owner confirmation) before the page is published as fact; rebuild estProfit only from verified terms using the shared working."
