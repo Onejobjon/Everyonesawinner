@@ -14,7 +14,7 @@ import { Ext, H2, LegalLayout, P, UL } from "../components/legal";
  * Nothing is promised about uptime, accuracy or outcomes.
  */
 
-const LAST_UPDATED = "28 October 2026";
+const LAST_UPDATED = "2 November 2026";
 const CONTACT = "support@everyonesawinner.uk";
 
 export default function Terms() {
@@ -29,6 +29,10 @@ export default function Terms() {
         Everyone's A Winner is a comparison and calculation tool. We show odds from UK bookmakers and
         exchanges side by side, list welcome offers with the evidence we have for them, and calculate
         what a matched bet returns.
+      </P>
+      <P>
+        Everyone's A Winner is operated from 3 Clanmaghery Grove, Ballykinler, Downpatrick, BT30
+        8EX, in the United Kingdom. That is the address for anything to do with a subscription.
       </P>
       <P>
         We are not a bookmaker and we are not an exchange. We do not place bets for you, we do not

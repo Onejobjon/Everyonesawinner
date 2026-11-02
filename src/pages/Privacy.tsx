@@ -16,11 +16,12 @@ import { Ext, H2, LegalLayout, P, PlaceholderNote, UL } from "../components/lega
  *   billing   src/server/stripe-webhook.ts (email + plan, only on a payment)
  *
  * No retention period is stated because none exists in the code — the notice
- * says so plainly rather than inventing one. No company name, number or
- * registered address is given: none is on file, so it is a marked placeholder.
+ * says so plainly rather than inventing one. The operating address is the
+ * owner's, supplied 2026-11-02. The business is not a registered company, so no
+ * company name or registration number is printed — printing one would be false.
  */
 
-const LAST_UPDATED = "28 October 2026";
+const LAST_UPDATED = "2 November 2026";
 const CONTACT = "support@everyonesawinner.uk";
 
 export default function Privacy() {
@@ -36,6 +37,11 @@ export default function Privacy() {
         explains what we hold about you, why we hold it, and what you can ask us to do with it.
       </P>
       <P>
+        Everyone's A Winner is operated from 3 Clanmaghery Grove, Ballykinler, Downpatrick, BT30
+        8EX, in the United Kingdom, and that is the controller of the information described in this
+        notice.
+      </P>
+      <P>
         For anything in this notice — including a request to delete your details — write to{" "}
         <a
           href={`mailto:${CONTACT}`}
@@ -45,7 +51,10 @@ export default function Privacy() {
         </a>
         .
       </P>
-      <PlaceholderNote>Registered company details are being added.</PlaceholderNote>
+      <PlaceholderNote>
+        Our company registration number is not printed on this page yet. Ask us at the address
+        above and we will confirm it in writing.
+      </PlaceholderNote>
 
       <H2>2. What we collect</H2>
       <P>
