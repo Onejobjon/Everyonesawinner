@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { calcDutch, calcDutchFreeBet } from "../lib/odds";
 import { getMatches, type Match } from "../lib/odds-api";
 import FreeBetsOffers from "../components/FreeBetsOffers";
 import Paywall from "../components/Paywall";
+import PageHeader from "../components/PageHeader";
 
 const STAKE = 10; // Fixed stake on favourite
 
@@ -37,23 +37,11 @@ export default function Oddsmatcher() {
 
   return (
     <Paywall title="the odds finder">
-      <div className="min-h-dvh page-bg font-['Inter',system-ui,sans-serif]">
-        <nav className="border-b border-gray-200 bg-white/90 dark:border-gray-800 dark:bg-gray-950/90">
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            <Link to="/" className="flex items-center gap-2">
-              <span className="rounded-lg bg-indigo-600 p-2 text-white font-bold text-lg">EAW</span>
-              <span className="text-xl font-bold tracking-tight">Everyone's A Winner</span>
-            </Link>
-            <Link to="/" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">← Back to Home</Link>
-          </div>
-        </nav>
-
-        <div className="mx-auto max-w-5xl px-6 py-8">
-          <h1 className="text-3xl font-bold tracking-tight">Best Odds Finder</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">Odds updated every 10 minutes.</p>
-          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-            Prices the feed reports as unavailable (1.00 / 451) are removed before any profit is calculated, and a match missing an outcome is never shown as an opportunity.
-          </p>
+      <PageHeader
+        title="Best Odds Finder"
+        subtitle="Odds updated every 10 minutes."
+        note="Prices the feed reports as unavailable (1.00 / 451) are removed before any profit is calculated, and a match missing an outcome is never shown as an opportunity."
+      >
 
           <div className="mt-6 flex flex-wrap gap-2">
             {filterOptions.map((f) => (
@@ -193,8 +181,7 @@ export default function Oddsmatcher() {
             </div>
             </>
           )}
-        </div>
-      </div>
+      </PageHeader>
     </Paywall>
   );
 }
