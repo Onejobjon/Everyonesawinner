@@ -352,7 +352,7 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
       const p = readInstantWins({ file: join(dir, "alerts-cache.json"), now: NOW });
       expect(p.status).toBe("no_scan");
       expect(p.reason).toBe("missing");
-      expect(p.message).toContain("No scan data yet");
+      expect(p.message).toContain("No prices to show yet");
       // The distinction that matters: it must not read as "we looked, nothing on".
       expect(p.message).not.toContain("no fixtures kicking off today");
       expect(p.scannedAt).toBeNull();
@@ -368,7 +368,7 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
       const p = readInstantWins({ file, now: NOW });
       expect(p.status).toBe("no_scan");
       expect(p.reason).toBe("unreadable");
-      expect(p.message).toContain("No scan data yet");
+      expect(p.message).toContain("No prices to show yet");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -394,7 +394,7 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
       expect(p.fixturesScanned).toBe(1);
       expect(p.sameDayFixtures).toBe(0);
       expect(p.message).toContain("no fixtures kicking off today");
-      expect(p.message).not.toContain("No scan data yet");
+      expect(p.message).not.toContain("No prices to show yet");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -533,5 +533,45 @@ describe("REGRESSION — the Norrie row the owner saw must never appear", () => 
     expect(built.rows).toHaveLength(1);
     expect(built.rows[0].profitLoss).toBeGreaterThan(0);
     expect(built.rows[0].layOdds).toBeLessThan(built.rows[0].backOdds);
+  });
+});
+
+/**
+ * ITEM 2 (2026-11-02) — the no-scan explanation is written for a CUSTOMER.
+ *
+ * The old copy told the user "the scheduled scan runs every 10 minutes", which
+ * is machinery talk and, on the published host, not even true: the feed there
+ * may be unable to see the scanner at all. Every `no_scan` message now comes
+ * from the server, and none of them may describe how our plumbing works.
+ */
+describe("no-scan copy — no machinery words reach a customer", () => {
+  const BANNED = /\b(worker|cron|scan|scanner|scanned|stalled|heartbeat|provider|quota|token|api|credits?)\b/i;
+
+  test("every no_scan reason gives a customer-facing sentence", () => {
+    const missingDir = mkdtempSync(join(tmpdir(), "eaw-instant-"));
+    try {
+      const cases = [
+        readInstantWins({ file: join(missingDir, "nope.json"), now: NOW }), // missing
+        readInstantWins({ file: (() => {
+          const t = mkdtempSync(join(tmpdir(), "eaw-instant-"));
+          writeFileSync(join(t, "c.json"), "{ not json");
+          return join(t, "c.json");
+        })(), now: NOW }), // unreadable
+        readInstantWins({ file: (() => {
+          const t = mkdtempSync(join(tmpdir(), "eaw-instant-"));
+          writeFileSync(join(t, "c.json"), JSON.stringify({ hello: "world" }));
+          return join(t, "c.json");
+        })(), now: NOW }), // wrong shape
+      ];
+      for (const p of cases) {
+        expect(p.status).toBe("no_scan");
+        expect(p.message.length).toBeGreaterThan(0);
+        expect(BANNED.test(p.message)).toBe(false);
+        // It still has to say the true thing: no prices, and nothing charged.
+        expect(p.message).toContain("No prices to show yet");
+      }
+    } finally {
+      rmSync(missingDir, { recursive: true, force: true });
+    }
   });
 });

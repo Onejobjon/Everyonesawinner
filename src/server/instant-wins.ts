@@ -235,7 +235,7 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
   if (sources.length === 0) {
     if (sawUnreadable) {
       return noScan(
-        "No scan data yet — the last scan's file could not be read, so there is nothing to show. Nothing was fetched to fill the gap.",
+        "No prices to show yet — the last list we received could not be read, so there is nothing to display. Nothing was charged for this page.",
         "unreadable",
         greensForNoScan,
       );
@@ -244,7 +244,7 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
     // asked about one file, and it has not been written.
     if (options.file) {
       return noScan(
-        "No scan data yet — the scheduled scan has not completed a run on this machine, so there is nothing to show. Nothing was fetched to fill the gap.",
+        "No prices to show yet — today's list has not arrived, so there is nothing to display. Nothing was charged for this page.",
         "missing",
         greensForNoScan,
       );
@@ -252,8 +252,14 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
     // NO FILE AND NO SNAPSHOT ANYWHERE. The scanner may well be healthy — on the
     // published host it almost certainly is — so do not blame it. Say what is
     // true: this server cannot see the scan.
+    //
+    // WRITTEN FOR A CUSTOMER (2026-11-02): the previous wording explained our
+    // machinery ("the scan runs on the machine that writes its results … no scan
+    // file or snapshot is reachable here"). A subscriber is not owed an account
+    // of how the plumbing failed; they are owed the truth in their own terms —
+    // there are no prices here yet, and it cost them nothing.
     return noScan(
-      "The feed cannot see the scanner from this server: the scan runs on the machine that writes its results, and no scan file or snapshot is reachable here. Nothing was fetched to fill the gap.",
+      "No prices to show yet — today's list has not reached this page. Nothing was charged for this page. Check back in a few minutes.",
       "unreachable",
       greensForNoScan,
     );
@@ -267,7 +273,7 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
 
   if (ts == null || matches == null) {
     return noScan(
-      "The last scan's file is not in a shape we can read, so there is nothing to show. Nothing was fetched to fill the gap.",
+      "No prices to show yet — the list we received could not be read, so there is nothing to display. Nothing was charged for this page.",
       "unreadable",
       greensForNoScan,
     );

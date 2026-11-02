@@ -795,7 +795,7 @@ export default function SameMatch() {
               <li>
                 <strong>Back prices</strong> (the legs of each plan) and the <strong>reference price</strong> come from
                 one third-party odds feed, cached for up to 10 minutes. We do not query Betfair or Smarkets directly, and
-                we do not read any exchange's API.
+                we do not read prices straight from any exchange.
               </li>
               <li>
                 <strong>Both prices in the calculation are yours.</strong> The bookmaker's bet-builder price and the
@@ -818,7 +818,7 @@ export default function SameMatch() {
             <h2 className="text-base font-semibold">What this tool cannot do</h2>
             <ul className="mt-2 list-disc space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
               <li>
-                <strong>We cannot see your bookmaker's bet-builder price.</strong> Our odds provider has no combined
+                <strong>We cannot see your bookmaker's bet-builder price.</strong> The odds feed we use has no combined
                 market at all — asking for one is refused — and a builder price is generated per customer anyway. That is
                 why you type it.
               </li>
@@ -832,8 +832,8 @@ export default function SameMatch() {
                 confirm.
               </li>
               <li>
-                <strong>One match at a time, on purpose.</strong> Each fetch costs credits, so there is no sweep, no
-                background scan and no auto-refresh. You pay only for the match you are looking at.
+                <strong>One match at a time, on purpose.</strong> Each fetch costs credits, so there is no sweep and no
+                auto-refresh. You pay only for the match you are looking at.
               </li>
             </ul>
           </section>

@@ -306,7 +306,7 @@ const server = Bun.serve({
             status: "no_scan",
             reason: "unreadable",
             message:
-              "No scan data yet — the last scan's file could not be read, so there is nothing to show. Nothing was fetched to fill the gap.",
+              "No prices to show yet — the last list we received could not be read, so there is nothing to display. Nothing was charged for this page.",
             scannedAt: null,
             ageMinutes: null,
             stale: false,

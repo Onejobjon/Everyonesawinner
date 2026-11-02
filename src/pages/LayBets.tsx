@@ -505,7 +505,7 @@ export default function LayBets() {
             Singles show every outcome with a lay gap under 0.20 (negative gap = better than break-even), on your £{stakeVal} cash back stake, including {commLabel} exchange commission (adjustable above — set it to what your exchange actually charges). Ice hockey is excluded — bookmaker back odds are regulation-time but exchange lays include overtime, so they never match.
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            <strong>Nothing is fetched until you press Search.</strong> This page has no automatic scan — the scheduled scanning is the opportunity alerts, which run separately on their own timetable. A search reads the feed fresh for each competition you selected, and the odds provider bills <strong>1 credit per competition</strong> however many fixtures come back: {selected.length === 0 ? "nothing to spend yet" : `${credits(costNow)} for this selection`}. Prices the feed reports as unavailable (1.00 / 451) are removed, and a lay price more than 10% below the bookmaker price is withheld — those rows are two different markets, not an opportunity.
+            <strong>Nothing is fetched until you press Search.</strong> This page never searches on its own — nothing runs until you press the button. A search reads fresh prices for each competition you selected, and the odds feed bills <strong>1 credit per competition</strong> however many fixtures come back: {selected.length === 0 ? "nothing to spend yet" : `${credits(costNow)} for this selection`}. Prices the feed reports as unavailable (1.00 / 451) are removed, and a lay price more than 10% below the bookmaker price is withheld — those rows are two different markets, not an opportunity.
           </p>
 
           {error && (
@@ -532,12 +532,12 @@ export default function LayBets() {
                 <div>
                   <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">No search has run yet</p>
                   <p className="mt-1 text-sm text-gray-500">
-                    Nothing has been fetched from the odds feed, and this page will not start a scan on its own.
+                    Nothing has been fetched from the odds feed, and this page will not search on its own.
                   </p>
                   <p className="mt-2 text-sm text-gray-500">
                     Press <strong>Search</strong> to read the latest prices for the{" "}
                     <strong>{selected.length}</strong> competition{selected.length === 1 ? "" : "s"} you have ticked. That costs{" "}
-                    <strong>{credits(costNow)}</strong> — the odds provider bills one credit per competition however many fixtures
+                    <strong>{credits(costNow)}</strong> — the odds feed bills one credit per competition however many fixtures
                     it returns — and the page will tell you exactly what it spent when the results come back.
                   </p>
                 </div>

@@ -34,6 +34,7 @@ import {
 import { londonDayKey, londonDayLabel, londonTimeLabel } from "../lib/london-day";
 import { money } from "../lib/laybets-common";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "./CommissionControl";
+import GreensPanel, { type GreensSummary } from "./GreensPanel";
 
 interface Payload {
   ok?: boolean;
@@ -53,6 +54,8 @@ interface Payload {
   sportsWithToday?: number;
   fixturesToday?: number;
   matches?: Match[];
+  /** Greens found in the last 30 days — already in the payload, so no extra cost. */
+  greens30d?: GreensSummary;
   error?: string;
 }
 
@@ -140,13 +143,13 @@ export default function InstantWins() {
             <span>⚡</span> Instant wins — today&apos;s green trades
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
-            Already on screen when you open this page — no search, no click. Every sport the scan
-            covers, at <strong>any odds</strong>: the only thing that gets a trade onto this list is
+            Already on screen when you open this page — no search, no click. Every sport we
+            cover, at <strong>any odds</strong>: the only thing that gets a trade onto this list is
             that it returns money whichever way the result goes, after commission, on your stake.
           </p>
           <p className="mt-2 inline-block rounded-lg bg-purple-50 px-3 py-1 text-xs font-medium text-purple-800 dark:bg-purple-950/50 dark:text-purple-200">
-            Costs <strong>zero credits</strong> to load: this feed reads the last scan&apos;s saved
-            result and fetches nothing from the odds provider.
+            Costs <strong>nothing</strong> to load: it shows the prices we already hold and fetches
+            no new ones.
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -183,15 +186,15 @@ export default function InstantWins() {
                 {built.sameDaySports} sport{built.sameDaySports === 1 ? "" : "s"} kicking off today.
               </>
             ) : (
-              <>The last scan did not record a time.</>
+              <>We did not record a time for these prices.</>
             )}
           </p>
           {stale && (
             <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               ⚠️ Some prices here are {ageWords(payload.priceAgeMinutes ?? staleAfterMin)} old — they
-              may have moved. The scan refreshes each sport on a credit budget rather than all of
-              them every ten minutes, so a sport can be up to about {staleAfterMin} minutes old.
-              Check the price at the bookmaker and the exchange before you place anything.
+              may have moved since we last looked. We refresh sports in turn rather than all at
+              once, so a sport can be up to about {staleAfterMin} minutes old. Check the price at the
+              bookmaker and the exchange before you place anything.
             </p>
           )}
           <p className="mt-1 text-[11px] text-gray-400">
@@ -214,7 +217,7 @@ export default function InstantWins() {
       )}
 
       {phase === "loading" && (
-        <p className="mt-6 text-sm text-gray-500">Reading the last scan…</p>
+        <p className="mt-6 text-sm text-gray-500">Loading today&apos;s prices…</p>
       )}
 
       {phase === "error" && (
@@ -230,14 +233,21 @@ export default function InstantWins() {
         </div>
       )}
 
-      {/* NO SCAN is its own state — never an empty list. */}
+      {/* NO SCAN is its own state — never an empty list.
+          The explanation is the SERVER's own `message`, not our guess about how
+          often anything runs: on the published host the feed can be unable to see
+          the scanner at all, and "it runs every 10 minutes" would then be a
+          promise we cannot keep. Whatever the server says, it is written for a
+          customer — no schedule, no machinery. */}
       {phase === "ready" && payload?.status === "no_scan" && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-6 dark:border-gray-800 dark:bg-gray-900/50">
-          <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">No scan data yet</p>
-          <p className="mt-1 text-sm text-gray-500">{payload.message}</p>
+          <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">No prices yet</p>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            {payload.message?.trim() || "There are no prices to show you yet."}
+          </p>
           <p className="mt-2 text-sm text-gray-500">
-            This is not &ldquo;no green trades&rdquo; — it means there is no completed scan to show
-            yet. The scheduled scan runs every 10 minutes; the feed fills in after the first one.
+            This is not &ldquo;no green trades&rdquo; — it means we have no prices to show you yet.
+            Check back in a few minutes.
           </p>
         </div>
       )}
@@ -247,10 +257,10 @@ export default function InstantWins() {
       {phase === "ready" && payload?.status === "ok" && built.rows.length === 0 && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-6 dark:border-gray-800 dark:bg-gray-900/50">
           <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-            No green trades in the last scan
+            No green trades right now
           </p>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            The scan {coverage} — <strong>{built.outcomesConsidered}</strong> outcome
+            We {coverage} — <strong>{built.outcomesConsidered}</strong> outcome
             {built.outcomesConsidered === 1 ? "" : "s"} priced, and none of them was profitable on
             both sides after commission at your £{stakeVal} stake.
           </p>
@@ -275,8 +285,8 @@ export default function InstantWins() {
           {typeof payload.fixturesToday === "number" && payload.fixturesToday > 0 && (
             <p className="mt-2 text-xs text-gray-500">
               Today has {payload.fixturesToday} fixture{payload.fixturesToday === 1 ? "" : "s"} across{" "}
-              {payload.sportsWithToday} sport{payload.sportsWithToday === 1 ? "" : "s"} in total; the
-              scan refreshes each sport on a budget, so it holds prices for{" "}
+              {payload.sportsWithToday} sport{payload.sportsWithToday === 1 ? "" : "s"} in total; we
+              refresh sports in turn rather than all at once, so we hold prices for{" "}
               {built.sameDayFixtures} of them right now.
             </p>
           )}
@@ -290,7 +300,7 @@ export default function InstantWins() {
       {phase === "ready" && payload?.status === "ok" && built.rows.length > 0 && (
         <>
           <p className="mt-4 text-sm font-medium text-gray-800 dark:text-gray-100">
-            {built.rows.length} green trade{built.rows.length === 1 ? "" : "s"} — the scan {coverage},
+            {built.rows.length} green trade{built.rows.length === 1 ? "" : "s"} — we {coverage},
             best return first.
           </p>
           <div className="mt-2 overflow-x-auto">
@@ -370,14 +380,18 @@ export default function InstantWins() {
               trade are both shown when the money works.
             </p>
             <p>
-              Figures come from the scheduled scan, not from a live check made when you opened this
-              page. We can only see pre-match back prices and exchange lay prices — bet-builder and
-              same-game prices are generated by the bookmaker for you personally, so they are not in
-              this feed.
+              These are the prices we held when you opened this page, not a fresh check made for
+              your visit. We can only see pre-match back prices and exchange lay prices —
+              bet-builder and same-game prices are generated by the bookmaker for you personally, so
+              they are not in this feed.
             </p>
           </div>
         </>
       )}
+
+      {/* GREENS IN THE LAST 30 DAYS — under the live feed, from the same payload
+          (zero extra cost). Empty history is printed as empty. */}
+      {phase === "ready" && <GreensPanel greens={payload?.greens30d} />}
 
       <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
         <Link

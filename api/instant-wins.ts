@@ -172,7 +172,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         status: "no_scan",
         reason: "unreadable",
         message:
-          "The feed could not reach the scan on this host, so there is nothing to show right now. Nothing was fetched to fill the gap.",
+          "No prices to show yet — we could not reach the list of prices for this page. Nothing was charged for this page.",
         scannedAt: null,
         ageMinutes: null,
         stale: false,
@@ -191,7 +191,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       status: "no_scan",
       reason: "missing",
       message:
-        "No scan data yet — the scheduled scan has not completed a run on this host, so there is nothing to show. Nothing was fetched to fill the gap.",
+        "No prices to show yet — today's list has not arrived. Nothing was charged for this page.",
       scannedAt: null,
       ageMinutes: null,
       stale: false,
