@@ -9,7 +9,8 @@ const plans: {
   period: string;
   desc: string;
   features: string[];
-  popular: boolean;
+  /** A reason for the highlight, never a popularity claim — we have zero customers. */
+  badge?: string;
 }[] = [
   {
     id: "starter",
@@ -20,22 +21,21 @@ const plans: {
     features: [
       "Best Odds Finder (oddsmatcher)",
       "Profit calculator with lay stake and liability",
-      "The licence-checked free-bets list",
+      "Dashboard with the instant-wins feed and your greens history",
     ],
-    popular: false,
   },
   {
     id: "pro",
     name: "Pro",
     price: "£29.99",
     period: "/month (planned)",
-    desc: "Adds the two lay tools.",
+    desc: "Adds the three Pro-only tools.",
     features: [
       "Everything in Starter",
       "Lay Bet Finder — close single lays, searched on demand",
       "Acca Lay Planner — 2–4 leg lay plans",
     ],
-    popular: true,
+    badge: "Best value for the tools you get",
   },
   {
     id: "annual",
@@ -47,7 +47,6 @@ const plans: {
       "Everything in Pro",
       "One payment for the year instead of twelve",
     ],
-    popular: false,
   },
 ];
 
@@ -83,7 +82,7 @@ export default function Subscribe() {
         <>
           These are the plans we intend to offer. Play isn't open yet — we're finishing the payment setup, and no payment can be taken until it does.
           <span className="mt-2 block text-sm">
-            Starter includes the oddsmatcher and calculator. Pro adds the Lay Bet Finder and the Acca Lay Planner.
+            Starter includes the oddsmatcher, the calculator and the dashboard. Pro adds the Lay Bet Finder, the Bet Builder and the Same-Match Planner.
           </span>
         </>
       }
@@ -93,14 +92,14 @@ export default function Subscribe() {
             <div
               key={i}
               className={`relative rounded-2xl border-2 p-8 shadow-sm ${
-                plan.popular
+                plan.badge
                   ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950"
                   : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
               }`}
             >
-              {plan.popular && (
+              {plan.badge && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">
-                  Most popular
+                  {plan.badge}
                 </span>
               )}
               <h3 className="text-lg font-semibold">{plan.name}</h3>
@@ -134,7 +133,33 @@ export default function Subscribe() {
           ))}
         </div>
 
-        <div className="mt-12 text-center border-t border-gray-200 dark:border-gray-800 pt-8">
+        {/* How to cancel, at the point of sale. The old terms promised this
+            would be here before anyone paid; it is here now. Cancellation is by
+            EMAIL because there is no self-serve cancel route in the code, and
+            nothing here claims otherwise. */}
+        <div className="mt-12 rounded-2xl border border-gray-200 bg-gray-50 p-6 text-left dark:border-gray-800 dark:bg-gray-900/50">
+          <h2 className="text-lg font-semibold">How to cancel</h2>
+          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+            Every plan renews automatically until you cancel it. To cancel, email{" "}
+            <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 underline hover:text-indigo-700">
+              support@everyonesawinner.uk
+            </a>{" "}
+            from the address on your account. There is no cancel button in the account area yet, so email is how it
+            is done — a clear message is enough, and you don't have to give a reason.
+          </p>
+          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+            Cancelling stops future billing. Your access continues to the end of the period you've already paid for.
+          </p>
+          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+            You also have a 14-day right to cancel a new subscription. Our{" "}
+            <Link to="/terms" className="text-indigo-600 underline hover:text-indigo-700">
+              terms of use
+            </Link>{" "}
+            set out that right, what happens if a payment fails, and what we do and don't refund.
+          </p>
+        </div>
+
+        <div className="mt-8 text-center border-t border-gray-200 dark:border-gray-800 pt-8">
           <p className="text-sm text-gray-500">
             Checkout isn't open yet. When it is, a completed payment will be confirmed by our server before any tool unlocks — not by this page.
           </p>

@@ -65,7 +65,7 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
     return (
       <PageHeader
         title={`Subscribe to access ${title || "this tool"}`}
-        subtitle="You're signed in! Choose a plan to unlock the odds finder, profit calculator, and all premium features."
+        subtitle="You're signed in! Choose a plan to unlock the oddsmatcher, the profit calculator and the dashboard."
       >
         <div className="mt-10">
           <Link
@@ -75,8 +75,22 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
             View plans &amp; subscribe →
           </Link>
         </div>
+        {/* This branch only renders for a signed-in account the SERVER says has no
+            subscription, so "Already subscribed? Sign in here" was wrong — they are
+            signed in. Re-ask the server instead. */}
         <p className="mt-6 text-sm text-gray-500">
-          Already subscribed? <Link to="/login" className="text-indigo-600 hover:text-indigo-700 font-medium">Sign in here</Link>
+          Paid and still seeing this? Your plan is set by our server, not by this page —{" "}
+          <button
+            onClick={() => void refresh()}
+            className="text-indigo-600 hover:text-indigo-700 font-medium underline"
+          >
+            check your account again
+          </button>
+          . If it still shows, email{" "}
+          <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 hover:text-indigo-700 font-medium">
+            support@everyonesawinner.uk
+          </a>
+          .
         </p>
       </PageHeader>
     );
@@ -84,10 +98,14 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
 
   // Pro-only tier: a Starter user (or any non-Pro plan) sees an upgrade screen
   if (tier === "pro" && !isProPlan(user.plan)) {
+    // Callers pass titles like "the Lay Bet Finder", so the sentence would start
+    // lower-case; capitalise the first letter of whatever we were given.
+    const subject = title || "this tool";
+    const Subject = subject.charAt(0).toUpperCase() + subject.slice(1);
     return (
       <PageHeader
         title={`Upgrade to Pro for ${title || "this tool"}`}
-        subtitle={`${title || "This tool"} is a Pro feature. Upgrade to unlock it alongside the Lay Bet Finder, the advanced oddsmatcher, and everything in Starter.`}
+        subtitle={`${Subject} is a Pro feature. Pro adds the Lay Bet Finder, the Acca Lay Planner and the Same-Match Planner to the oddsmatcher, calculator and dashboard you already get on Starter.`}
       >
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 text-left">
           <div className="rounded-2xl border-2 border-indigo-500 bg-white p-8 shadow-sm dark:bg-gray-950">
@@ -100,7 +118,8 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
             <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <li>• Lay Bet Finder — close single lays</li>
               <li>• Acca Lay Planner — 2–4-leg lay plans</li>
-              <li>• Oddsmatcher and calculator</li>
+              <li>• Same-Match Planner</li>
+              <li>• Oddsmatcher, calculator and dashboard</li>
             </ul>
             <button type="button" disabled aria-disabled="true" className="mt-6 block w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500">
               Checkout opens shortly
@@ -117,8 +136,8 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
             <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <li>• Lay Bet Finder — close single lays</li>
               <li>• Acca Lay Planner — 2–4-leg lay plans</li>
-              <li>• Everything in Pro</li>
-              <li>• One payment for the year</li>
+              <li>• Same-Match Planner</li>
+              <li>• One payment for the year instead of twelve</li>
             </ul>
             <button type="button" disabled aria-disabled="true" className="mt-6 block w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500">
               Checkout opens shortly

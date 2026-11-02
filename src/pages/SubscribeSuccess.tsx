@@ -1,87 +1,222 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
-import { useAuth } from "../lib/auth";
+import { useAuth, type Plan } from "../lib/auth";
+
+/**
+ * /subscribe/success — where the payment provider returns a customer after checkout.
+ *
+ * THE ONE RULE THIS PAGE KEEPS: it cannot grant a plan. Only `GET /api/me`
+ * (src/server/pro-gate.ts) decides whether an account is subscribed, and this
+ * page only asks it and reports the answer. That is why every sentence below is
+ * phrased as "our server says", never as "payment received" on this page's own
+ * authority.
+ *
+ * Two things were wrong with the previous version, both fixed here:
+ *   - It told a paying customer "We haven't received a payment for this
+ *     account" and "No payment has been taken" — the first thing they read
+ *     after paying.
+ *   - It redirected them away after 3 seconds, before they could read it, and
+ *     offered /oddsmatcher — which bounces into the paywall whenever the
+ *     webhook is a moment behind. There is now no auto-redirect at all: the
+ *     page waits, offers "Check again", and only links into a paid tool once
+ *     the server has actually confirmed the plan.
+ */
+
+const PLAN_LABEL: Record<Plan, { name: string; price: string }> = {
+  starter: { name: "Starter", price: "£19.99 a month" },
+  pro: { name: "Pro", price: "£29.99 a month" },
+  annual: { name: "Pro Annual", price: "£269.99 a year" },
+};
+
+function isPlan(value: unknown): value is Plan {
+  return value === "starter" || value === "pro" || value === "annual";
+}
 
 export default function SubscribeSuccess() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [status, setStatus] = useState<"activating" | "done" | "error">("activating");
-  const [countdown, setCountdown] = useState(3);
+  const { user, sessionStatus, refresh } = useAuth();
+  const [busy, setBusy] = useState(false);
+  /** The plan the customer picked on /subscribe, for display only. Never proof of payment. */
+  const [chosenPlan, setChosenPlan] = useState<Plan | null>(null);
+  const askedOnce = useRef(false);
 
+  // The hint /subscribe leaves behind before it hands off to checkout. Read it
+  // for display, then drop it: it is a UI hint, never evidence of a payment.
   useEffect(() => {
-    if (!user) {
-      navigate("/login?redirect=/subscribe/success", { replace: true });
-      return;
-    }
-
     try {
-      // No payment has been received, so there is nothing to activate here.
-      // Only the server can grant a plan; we just clear the leftover hint the
-      // /subscribe page wrote before it opened checkout.
+      const raw = localStorage.getItem("eaw_pending_plan");
+      if (isPlan(raw)) setChosenPlan(raw);
       localStorage.removeItem("eaw_pending_plan");
-      setStatus("done");
-
-      // Redirect to the free bet offers after 3 seconds
-      const timer = setInterval(() => {
-        setCountdown((c) => {
-          if (c <= 1) {
-            clearInterval(timer);
-            navigate("/free-bets", { replace: true });
-            return 0;
-          }
-          return c - 1;
-        });
-      }, 1000);
     } catch {
-      setStatus("error");
+      /* private mode / storage disabled — the page still works */
     }
   }, []);
 
-  const TITLES = {
-    activating: "Checking whether a payment has been confirmed...",
-    done: "We haven't received a payment for this account",
-    error: "Something went wrong",
-  } as const;
+  useEffect(() => {
+    if (sessionStatus === "anon") {
+      navigate("/login?redirect=/subscribe/success", { replace: true });
+    }
+  }, [sessionStatus, navigate]);
 
-  return (
-    <PageHeader
-      title={TITLES[status]}
-      subtitle={
-        status === "activating"
-          ? "Please wait one moment."
-          : status === "done"
-            ? "This page does not activate anything — only our server can confirm a payment, and checkout isn't open yet. No payment has been taken."
-            : "We couldn't activate your subscription. Try again or contact support."
-      }
-    >
-      {status === "activating" && (
+  // Ask the server once, unprompted: the confirmation may already have landed.
+  useEffect(() => {
+    if (sessionStatus !== "authed" || askedOnce.current) return;
+    askedOnce.current = true;
+    void refresh();
+  }, [sessionStatus, refresh]);
+
+  const checking = sessionStatus === "checking" || (sessionStatus === "authed" && !user);
+  const active = sessionStatus === "authed" && !!user?.subscription;
+  const serverUnreachable = sessionStatus === "error";
+
+  async function checkAgain() {
+    setBusy(true);
+    try {
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const confirmedPlan = user?.plan ? PLAN_LABEL[user.plan] : null;
+  const shownPlan = confirmedPlan ?? (chosenPlan ? PLAN_LABEL[chosenPlan] : null);
+
+  if (checking) {
+    return (
+      <PageHeader
+        title="Confirming your subscription…"
+        subtitle="We're asking our server whether the payment has come through. This takes a moment."
+      >
         <div className="flex justify-center py-12">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
         </div>
-      )}
+      </PageHeader>
+    );
+  }
 
-      {status === "done" && (
-        <div className="mt-8 flex flex-wrap gap-4">
-          <Link to="/free-bets" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
-            Go to free bets
+  if (active) {
+    return (
+      <PageHeader
+        title="You're subscribed"
+        subtitle="Our server has confirmed your subscription on this account. Everything you've paid for is unlocked now."
+      >
+        <div className="mx-auto mt-8 max-w-xl rounded-2xl border border-gray-200 bg-white p-6 text-left shadow-sm dark:border-gray-800 dark:bg-gray-950">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-lg font-semibold">{confirmedPlan?.name ?? "Your plan"}</h2>
+            {confirmedPlan && <span className="text-sm text-gray-600 dark:text-gray-400">{confirmedPlan.price}</span>}
+          </div>
+          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+            Your plan renews automatically until you cancel. To cancel, email{" "}
+            <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 underline hover:text-indigo-700">
+              support@everyonesawinner.uk
+            </a>{" "}
+            from the address on this account — cancelling stops future billing and your access runs to the end of
+            the period you've already paid for.
+          </p>
+          <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">
+            The full payment terms, including your 14-day right to cancel, are in our{" "}
+            <Link to="/terms" className="text-indigo-600 underline hover:text-indigo-700">
+              terms of use
+            </Link>
+            .
+          </p>
+        </div>
+
+        <p className="mx-auto mt-4 max-w-xl text-xs leading-5 text-gray-500 dark:text-gray-400">
+          This page didn't unlock anything — access is granted by our server, which is what just confirmed your
+          plan.
+        </p>
+
+        <div className="mt-8 flex flex-wrap justify-center gap-4">
+          <Link to="/dashboard" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
+            Go to your dashboard
           </Link>
-          <Link to="/oddsmatcher" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">
-            Start matching
+          <Link
+            to="/free-bets"
+            className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300"
+          >
+            See the free-bet offers
           </Link>
         </div>
-      )}
+      </PageHeader>
+    );
+  }
 
-      {status === "error" && (
-        <div className="mt-8 flex flex-wrap gap-4">
-          <Link to="/subscribe" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
-            Try again
-          </Link>
-          <a href="mailto:support@everyonesawinner.uk" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">
-            Contact support
+  if (serverUnreachable) {
+    return (
+      <PageHeader
+        title="We couldn't reach our server to confirm your subscription"
+        subtitle="This says nothing either way about your payment — we simply couldn't ask. Try again in a moment, and if it keeps failing, email us."
+      >
+        <div className="mt-8 flex flex-wrap justify-center gap-4">
+          <button
+            onClick={() => void checkAgain()}
+            disabled={busy}
+            className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {busy ? "Checking…" : "Try again"}
+          </button>
+          <a
+            href="mailto:support@everyonesawinner.uk"
+            className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300"
+          >
+            Email support
           </a>
         </div>
+      </PageHeader>
+    );
+  }
+
+  // Signed in, but the server has not confirmed a subscription (yet).
+  return (
+    <PageHeader
+      title="Waiting for our server to confirm your payment"
+      subtitle="You're signed in. Our payment provider hasn't told our server that the payment has gone through yet — this is usually a minute or two, occasionally a little longer."
+    >
+      {shownPlan && (
+        <div className="mx-auto mt-8 max-w-xl rounded-2xl border border-gray-200 bg-white p-6 text-left shadow-sm dark:border-gray-800 dark:bg-gray-950">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-lg font-semibold">{shownPlan.name}</h2>
+            <span className="text-sm text-gray-600 dark:text-gray-400">{shownPlan.price}</span>
+          </div>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            {confirmedPlan
+              ? "The plan on this account."
+              : "The plan you chose at checkout. It isn't active until our server confirms the payment."}
+          </p>
+        </div>
       )}
+
+      <p className="mx-auto mt-6 max-w-xl text-sm leading-6 text-gray-600 dark:text-gray-400">
+        Nothing on this page can unlock your account — only our server can, and it does so the moment the
+        confirmation arrives. You don't need to stay here: the plan is attached to your account, so you can
+        close this page and sign in again later.
+      </p>
+
+      <div className="mt-8 flex flex-wrap justify-center gap-4">
+        <button
+          onClick={() => void checkAgain()}
+          disabled={busy}
+          className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {busy ? "Checking…" : "Check again"}
+        </button>
+        <Link
+          to="/free-bets"
+          className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300"
+        >
+          Browse the free-bet offers
+        </Link>
+      </div>
+
+      <p className="mx-auto mt-6 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">
+        Still showing this after ten minutes? Email{" "}
+        <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 underline hover:text-indigo-700">
+          support@everyonesawinner.uk
+        </a>{" "}
+        with the time you paid and we'll sort it out — you will not be left paying for something you can't use.
+      </p>
     </PageHeader>
   );
 }
