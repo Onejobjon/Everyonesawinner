@@ -15,7 +15,6 @@ import {
   type SameMatchPlan,
 } from "../lib/same-match";
 import {
-  creditsFor,
   fetchMatchMarkets,
   marketsFor,
   type SameMatchFetchResult,
@@ -86,10 +85,6 @@ function parseAmount(raw: string, fallback: number): number {
 function money(n: number): string {
   const sign = n < 0 ? "−" : "";
   return `${sign}£${Math.abs(n).toFixed(2)}`;
-}
-
-function credits(n: number): string {
-  return `${n} credit${n === 1 ? "" : "s"}`;
 }
 
 /** Plain-language names for the markets we ask for, so the cost list is readable. */
@@ -195,7 +190,6 @@ export default function SameMatch() {
 
   const requestOptions = { includeTeamTotals, includeReference };
   const markets = marketsFor(requestOptions);
-  const cost = creditsFor(requestOptions);
   const optionsChanged =
     fetchedFor != null &&
     (fetchedFor.teamTotals !== includeTeamTotals || fetchedFor.reference !== includeReference);
@@ -222,8 +216,7 @@ export default function SameMatch() {
       const label = FOOTBALL_COMPETITIONS.find((c) => c.key === competition)?.label ?? competition;
       setCompNote(
         `${label}: ${fresh.length} fixture${fresh.length === 1 ? "" : "s"} returned` +
-          (added.length < fresh.length ? ` (${fresh.length - added.length} already listed)` : "") +
-          ` · ${credits(result.credits.spent)} spent${result.credits.remaining != null ? `, ${result.credits.remaining.toLocaleString()} left` : ""}`
+          (added.length < fresh.length ? ` (${fresh.length - added.length} already listed)` : "")
       );
     } catch (e) {
       setCompError(e instanceof Error ? e.message : "That competition could not be read.");
@@ -324,7 +317,7 @@ export default function SameMatch() {
           <section className={`mt-8 ${card}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-lg font-semibold">1 · Pick one fixture</h2>
-              <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-300">Free — no credits</span>
+              <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/50 dark:text-green-300">No search needed</span>
             </div>
             <p className="mt-1 text-sm text-gray-500">
               This list is football only (both-teams-to-score, goals and correct-score markets are football markets).
@@ -339,7 +332,7 @@ export default function SameMatch() {
             {!loading && !loadError && football.length === 0 && (
               <p className="mt-4 text-sm text-gray-500">
                 The shared cached feed holds no football fixtures right now. Odds refresh about every 10 minutes — or
-                ask the feed for one competition below ({credits(1)}).
+                ask the feed for one competition below.
               </p>
             )}
 
@@ -398,7 +391,7 @@ export default function SameMatch() {
                   disabled={compPhase === "fetching"}
                   className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-gray-400 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200"
                 >
-                  {compPhase === "fetching" ? "Reading…" : `Find fixtures — ${credits(1)}`}
+                  {compPhase === "fetching" ? "Reading…" : "Find fixtures"}
                 </button>
                 <span className="text-[11px] text-gray-500">
                   One request for that competition's match-result market. Nothing is read until you press it.
@@ -421,13 +414,8 @@ export default function SameMatch() {
               {markets.map((m) => (
                 <li key={m} className="flex items-center justify-between gap-3 border-b border-gray-100 py-1 last:border-0 dark:border-gray-800">
                   <span>{MARKET_LABEL[m] ?? m}</span>
-                  <span className="text-xs font-medium text-gray-500">1 credit</span>
                 </li>
               ))}
-              <li className="flex items-center justify-between gap-3 pt-1 font-semibold text-gray-800 dark:text-gray-100">
-                <span>Total for this match</span>
-                <span>{credits(cost)}</span>
-              </li>
             </ul>
 
             <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
@@ -438,7 +426,7 @@ export default function SameMatch() {
                   onChange={(e) => setIncludeTeamTotals(e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 text-purple-600"
                 />
-                <span>Each team's goal lines <span className="text-xs text-gray-500">(+1 credit — finds more two-leg plans)</span></span>
+                <span>Each team's goal lines <span className="text-xs text-gray-500">(finds more two-leg plans)</span></span>
               </label>
               <label className="flex items-center gap-2">
                 <input
@@ -447,7 +435,7 @@ export default function SameMatch() {
                   onChange={(e) => setIncludeReference(e.target.checked)}
                   className="h-4 w-4 rounded border-gray-300 text-purple-600"
                 />
-                <span>Correct-score reference price <span className="text-xs text-gray-500">(+1 credit, optional)</span></span>
+                <span>Correct-score reference price <span className="text-xs text-gray-500">(optional)</span></span>
               </label>
             </div>
 
@@ -455,7 +443,8 @@ export default function SameMatch() {
               <p className="mt-2 text-xs text-gray-500">
                 The reference price is a benchmark only: the best correct-score <em>back</em> price we can see for the
                 pinned scoreline, from a named bookmaker. It is not a quote and it is not the lay price — we cannot see
-                the exchange's lay side for a scoreline at all. Off by default because it costs a credit.
+                the exchange's lay side for a scoreline at all. Off by default because it is an extra read on top of
+                the match result.
               </p>
             )}
 
@@ -469,12 +458,12 @@ export default function SameMatch() {
                 {phase === "fetching"
                   ? "Fetching…"
                   : selected
-                    ? `Fetch ${selected.home} v ${selected.away} — ${credits(cost)}`
+                    ? `Fetch ${selected.home} v ${selected.away}`
                     : "Pick a fixture first"}
               </button>
               {selected && phase !== "fetching" && (
                 <span className="text-xs text-gray-500">
-                  Costs {credits(cost)} when you press this. It does not repeat — one press, one match.
+                  One press, one match. It does not repeat.
                 </span>
               )}
             </div>
@@ -482,8 +471,7 @@ export default function SameMatch() {
             {optionsChanged && (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                 You changed the market options after this match was fetched. The plans below were built from the
-                markets you paid for, which did not include the new ones. Fetch again to include them ({credits(cost)}
-                {" "}for this match).
+                markets read then, which did not include the new ones. Fetch again to include them.
               </p>
             )}
 
@@ -495,9 +483,7 @@ export default function SameMatch() {
 
             {fetched && (
               <p className="mt-3 text-xs text-gray-500">
-                Fetched {new Date(fetched.fetchedAt).toLocaleTimeString()} ·{" "}
-                {fetched.credits.measured ? `${credits(fetched.credits.spent)} spent` : `about ${credits(fetched.credits.spent)} spent (estimated)`}{" "}
-                {fetched.credits.remaining != null ? `· ${fetched.credits.remaining.toLocaleString()} credits left on the account` : ""}
+                Fetched {new Date(fetched.fetchedAt).toLocaleTimeString()}
                 {" "}· markets: {fetched.marketsRequested.map((m) => MARKET_LABEL[m] ?? m).join(", ")}
               </p>
             )}
@@ -531,7 +517,7 @@ export default function SameMatch() {
                     tool only shows exact pins, so it shows nothing rather than something approximate.
                   </p>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-                    {!includeTeamTotals && <li>Tick “each team's goal lines” and fetch again — it widens the lines we can pin with (+1 credit).</li>}
+                    {!includeTeamTotals && <li>Tick “each team's goal lines” and fetch again — it widens the lines we can pin with.</li>}
                     <li>Try a different fixture — lines vary by match.</li>
                   </ul>
                 </div>
@@ -775,7 +761,7 @@ export default function SameMatch() {
                   </>
                 ) : (
                   <p className="mt-1 text-sm text-gray-500">
-                    Not fetched. The reference price is an optional extra market costing 1 credit — tick “correct-score
+                    Not fetched. The reference price is an optional extra market — tick “correct-score
                     reference price” above and fetch this match again if you want it.
                   </p>
                 )}
@@ -832,8 +818,8 @@ export default function SameMatch() {
                 confirm.
               </li>
               <li>
-                <strong>One match at a time, on purpose.</strong> Each fetch costs credits, so there is no sweep and no
-                auto-refresh. You pay only for the match you are looking at.
+                <strong>One match at a time, on purpose.</strong> One read per match, so there is no sweep and no
+                auto-refresh: the tool only ever looks at the match you are on.
               </li>
             </ul>
           </section>

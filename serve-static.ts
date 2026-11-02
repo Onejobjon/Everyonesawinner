@@ -13,6 +13,7 @@ import { registerUser, authenticateUser, findByEmail } from "./src/server/users"
 import { resolveSession, revokeSession } from "./src/server/sessions";
 import { requireProSession, requirePaidSession, requireOwnerSession } from "./src/server/pro-gate";
 import { readInstantWins, feedDiagnostics, candidateCacheFiles } from "./src/server/instant-wins";
+import { ensureScanOnOpen, scanOnOpenState } from "./src/server/scan-on-open";
 import { readGreenHistory } from "./src/server/green-history";
 import { pushSnapshot, rememberSnapshot, SNAPSHOT_HEADER, verifyBridgeToken } from "./src/server/scan-bridge";
 import { handleStripeEvent, verifyStripeSignature } from "./src/server/stripe-webhook";
@@ -180,14 +181,14 @@ const server = Bun.serve({
           {
             error: "odds_unavailable",
             message:
-              "The live odds feed is not configured on this server, so a search cannot run. Nothing was charged.",
+              "The live odds feed is not configured on this server, so a search cannot run.",
           },
           { status: 503, headers: { "cache-control": "no-store" } },
         );
       }
       try {
         const result = await runLeagueSearch(keys, { apiKey: ODDS_API_KEY });
-        const spent = result.credits.measured ? `${result.credits.spent} credits` : `~${result.credits.spent} credits (estimated)`;
+        const spent = result.credits.measured ? `${result.credits.spent} requests` : `~${result.credits.spent} requests (estimated)`;
         console.log(
           `[league-search] ${result.leagues.filter((l) => l.ok).length}/${result.leagues.length} leagues, ` +
             `${result.events.length} events, ${spent}${result.credits.remaining != null ? `, ${result.credits.remaining} left` : ""}` +
@@ -238,7 +239,7 @@ const server = Bun.serve({
         return Response.json(
           {
             error: "unknown_competition",
-            message: "That competition is not in our list, so nothing was requested. Nothing was charged.",
+            message: "That competition is not in our list, so nothing was requested.",
           },
           { status: 400, headers: { "cache-control": "no-store" } },
         );
@@ -249,7 +250,7 @@ const server = Bun.serve({
           {
             error: "odds_unavailable",
             message:
-              "The live odds feed is not configured on this server, so this match cannot be fetched. Nothing was charged.",
+              "The live odds feed is not configured on this server, so this match cannot be fetched.",
           },
           { status: 503, headers: { "cache-control": "no-store" } },
         );
@@ -263,8 +264,8 @@ const server = Bun.serve({
         );
       }
       const spent = result.credits.measured
-        ? `${result.credits.spent} credits`
-        : `~${result.credits.spent} credits (estimated)`;
+        ? `${result.credits.spent} requests`
+        : `~${result.credits.spent} requests (estimated)`;
       console.log(
         `[same-match] ${sport}/${eventId} markets=${result.markets.join(",")} ${spent}` +
           (result.credits.remaining != null ? `, ${result.credits.remaining} left` : ""),
@@ -274,10 +275,16 @@ const server = Bun.serve({
 
     // INSTANT WINS — the same-day feed the dashboard loads on open.
     //
-    // THE CREDIT RULE: this branch performs NO fetch and never touches the odds
-    // provider. It reads the file the scheduled scan already wrote
-    // (`.run/alerts-cache.json`) and returns the same-day slice of it, so opening
-    // the page costs ZERO credits however many times it is loaded.
+    // SCAN ON OPEN (owner directive 2026-11-03: "scan every 30mins and on open"):
+    // if the newest scan we can see is more than ~5 minutes old, this request asks
+    // for a new one — through the SAME pipeline the scheduled loop uses
+    // (runAlertCheck: transform, greens history, Telegram, push to the published
+    // host). Three rules, all in src/server/scan-on-open.ts:
+    //   • single flight — an in-process promise plus a lock file, so ten opens in a
+    //     minute cost one scan, not ten;
+    //   • the page is never made to wait — the scan is started and NOT awaited, and
+    //     the answer below is the snapshot we already hold plus `refreshing: true`;
+    //   • a failed scan changes nothing the user can see, and says so.
     //
     // Paid-tier gate (Starter and above) — it is not a Pro tool, but it is not
     // public either. The gate runs before the file read.
@@ -292,11 +299,38 @@ const server = Bun.serve({
       }
       try {
         const payload = readInstantWins();
+        // Fire-and-forget: this returns a decision, never a wait.
+        let refreshing = false;
+        let refreshNote = "";
+        try {
+          const decision = ensureScanOnOpen({
+            newestScanAt: payload.scannedAt,
+            canScan: Boolean(ODDS_API_KEY),
+          });
+          refreshing = decision.refreshing;
+          refreshNote = `${decision.started ? "started" : "no-start"}: ${decision.reason}`;
+        } catch (e) {
+          // The feed must answer even if the refresh path is broken.
+          console.error(`[instant-wins] scan-on-open failed: ${String(e)}`);
+          refreshNote = `error: ${String(e)}`;
+        }
         console.log(
           `[instant-wins] status=${payload.status} age=${payload.ageMinutes ?? "-"}m stale=${payload.stale} ` +
-            `fixtures=${payload.fixturesScanned} sameDay=${payload.sameDayFixtures} credits=0`,
+            `fixtures=${payload.fixturesScanned} sameDay=${payload.sameDayFixtures} ` +
+            `refreshing=${refreshing} (${refreshNote})`,
         );
-        return Response.json(payload, { headers: { "cache-control": "no-store" } });
+        const onOpen = scanOnOpenState();
+        return Response.json(
+          {
+            ...payload,
+            refreshing,
+            refreshStartedAt: onOpen.startedAt,
+            // If the last on-open scan failed, the page says the prices may have
+            // moved. It never blanks: the rows above are still the last real ones.
+            refreshFailed: onOpen.lastError != null && !refreshing,
+          },
+          { headers: { "cache-control": "no-store" } },
+        );
       } catch (e) {
         // A read failure is a STATE, not a 500: the page says "no scan data yet".
         console.error(`[instant-wins] read failed: ${String(e)}`);
@@ -306,7 +340,7 @@ const server = Bun.serve({
             status: "no_scan",
             reason: "unreadable",
             message:
-              "No prices to show yet — the last list we received could not be read, so there is nothing to display. Nothing was charged for this page.",
+              "No prices to show yet — the last list we received could not be read, so there is nothing to display.",
             scannedAt: null,
             ageMinutes: null,
             stale: false,
@@ -314,6 +348,7 @@ const server = Bun.serve({
             fixturesScanned: 0,
             sameDayFixtures: 0,
             matches: [],
+            refreshing: false,
           },
           { headers: { "cache-control": "no-store" } },
         );
@@ -355,7 +390,10 @@ const server = Bun.serve({
           { status: gate.status, headers: { "cache-control": "no-store" } },
         );
       }
-      return Response.json(feedDiagnostics(), { headers: { "cache-control": "no-store" } });
+      return Response.json(
+        { ...feedDiagnostics(), scanOnOpen: scanOnOpenState() },
+        { headers: { "cache-control": "no-store" } },
+      );
     }
 
     // SCAN SNAPSHOT — the receiving end of the bridge (src/server/scan-bridge.ts).
@@ -410,7 +448,7 @@ const server = Bun.serve({
       }
       const fixtures = (parsed.cache.data as unknown[]).length;
       console.log(
-        `[scan-snapshot] accepted ${fixtures} fixtures, scan ${new Date(parsed.cache.ts).toISOString()} (disk=${persisted}, credits=0)`,
+        `[scan-snapshot] accepted ${fixtures} fixtures, scan ${new Date(parsed.cache.ts).toISOString()} (disk=${persisted}, no provider call)`,
       );
       return Response.json(
         { ok: true, fixtures, persisted, receivedAt: new Date().toISOString() },

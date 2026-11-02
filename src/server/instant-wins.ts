@@ -235,7 +235,7 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
   if (sources.length === 0) {
     if (sawUnreadable) {
       return noScan(
-        "No prices to show yet — the last list we received could not be read, so there is nothing to display. Nothing was charged for this page.",
+        "No prices to show yet — the last list we received could not be read, so there is nothing to display.",
         "unreadable",
         greensForNoScan,
       );
@@ -244,7 +244,7 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
     // asked about one file, and it has not been written.
     if (options.file) {
       return noScan(
-        "No prices to show yet — today's list has not arrived, so there is nothing to display. Nothing was charged for this page.",
+        "No prices to show yet — today's list has not arrived, so there is nothing to display.",
         "missing",
         greensForNoScan,
       );
@@ -259,7 +259,7 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
     // of how the plumbing failed; they are owed the truth in their own terms —
     // there are no prices here yet, and it cost them nothing.
     return noScan(
-      "No prices to show yet — today's list has not reached this page. Nothing was charged for this page. Check back in a few minutes.",
+      "No prices to show yet — today's list has not reached this page. Check back in a few minutes.",
       "unreachable",
       greensForNoScan,
     );
@@ -273,7 +273,7 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
 
   if (ts == null || matches == null) {
     return noScan(
-      "No prices to show yet — the list we received could not be read, so there is nothing to display. Nothing was charged for this page.",
+      "No prices to show yet — the list we received could not be read, so there is nothing to display.",
       "unreadable",
       greensForNoScan,
     );

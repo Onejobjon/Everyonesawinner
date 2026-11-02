@@ -77,7 +77,7 @@ export async function requireProSession(
       ok: false,
       status: 401,
       error: "not_signed_in",
-      message: `Sign in to run ${what}. Nothing was fetched and nothing was charged.`,
+      message: `Sign in to run ${what}.`,
     };
   }
 
@@ -90,7 +90,7 @@ export async function requireProSession(
         ok: false,
         status: 401,
         error: "session_expired",
-        message: `Your session has expired — sign in again to run ${what}. Nothing was fetched and nothing was charged.`,
+        message: `Your session has expired — sign in again to run ${what}.`,
       };
     }
     const user = await findByEmail(session.email);
@@ -112,7 +112,7 @@ export async function requireProSession(
       status: 503,
       error: "account_unavailable",
       message:
-        "We could not check your account, so the search did not run. Nothing was fetched and nothing was charged.",
+        "We could not check your account, so the search did not run.",
     };
   }
 
@@ -121,7 +121,7 @@ export async function requireProSession(
       ok: false,
       status: 403,
       error: "pro_required",
-      message: `${what[0].toUpperCase()}${what.slice(1)} is a Pro tool. Upgrade to Pro to run it. Nothing was fetched and nothing was charged.`,
+      message: `${what[0].toUpperCase()}${what.slice(1)} is a Pro tool. Upgrade to Pro to run it.`,
     };
   }
 
@@ -153,7 +153,7 @@ export async function requirePaidSession(
       ok: false,
       status: 401,
       error: "not_signed_in",
-      message: `Sign in to see ${what}. Nothing was fetched and nothing was charged.`,
+      message: `Sign in to see ${what}.`,
     };
   }
   let email: string;
@@ -166,7 +166,7 @@ export async function requirePaidSession(
         ok: false,
         status: 401,
         error: "session_expired",
-        message: `Your session has expired — sign in again to see ${what}. Nothing was fetched and nothing was charged.`,
+        message: `Your session has expired — sign in again to see ${what}.`,
       };
     }
     const user = await findByEmail(session.email);
@@ -189,7 +189,7 @@ export async function requirePaidSession(
       status: 503,
       error: "account_unavailable",
       message:
-        "We could not check your account, so nothing was shown. Nothing was fetched and nothing was charged.",
+        "We could not check your account, so nothing was shown.",
     };
   }
 
@@ -198,7 +198,7 @@ export async function requirePaidSession(
       ok: false,
       status: 403,
       error: "subscription_required",
-      message: `${what[0].toUpperCase()}${what.slice(1)} is part of the paid tools. Choose a plan to see it. Nothing was fetched and nothing was charged.`,
+      message: `${what[0].toUpperCase()}${what.slice(1)} is part of the paid tools. Choose a plan to see it.`,
     };
   }
 

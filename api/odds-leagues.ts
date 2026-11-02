@@ -114,7 +114,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     send(
       {
         error: "not_signed_in",
-        message: "Sign in to run this search. Nothing was fetched and nothing was charged.",
+        message: "Sign in to run this search.",
       },
       401,
     );
@@ -131,7 +131,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "session_expired",
           message:
-            "Your session has expired — sign in again to run this search. Nothing was fetched and nothing was charged.",
+            "Your session has expired — sign in again to run this search.",
         },
         401,
       );
@@ -142,7 +142,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "account_unavailable",
           message:
-            "We could not check your account, so the search did not run. Nothing was fetched and nothing was charged.",
+            "We could not check your account, so the search did not run.",
         },
         503,
       );
@@ -156,7 +156,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       send(
         {
           error: "not_signed_in",
-          message: "Sign in to run this search. Nothing was fetched and nothing was charged.",
+          message: "Sign in to run this search.",
         },
         401,
       );
@@ -167,7 +167,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "pro_required",
           message:
-            "The Lay Bet Finder search is a Pro tool. Upgrade to Pro to run it. Nothing was fetched and nothing was charged.",
+            "The Lay Bet Finder search is a Pro tool. Upgrade to Pro to run it.",
         },
         403,
       );
@@ -180,7 +180,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       {
         error: "account_unavailable",
         message:
-          "We could not check your account, so the search did not run. Nothing was fetched and nothing was charged.",
+          "We could not check your account, so the search did not run.",
       },
       503,
     );
@@ -236,7 +236,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       {
         error: "odds_unavailable",
         message:
-          "The live odds feed is not configured on this server, so a search cannot run. Nothing was charged.",
+          "The live odds feed is not configured on this server, so a search cannot run.",
       },
       503,
     );

@@ -93,7 +93,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     send(
       {
         error: "not_signed_in",
-        message: "Sign in to fetch this match's markets. Nothing was fetched and nothing was charged.",
+        message: "Sign in to fetch this match's markets.",
       },
       401,
     );
@@ -110,7 +110,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "session_expired",
           message:
-            "Your session has expired — sign in again to fetch markets. Nothing was fetched and nothing was charged.",
+            "Your session has expired — sign in again to fetch markets.",
         },
         401,
       );
@@ -121,7 +121,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "account_unavailable",
           message:
-            "We could not check your account, so nothing was fetched. Nothing was charged.",
+            "We could not check your account, so nothing was fetched.",
         },
         503,
       );
@@ -135,7 +135,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       send(
         {
           error: "not_signed_in",
-          message: "Sign in to fetch this match's markets. Nothing was fetched and nothing was charged.",
+          message: "Sign in to fetch this match's markets.",
         },
         401,
       );
@@ -146,7 +146,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "pro_required",
           message:
-            "The Same-Match Planner is a Pro tool. Upgrade to Pro to use it. Nothing was fetched and nothing was charged.",
+            "The Same-Match Planner is a Pro tool. Upgrade to Pro to use it.",
         },
         403,
       );
@@ -158,7 +158,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     send(
       {
         error: "account_unavailable",
-        message: "We could not check your account, so nothing was fetched. Nothing was charged.",
+        message: "We could not check your account, so nothing was fetched.",
       },
       503,
     );
@@ -204,7 +204,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       {
         error: "odds_unavailable",
         message:
-          "The live odds feed is not configured on this server, so this match cannot be fetched. Nothing was charged.",
+          "The live odds feed is not configured on this server, so this match cannot be fetched.",
       },
       503,
     );
@@ -217,7 +217,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     send(
       {
         error: "unknown_competition",
-        message: "That competition is not in our list, so nothing was requested. Nothing was charged.",
+        message: "That competition is not in our list, so nothing was requested.",
       },
       400,
     );

@@ -147,11 +147,6 @@ function persist(p: Persisted): void {
   }
 }
 
-/** "3 credits" / "1 credit" — never a bare number next to the word credit. */
-function credits(n: number): string {
-  return `${n} credit${n === 1 ? "" : "s"}`;
-}
-
 export default function LayBets() {
   const persisted = useMemo(loadPersisted, []);
 
@@ -292,7 +287,6 @@ export default function LayBets() {
 
   const failed = result ? result.leagues.filter((l) => !l.ok) : [];
   const answered = result ? result.leagues.filter((l) => l.ok) : [];
-  const costNow = selected.length;
 
   const controlClass =
     "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200";
@@ -328,7 +322,7 @@ export default function LayBets() {
                 <p className="text-xs text-gray-500">
                   {selected.length === 0
                     ? "Nothing selected — pick at least one."
-                    : `${selected.length} of ${MAX_LEAGUES} selected · a search costs ${credits(costNow)} (the odds feed bills 1 credit per competition, whatever it returns)`}
+                    : `${selected.length} of ${MAX_LEAGUES} selected`}
                 </p>
               </div>
               <button
@@ -391,7 +385,7 @@ export default function LayBets() {
             })}
             {selected.length >= MAX_LEAGUES && (
               <p className="mt-3 text-xs text-gray-500">
-                That is the most one search covers ({MAX_LEAGUES} competitions = {credits(MAX_LEAGUES)}). Untick one to swap it for another.
+                That is the most one search covers ({MAX_LEAGUES} competitions). Untick one to swap it for another.
               </p>
             )}
           </div>
@@ -495,17 +489,17 @@ export default function LayBets() {
                   : `Search ${selected.length} competition${selected.length === 1 ? "" : "s"}`}
               </button>
               <p className="mt-1 text-center text-[11px] text-gray-500">
-                {selected.length === 0 ? "Nothing will be fetched" : `Costs ${credits(costNow)}`}
+                {selected.length === 0 ? "Nothing will be fetched" : "Reads the latest prices for your selection"}
               </p>
             </div>
           </div>
 
-          {/* Cost honesty, before the click. */}
+          {/* What the search does, before the click. */}
           <p className="mt-3 text-xs text-gray-400">
             Singles show every outcome with a lay gap under 0.20 (negative gap = better than break-even), on your £{stakeVal} cash back stake, including {commLabel} exchange commission (adjustable above — set it to what your exchange actually charges). Ice hockey is excluded — bookmaker back odds are regulation-time but exchange lays include overtime, so they never match.
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            <strong>Nothing is fetched until you press Search.</strong> This page never searches on its own — nothing runs until you press the button. A search reads fresh prices for each competition you selected, and the odds feed bills <strong>1 credit per competition</strong> however many fixtures come back: {selected.length === 0 ? "nothing to spend yet" : `${credits(costNow)} for this selection`}. Prices the feed reports as unavailable (1.00 / 451) are removed, and a lay price more than 10% below the bookmaker price is withheld — those rows are two different markets, not an opportunity.
+            <strong>Nothing is fetched until you press Search.</strong> This page never searches on its own — nothing runs until you press the button. A search reads fresh prices for each competition you selected, however many fixtures come back. Prices the feed reports as unavailable (1.00 / 451) are removed, and a lay price more than 10% below the bookmaker price is withheld — those rows are two different markets, not an opportunity.
           </p>
 
           {error && (
@@ -536,9 +530,8 @@ export default function LayBets() {
                   </p>
                   <p className="mt-2 text-sm text-gray-500">
                     Press <strong>Search</strong> to read the latest prices for the{" "}
-                    <strong>{selected.length}</strong> competition{selected.length === 1 ? "" : "s"} you have ticked. That costs{" "}
-                    <strong>{credits(costNow)}</strong> — the odds feed bills one credit per competition however many fixtures
-                    it returns — and the page will tell you exactly what it spent when the results come back.
+                    <strong>{selected.length}</strong> competition{selected.length === 1 ? "" : "s"} you have ticked,
+                    and the page will show you exactly what came back.
                   </p>
                 </div>
               </div>
@@ -555,10 +548,7 @@ export default function LayBets() {
                 </strong>{" "}
                 — {result.fixtures} fixture{result.fixtures === 1 ? "" : "s"} read, {results.singles.length} close-lay row
                 {results.singles.length === 1 ? "" : "s"} found. Showing <strong>{dayLabel}</strong>:{" "}
-                {dayMatches.length} fixture{dayMatches.length === 1 ? "" : "s"} matched. Credits spent:{" "}
-                <strong>{credits(result.credits.spent)}</strong>
-                {result.credits.measured ? " (measured by the odds feed)" : " (estimated — the feed did not report per-request cost)"}
-                {result.credits.remaining != null ? ` · ${result.credits.remaining.toLocaleString()} left on the account` : ""}.
+                {dayMatches.length} fixture{dayMatches.length === 1 ? "" : "s"} matched.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {result.leagues.map((l) => (
@@ -620,13 +610,13 @@ export default function LayBets() {
                     The search read <strong>{result.fixtures}</strong> fixture
                     {result.fixtures === 1 ? "" : "s"} from {answered.length} competition
                     {answered.length === 1 ? "" : "s"}, and none of them kicks off on the day you have
-                    chosen. That is a date result, not an empty table — the credits are already spent,
+                    chosen. That is a date result, not an empty table — these prices are already read,
                     so try another day without searching again.
                   </p>
                   <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-500">
                     <li>Switch to <strong>Next 7 days</strong> to see everything this search returned.</li>
                     <li>Or pick the specific date you care about.</li>
-                    <li>Searching again would cost {credits(costNow)} and is not needed for this.</li>
+                    <li>Searching again is not needed for this.</li>
                   </ul>
                 </div>
               </div>
@@ -646,7 +636,7 @@ export default function LayBets() {
                   </p>
                   <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-500">
                     {minOdds > 1 && <li>Lower the minimum back odds.</li>}
-                    <li>Add more competitions — a wider search costs more credits (1 each).</li>
+                    <li>Add more competitions — a wider search reads more of the feed.</li>
                     <li>Odds move constantly; search again in a few minutes.</li>
                   </ul>
                 </div>

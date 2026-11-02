@@ -9,17 +9,24 @@
  * cannot silence it.
  *
  * THE RULES (owner's instruction, 2026-10-28):
- *   • no scan completed for ~25 minutes while the machine is up → ONE message;
+ *   • no scan completed for longer than a normal cycle allows → ONE message;
  *   • one message PER STALL — not one every scan, and no heartbeat when things
  *     are fine. Silence is the healthy state.
+ *
+ * THE THRESHOLD FOLLOWS THE CADENCE (2026-11-03): the sweep now runs every 30
+ * minutes (src/lib/cadence.ts), so the old 25-minute threshold would have fired on
+ * every healthy cycle — an alarm that cries wolf on a working system is worse than
+ * no alarm. It is now STALL_ALARM_MIN (75 min = two and a half cycles), imported
+ * rather than typed here so the two can never drift apart again.
  *
  * The decision is a pure function so the "once per stall" behaviour can be tested
  * without sending anything: see test/gap-alarm.test.ts.
  */
 import { londonDayKey, londonTimeLabel } from "../lib/london-day";
+import { SCAN_INTERVAL_MIN, STALL_ALARM_MIN } from "../lib/cadence";
 
 /** Minutes without a completed scan before we say something. */
-export const GAP_ALARM_MIN = 25;
+export const GAP_ALARM_MIN = STALL_ALARM_MIN;
 
 export interface GapAlarmInput {
   /** "Now" — injectable for tests. */
@@ -118,7 +125,7 @@ export function decideGapAlarm(input: GapAlarmInput): GapAlarmDecision {
 
   const message =
     `⚠️ Everyone's A Winner — the odds scanner has stalled.\n` +
-    `It has been ${howLong} (${since}). Scans normally run every 10 minutes, so ` +
+    `It has been ${howLong} (${since}). Scans normally run every ${SCAN_INTERVAL_MIN} minutes, so ` +
     `${threshold} minutes of silence means the worker is down or wedged.\n` +
     `Nothing needs doing: the supervisor restarts it automatically, and you will get ` +
     `one more message only if it stalls again after recovering. This is the only ` +

@@ -330,7 +330,7 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-7xl px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and what each one would include. <strong>No plan can be bought yet.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and nothing can be charged until it does.</span></p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and what each one would include. <strong>No plan can be bought yet.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and no payment can be taken until it does.</span></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
               {n:"Starter",p:"£19.99",pr:"/month (planned)",d:"The oddsmatcher and the calculator.",f:["Best Odds Finder (oddsmatcher)","Profit calculator with lay stake and liability","The licence-checked free-bets list"],pop:false},

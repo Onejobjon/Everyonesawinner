@@ -110,12 +110,12 @@ export async function fetchMatchMarkets(req: MarketRequest): Promise<SameMatchFe
         (payload == null
           ? // A non-JSON reply means the fetch endpoint is not being served by
             // this host yet — say so plainly instead of leaking a status code.
-            "The server did not return market data for this match. Nothing was charged — try again in a moment."
+            "The server did not return market data for this match — try again in a moment."
           : res.status === 403
             ? "This is a Pro tool — upgrade to Pro to fetch a match."
             : res.status === 401
-              ? "Sign in again to fetch a match. Nothing was charged."
-              : `The fetch could not run (${res.status}). Nothing was charged.`)
+              ? "Sign in again to fetch a match."
+              : `The fetch could not run (${res.status}).`)
     );
   }
 

@@ -40,6 +40,7 @@ import {
 import { checkBackLayPair, isSameBookmakerKey } from "../lib/odds-sanity";
 import { readGreenHistory, recordGreens } from "./green-history";
 import { pushSnapshot } from "./scan-bridge";
+import { SCAN_INTERVAL_MIN } from "../lib/cadence";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
@@ -77,10 +78,12 @@ const FRESHNESS_MAX_GAP_MS = 60 * 60_000; // 60 minutes
 const ACTIONABILITY_BUFFER_MS = 15 * 60_000; // 15 minutes
 
 // ── Config (all env-var driven, safe defaults) ─────────────────────────────
-// How often the worker runs a check (minutes). Default 10 = matches the site's
-// 10-minute odds refresh, so an opportunity is alerted as soon as it is scanned
-// rather than sitting until the next hour (owner directive, 2026-10-27).
-const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, 10);
+// How often the worker runs a check (minutes). Default 30 — the owner's cadence
+// (2026-11-03), shared with the bash loop and the stall alarm through
+// src/lib/cadence.ts so the three cannot drift apart. A page open can also ask
+// for a scan (src/server/scan-on-open.ts), which is why 30 minutes is acceptable
+// as a background rate.
+const CHECK_INTERVAL_MIN = num(process.env.ALERT_CHECK_INTERVAL_MIN, SCAN_INTERVAL_MIN);
 // NOTE: there is no single snapshot TTL any more — each SPORT has its own
 // freshness window (SPORT_ODDS_TTL_MIN below), because a same-day sweep is one
 // credit per sport and 20 sports every 10 minutes would burn the month in a day.

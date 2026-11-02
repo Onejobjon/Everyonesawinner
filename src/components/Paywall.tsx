@@ -139,7 +139,7 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
                 <span className="text-3xl font-extrabold">£269.99</span>
                 <span className="text-sm text-gray-500">/yr</span>
               </div>
-              <p className="mt-1 text-xs text-gray-500">Billed once a year (planned)</p>
+              <p className="mt-1 text-xs text-gray-500">Paid once a year (planned)</p>
               <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
                 <li>• Lay Bet Finder — close single lays</li>
                 <li>• Acca Lay Planner — 2–4-leg lay plans</li>
@@ -153,7 +153,7 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
           </div>
 
           <p className="mt-8 text-sm text-gray-500">
-            Checkout isn't open yet — we're finishing the payment setup, and nothing can be charged until it does. These are the plans we intend to offer, not prices you can buy today.
+            Checkout isn't open yet — we're finishing the payment setup, and no payment can be taken until it does. These are the plans we intend to offer, not prices you can buy today.
           </p>
         </div>
       </div>

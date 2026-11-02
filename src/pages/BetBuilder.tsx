@@ -437,7 +437,7 @@ export default function BetBuilder() {
 
           {/* Honesty rails + freshness */}
           <p className="mt-3 text-xs text-gray-400">
-            Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20); ice hockey is excluded (regulation-time back vs overtime lay). {mode === "paid" ? <>Figures use your £{paidStakeVal} back stake (your own money) and {commLabel} exchange commission — a small locked-in loss is the normal qualifying cost, never a guaranteed profit.</> : <>Figures use a £{freeStakeVal} stake-not-returned free bet and {commLabel} exchange commission.</>} Run searches the freshest prices we hold — it never spends a credit.
+            Multi-leg bets always combine legs from different matches — same-game bet builders can't be laid on the exchange, so they're excluded. Legs are limited to back odds of 1.10–6.00 and a close exchange lay price (within 0.20); ice hockey is excluded (regulation-time back vs overtime lay). {mode === "paid" ? <>Figures use your £{paidStakeVal} back stake (your own money) and {commLabel} exchange commission — a small locked-in loss is the normal qualifying cost, never a guaranteed profit.</> : <>Figures use a £{freeStakeVal} stake-not-returned free bet and {commLabel} exchange commission.</>} Run searches the freshest prices we hold.
           </p>
           <p className="mt-1 text-xs text-gray-400">Pre-match odds — refresh every 10 minutes.</p>
 

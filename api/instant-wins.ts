@@ -69,7 +69,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     send(
       {
         error: "not_signed_in",
-        message: "Sign in to see the instant-win feed. Nothing was fetched and nothing was charged.",
+        message: "Sign in to see the instant-win feed.",
       },
       401,
     );
@@ -87,7 +87,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "session_expired",
           message:
-            "Your session has expired — sign in again to see the instant-win feed. Nothing was fetched and nothing was charged.",
+            "Your session has expired — sign in again to see the instant-win feed.",
         },
         401,
       );
@@ -98,7 +98,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "account_unavailable",
           message:
-            "We could not check your account, so the feed was not shown. Nothing was fetched and nothing was charged.",
+            "We could not check your account, so the feed was not shown.",
         },
         503,
       );
@@ -113,7 +113,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       send(
         {
           error: "not_signed_in",
-          message: "Sign in to see the instant-win feed. Nothing was fetched and nothing was charged.",
+          message: "Sign in to see the instant-win feed.",
         },
         401,
       );
@@ -124,7 +124,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         {
           error: "subscription_required",
           message:
-            "The instant-win feed is part of the paid tools. Choose a plan to see it. Nothing was fetched and nothing was charged.",
+            "The instant-win feed is part of the paid tools. Choose a plan to see it.",
         },
         403,
       );
@@ -136,7 +136,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       {
         error: "account_unavailable",
         message:
-          "We could not check your account, so the feed was not shown. Nothing was fetched and nothing was charged.",
+          "We could not check your account, so the feed was not shown.",
       },
       503,
     );
@@ -172,7 +172,7 @@ export default async function handler(req: any, res: any): Promise<void> {
         status: "no_scan",
         reason: "unreadable",
         message:
-          "No prices to show yet — we could not reach the list of prices for this page. Nothing was charged for this page.",
+          "No prices to show yet — we could not reach the list of prices for this page.",
         scannedAt: null,
         ageMinutes: null,
         stale: false,
@@ -191,7 +191,7 @@ export default async function handler(req: any, res: any): Promise<void> {
       status: "no_scan",
       reason: "missing",
       message:
-        "No prices to show yet — today's list has not arrived. Nothing was charged for this page.",
+        "No prices to show yet — today's list has not arrived.",
       scannedAt: null,
       ageMinutes: null,
       stale: false,

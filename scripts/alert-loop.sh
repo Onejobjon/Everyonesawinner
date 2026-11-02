@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Alert worker loop — the owner's hourly opportunity scans. PORT-FREE by design:
+# Alert worker loop — the owner's 30-minute opportunity scans. PORT-FREE by design:
 # it never binds a socket, so it does not care that the platform dev server owns
 # port 3000. Each tick is one `runAlertCheck()` in a fresh bun process, so a
 # crash cannot leave the worker half-dead, and a bad scan can never wedge the
 # schedule.
+#
+# CADENCE (owner directive 2026-11-03: "scan every 30mins and on open"):
+#   30 minutes = 1800s, and it is a DEFAULT IN THIS COMMITTED FILE, not an env var
+#   set in somebody's shell — so a replaced machine re-reads it and comes back at
+#   the same cadence (the pidfile fix below survives the same way). The number is
+#   pinned to src/lib/cadence.ts by test/cadence.test.ts; change both together.
+#   "On open" is the other half and lives in src/server/scan-on-open.ts.
 #
 # Credentials are READ FROM FILE at start-up — they are never pasted into this
 # script, the repo, or a command line:
@@ -24,7 +31,7 @@ cd "$HERE/.."
 REPO="$PWD"
 SECRETS="/home/team/shared/.secrets/telegram.env"
 LOG="$REPO/.run/alerts.log"
-INTERVAL="${ALERT_INTERVAL_SEC:-600}"   # every 10 min — alerts as soon as scanned (owner directive 2026-10-27)
+INTERVAL="${ALERT_INTERVAL_SEC:-1800}"   # every 30 min — OWNER DIRECTIVE 2026-11-03 ("scan every 30mins and on open")
 RETRY_FAST="${ALERT_RETRY_SEC:-15}"      # quick retry when a tick crashes
 mkdir -p .run
 

@@ -39,8 +39,8 @@ describe("gap alarm — one message per stall, silence when healthy", () => {
     if (d.action === "none") expect(d.reason).toContain("shorter than");
   });
 
-  test("25+ minutes of silence fires once, and only once", () => {
-    const lastScanAt = "2026-11-02T11:20:00Z"; // 40 minutes ago
+  test("75+ minutes of silence fires once, and only once", () => {
+    const lastScanAt = "2026-11-02T10:45:00Z"; // 75 minutes ago
     const first = decideGapAlarm({
       now: NOW,
       lastScanAt,
@@ -49,11 +49,11 @@ describe("gap alarm — one message per stall, silence when healthy", () => {
     });
     expect(first.action).toBe("alert");
     if (first.action !== "alert") return;
-    expect(first.gapMinutes).toBe(40);
-    expect(first.stallKey).toBe("2026-11-02T11:20:00.000Z");
+    expect(first.gapMinutes).toBe(75);
+    expect(first.stallKey).toBe("2026-11-02T10:45:00.000Z");
     expect(first.message).toContain("stalled");
-    expect(first.message).toContain("40 minutes ago");
-    expect(first.message).toContain("11:20 today");
+    expect(first.message).toContain("1 hour 15 minutes ago");
+    expect(first.message).toContain("10:45 today");
     // It must not promise a stream of messages.
     expect(first.message).toContain("only message for this stall");
 
@@ -73,13 +73,13 @@ describe("gap alarm — one message per stall, silence when healthy", () => {
       now: NOW,
       lastScanAt: "2026-11-02T11:58:00Z", // healthy again
       uptimeMs: 3 * 60 * 60_000,
-      announcedFor: "2026-11-02T11:20:00.000Z",
+      announcedFor: "2026-11-02T10:45:00.000Z",
     });
     expect(cleared.action).toBe("clear");
 
     const nextStall = decideGapAlarm({
-      now: new Date("2026-11-02T13:00:00Z"),
-      lastScanAt: "2026-11-02T11:58:00Z", // 62 min ago
+      now: new Date("2026-11-02T13:30:00Z"),
+      lastScanAt: "2026-11-02T11:58:00Z", // 92 min ago
       uptimeMs: 3 * 60 * 60_000,
       announcedFor: null, // state was cleared
     });
@@ -99,18 +99,18 @@ describe("gap alarm — one message per stall, silence when healthy", () => {
     expect(d.message).toContain("since this machine started");
   });
 
-  test("the threshold is 25 minutes and the edges are honest", () => {
-    expect(GAP_ALARM_MIN).toBe(25);
+  test("the threshold is 75 minutes and the edges are honest", () => {
+    expect(GAP_ALARM_MIN).toBe(75);
     const justUnder = decideGapAlarm({
       now: NOW,
-      lastScanAt: new Date(NOW.getTime() - 24 * 60_000).toISOString(),
+      lastScanAt: new Date(NOW.getTime() - 74 * 60_000).toISOString(),
       uptimeMs: 3 * 60 * 60_000,
       announcedFor: null,
     });
     expect(justUnder.action).toBe("none");
     const justOver = decideGapAlarm({
       now: NOW,
-      lastScanAt: new Date(NOW.getTime() - 26 * 60_000).toISOString(),
+      lastScanAt: new Date(NOW.getTime() - 76 * 60_000).toISOString(),
       uptimeMs: 3 * 60 * 60_000,
       announcedFor: null,
     });

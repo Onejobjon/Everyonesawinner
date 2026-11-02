@@ -53,7 +53,7 @@ export default function SubscribeSuccess() {
             <span className="text-6xl">ℹ️</span>
             <h1 className="mt-6 text-2xl font-bold">We haven't received a payment for this account</h1>
             <p className="mt-2 text-gray-600 dark:text-gray-400">
-              This page does not activate anything — only our server can confirm a payment, and checkout isn't open yet. Nothing has been charged.
+              This page does not activate anything — only our server can confirm a payment, and checkout isn't open yet. No payment has been taken.
             </p>
             <div className="mt-8 flex gap-4 justify-center">
               <Link to="/dashboard" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">

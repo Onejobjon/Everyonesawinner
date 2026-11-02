@@ -23,7 +23,7 @@
  *   • A green row is a FEED price, not a guaranteed fill: exchange liquidity can
  *     make the lay unachievable at that price, and the panel says so.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { sessionToken, type Match } from "../lib/odds-api";
 import {
@@ -56,6 +56,16 @@ interface Payload {
   matches?: Match[];
   /** Greens found in the last 30 days — already in the payload, so no extra cost. */
   greens30d?: GreensSummary;
+  /**
+   * A scan was started when this page opened (owner directive 2026-11-03, "scan
+   * every 30mins and on open"). The rows above are still the previous snapshot —
+   * the page re-checks once, ~30 s later, and swaps in the newer data if it landed.
+   */
+  refreshing?: boolean;
+  /** When that on-open scan started (ISO). */
+  refreshStartedAt?: string | null;
+  /** The most recent on-open scan failed — the prices here may have moved. */
+  refreshFailed?: boolean;
   error?: string;
 }
 
@@ -80,16 +90,33 @@ export default function InstantWins() {
   const [payload, setPayload] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stake, setStake] = useState<string>(DEFAULT_STAKE);
+  // A re-check that failed on the way back. Kept separate from the server's
+  // `refreshFailed` so a dropped connection says the same thing as a failed scan.
+  const [recheckFailed, setRecheckFailed] = useState(false);
+  // Bounded, so a slow scan can never turn into a polling loop.
+  const rechecks = useRef(0);
   const { pct: commPct, rate: commission, label: commLabel, setPct: setCommPct } =
     useExchangeCommission();
 
   const stakeVal = parseStake(stake);
 
-  // ONE read on open. It reads a file on the server; it never fetches odds, so
-  // this costs zero credits — the panel says so on the page too.
-  const load = useCallback(async () => {
-    setPhase("loading");
-    setError(null);
+  /**
+   * ONE read on open, plus at most one silent re-check.
+   *
+   * The server starts a scan if the prices it holds are stale ("scan on open"),
+   * and answers IMMEDIATELY with the old snapshot and `refreshing: true`. So:
+   *   • a first read may set the panel to loading;
+   *   • a re-check (`silent`) NEVER blanks the panel — if it fails, the rows the
+   *     user is reading stay exactly where they are and we say the prices may have
+   *     moved. Blanking a list of prices because a refresh failed would be a lie:
+   *     it would read as "no green trades".
+   */
+  const load = useCallback(async (opts: { silent?: boolean } = {}) => {
+    const silent = opts.silent === true;
+    if (!silent) {
+      setPhase("loading");
+      setError(null);
+    }
     try {
       const token = sessionToken();
       const headers: Record<string, string> = { accept: "application/json" };
@@ -97,13 +124,23 @@ export default function InstantWins() {
       const res = await fetch("/api/instant-wins", { headers, cache: "no-store" });
       const body = (await res.json().catch(() => null)) as Payload | null;
       if (!res.ok || !body) {
+        if (silent) {
+          setRecheckFailed(true);
+          return;
+        }
         setError(body?.message || body?.error || `The feed could not load (${res.status}).`);
         setPhase("error");
         return;
       }
+      setRecheckFailed(false);
+      setError(null);
       setPayload(body);
       setPhase("ready");
     } catch (e) {
+      if (silent) {
+        setRecheckFailed(true);
+        return;
+      }
       setError(e instanceof Error ? e.message : "The feed could not load.");
       setPhase("error");
     }
@@ -112,6 +149,19 @@ export default function InstantWins() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The on-open scan was started by the server. Look once more in ~30 s — by then
+  // a normal scan has finished — and render the newer data if it has landed. Two
+  // attempts at most, so a wedged scan cannot become a polling loop.
+  useEffect(() => {
+    if (!payload?.refreshing) return;
+    if (rechecks.current >= 2) return;
+    const timer = setTimeout(() => {
+      rechecks.current += 1;
+      void load({ silent: true });
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [payload?.refreshing, payload?.scannedAt, load]);
 
   const now = useMemo(() => new Date(), [payload]);
   const built = useMemo(() => {
@@ -148,8 +198,7 @@ export default function InstantWins() {
             that it returns money whichever way the result goes, after commission, on your stake.
           </p>
           <p className="mt-2 inline-block rounded-lg bg-purple-50 px-3 py-1 text-xs font-medium text-purple-800 dark:bg-purple-950/50 dark:text-purple-200">
-            Costs <strong>nothing</strong> to load: it shows the prices we already hold and fetches
-            no new ones.
+            Loads straight from the list we already hold — no search, no click.
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -174,6 +223,25 @@ export default function InstantWins() {
       {/* Freshness — always visible, and loud once the scan is old. */}
       {phase === "ready" && payload?.status === "ok" && (
         <div className="mt-4">
+          {payload?.refreshing && (
+            <p
+              className="mb-2 rounded-lg border border-purple-200 bg-purple-50 p-3 text-sm font-medium text-purple-900 dark:border-purple-900 dark:bg-purple-950/40 dark:text-purple-200"
+              role="status"
+            >
+              Updating these prices now — the list below is the previous set, and this page will
+              swap in the new one as soon as it lands. You do not need to do anything.
+            </p>
+          )}
+          {(payload?.refreshFailed || recheckFailed) && !payload?.refreshing && (
+            <p
+              className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+              role="status"
+            >
+              We could not update these prices just now, so they may have moved since we looked.
+              What you see below is the last set we did read — check the price at the bookmaker and
+              the exchange before you place anything.
+            </p>
+          )}
           <p className="text-sm text-gray-700 dark:text-gray-200" role="status">
             {asOfLabel ? (
               <>
@@ -249,6 +317,11 @@ export default function InstantWins() {
             This is not &ldquo;no green trades&rdquo; — it means we have no prices to show you yet.
             Check back in a few minutes.
           </p>
+          {payload?.refreshing && (
+            <p className="mt-2 text-sm font-medium text-purple-700 dark:text-purple-300" role="status">
+              We are reading today&rsquo;s prices now — this page will fill in on its own.
+            </p>
+          )}
         </div>
       )}
 
@@ -401,8 +474,8 @@ export default function InstantWins() {
           Open the Lay Bet Finder — search your own competitions →
         </Link>
         <span className="text-xs text-gray-500">
-          The finder is the manual search: you pick competitions and a date, and it says what it costs
-          before you press it. This panel is the free, already-loaded list.
+          The finder is the manual search: you pick competitions and a date, and it reads fresh
+          prices when you press Search. This panel is the already-loaded list.
         </span>
       </div>
     </section>

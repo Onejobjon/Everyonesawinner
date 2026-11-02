@@ -99,7 +99,7 @@ export default function Subscribe() {
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Choose your plan</h1>
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            These are the plans we intend to offer. Play isn't open yet — we're finishing the payment setup, and nothing can be charged until it does.
+            These are the plans we intend to offer. Play isn't open yet — we're finishing the payment setup, and no payment can be taken until it does.
             <br />
             <span className="text-sm">Starter includes the oddsmatcher and calculator. Pro adds the Lay Bet Finder and the Acca Lay Planner.</span>
           </p>
@@ -145,7 +145,7 @@ export default function Subscribe() {
                 Checkout opens shortly
               </button>
               <p className="mt-2 text-xs text-gray-400 text-center">
-                Nothing can be charged until checkout opens.
+                No payment can be taken until checkout opens.
               </p>
             </div>
           ))}

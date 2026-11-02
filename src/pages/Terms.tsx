@@ -87,7 +87,7 @@ export default function Terms() {
       </P>
       <P>
         If and when checkout opens, the price, the billing period and how to cancel will be published
-        on the plan page before you pay anything. You will not be charged without seeing them first.
+        on the plan page before you pay anything. You will not be asked to pay without seeing them first.
       </P>
 
       <H2>8. Availability</H2>
