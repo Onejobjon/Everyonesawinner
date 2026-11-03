@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { decideGapAlarm, GAP_ALARM_MIN } from "../src/server/gap-alarm";
+import { resolveChatId, systemSuppressionReason } from "../src/server/telegram-channels";
 
 const REPO = join(import.meta.dir, "..");
 const RUN_DIR = process.env.ALERTS_RUN_DIR || join(REPO, ".run");
@@ -84,8 +85,15 @@ function loadSecrets(): void {
 
 async function sendTelegram(text: string): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN || "";
-  const chatId = process.env.TELEGRAM_CHAT_ID || "";
-  if (!token || !chatId) {
+  // A stall alarm is a SYSTEM message: private admin chat only, never the
+  // customer-facing alerts group, and suppressed (not redirected) when no
+  // private admin chat is configured. See src/server/telegram-channels.ts.
+  const chatId = resolveChatId("system");
+  if (!chatId) {
+    console.error(`[gap-alarm] suppressed — ${systemSuppressionReason()}; message NOT sent`);
+    return false;
+  }
+  if (!token) {
     console.error("[gap-alarm] no Telegram credentials — message NOT sent");
     return false;
   }

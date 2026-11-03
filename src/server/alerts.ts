@@ -14,8 +14,12 @@
  *      header (secret ALERT_WEBHOOK_SECRET).
  *   B. Email — short plain-text alert to ALERT_EMAIL_TO via the Resend HTTP API
  *      (ALERT_EMAIL_API_KEY + ALERT_EMAIL_FROM).
- *   C. Telegram (optional) — message to TELEGRAM_CHAT_ID via the Bot API
- *      (TELEGRAM_BOT_TOKEN).
+ *   C. Telegram (optional) — Bot API (TELEGRAM_BOT_TOKEN), TWO destinations:
+ *      opportunity alerts → TELEGRAM_ALERTS_CHAT_ID (falls back to the legacy
+ *      TELEGRAM_CHAT_ID, may be a group); system messages (stall alarms,
+ *      delivery self-tests, health pings) → TELEGRAM_ADMIN_CHAT_ID, private
+ *      only, suppressed rather than leaked when that is not set.
+ *      See src/server/telegram-channels.ts.
  *
  * Quota-aware: the-odds-api.com free tier is ~500 requests/month. The worker
  * reuses a fresh on-disk cache instead of re-fetching, and runs on a
@@ -42,6 +46,11 @@ import { readGreenHistory, recordGreens } from "./green-history";
 import { pushSnapshot } from "./scan-bridge";
 import { SCAN_INTERVAL_MIN } from "../lib/cadence";
 import { SCAN_WINDOW_HOURS, isInScanWindow, windowPhrase } from "../lib/scan-window";
+import {
+  resolveChatId,
+  systemSuppressionReason,
+  type TelegramChannel,
+} from "./telegram-channels";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
@@ -96,9 +105,15 @@ const WEBHOOK_SECRET = process.env.ALERT_WEBHOOK_SECRET || "";
 const EMAIL_API_KEY = process.env.ALERT_EMAIL_API_KEY || "";
 const EMAIL_FROM = process.env.ALERT_EMAIL_FROM || "";
 const EMAIL_TO = process.env.ALERT_EMAIL_TO || "";
-// Channel C — Telegram (env names per owner spec)
-const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
+// Channel C — Telegram. TWO destinations, resolved per send (see
+// src/server/telegram-channels.ts for the rule):
+//   alerts  → TELEGRAM_ALERTS_CHAT_ID (falls back to TELEGRAM_CHAT_ID), may be a group
+//   system  → TELEGRAM_ADMIN_CHAT_ID only, must be a PRIVATE chat, else suppressed
+// Read at call time, not module load, so a machine replacement or a changed env
+// takes effect without restarting the worker mid-flight.
+function tgToken(): string {
+  return (process.env.TELEGRAM_BOT_TOKEN || "").trim();
+}
 
 // Overridable so tests can prove the instrumentation without touching real state.
 const RUN_DIR = process.env.ALERTS_RUN_DIR || join(import.meta.dir, "../../.run");
@@ -292,6 +307,47 @@ export interface SportsIndex {
   totalFixturesInWindow: number;
   /** Free calls that failed (rate limit, network) — coverage is understated, not invented. */
   failed: number;
+  /**
+   * The full in-season key list from the vendor, persisted so a later bad
+   * response can be judged against it and rebuilt from it (see the guard in
+   * `fetchSportsIndex`). Optional: index files written before 2026-11-03 do not
+   * have it.
+   */
+  inSeason?: string[];
+  /** Set when the vendor's sports list came back implausibly short and we fell
+   * back to what we already knew instead of publishing a two-sport world. */
+  degraded?: boolean;
+  /** One line saying what went wrong, for the status surface and the log. */
+  degradedReason?: string;
+}
+
+/**
+ * A healthy `/sports/?all=false` answers with ~78–80 in-season sports, whatever
+ * the calendar says — the list is what the vendor supports, not what is playing.
+ *
+ * OBSERVED DEFECT (2026-11-03, 23:11 scan): the same endpoint returned 2 sports,
+ * the index recorded `sportsInSeason: 2`, and coverage collapsed to one sport
+ * for the next half hour. Two hand checks at 23:14 returned 80. The response was
+ * wrong, not the world: below this floor it is treated as broken.
+ */
+export const SPORTS_LIST_FLOOR = 20;
+
+/** The previous index must have recorded at least this many sports before a
+ * short answer is judged against it (a healthy one records ~80). */
+export const SPORTS_LIST_PREVIOUS_FLOOR = 80;
+
+/** Is this in-season count too small to believe? */
+export function sportsListIsShort(count: number): boolean {
+  return !Number.isFinite(count) || count < SPORTS_LIST_FLOOR;
+}
+
+/** Did the last index record a full list we can fall back to? */
+export function previousListIsUsable(previousCount: number | null | undefined): boolean {
+  return (
+    typeof previousCount === "number" &&
+    Number.isFinite(previousCount) &&
+    previousCount >= SPORTS_LIST_PREVIOUS_FLOOR
+  );
 }
 
 interface SportCacheEntry {
@@ -354,31 +410,101 @@ function sleep(ms: number): Promise<void> {
  * does not hammer 78 free endpoints every time. A failed call is COUNTED, never
  * treated as "that sport has nothing on" — an understated coverage number that
  * says so is honest; a silently short list is not.
+ *
+ * GUARD (2026-11-03): a short `/sports/?all=false` answer is a BAD RESPONSE, not
+ * news. See SPORTS_LIST_FLOOR. It is retried once; if it is still short the
+ * previous index's in-season list is reused rather than publishing a collapse.
+ * The failure is logged loudly (`!! SPORTS LIST ...`) and the returned index is
+ * marked `degraded` with a reason.
+ *
+ * `opts` exists for tests: `runDir` points the index file somewhere temporary
+ * (the module-level default is fixed at import), `retryDelayMs` removes the
+ * pacing wait. Production passes neither.
  */
-export async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIndex> {
+export async function fetchSportsIndex(
+  now: Date = new Date(),
+  opts: { runDir?: string; retryDelayMs?: number } = {},
+): Promise<SportsIndex> {
+  const indexFile = opts.runDir ? join(opts.runDir, "alerts-sports-index.json") : INDEX_FILE;
+  const retryDelayMs = opts.retryDelayMs ?? num(process.env.SPORTS_LIST_RETRY_MS, 2000);
+
+  // The previous index is read even when it is stale: it is the only record of
+  // what a healthy sports list looked like, and the guard below needs it.
+  let previous: SportsIndex | null = null;
   try {
-    if (existsSync(INDEX_FILE)) {
-      const cached = JSON.parse(readFileSync(INDEX_FILE, "utf8")) as SportsIndex;
+    if (existsSync(indexFile)) {
+      const cached = JSON.parse(readFileSync(indexFile, "utf8")) as SportsIndex;
       // A file written before the window rename has `totalTodayFixtures` and no
       // `totalFixturesInWindow`. Its numbers were built on the calendar-day rule,
       // so it is not merely stale — it is answering the wrong question. Rebuild.
       const rightShape =
         Array.isArray(cached?.sports) && Number.isFinite(cached?.totalFixturesInWindow);
-      if (
-        rightShape &&
-        Number.isFinite(cached?.ts) &&
-        Date.now() - cached.ts < INDEX_TTL_MIN * 60_000
-      ) {
-        return cached;
+      if (rightShape && Number.isFinite(cached?.ts)) {
+        previous = cached;
+        if (Date.now() - cached.ts < INDEX_TTL_MIN * 60_000) return cached;
       }
     }
   } catch {
     /* unreadable index — rebuild it */
   }
 
-  const list = await getJson(auth("/sports/?all=false"));
-  const all = Array.isArray(list.body) ? (list.body as { key?: string; title?: string; active?: boolean }[]) : [];
-  const inSeason = all.filter((s) => s.active !== false && typeof s.key === "string");
+  const parseList = (body: unknown): { key: string; title?: string }[] => {
+    if (!Array.isArray(body)) return []; // a failed call is not "no sports"
+    return (body as { key?: string; title?: string; active?: boolean }[]).filter(
+      (s) => s?.active !== false && typeof s?.key === "string",
+    ) as { key: string; title?: string }[];
+  };
+
+  let inSeason = parseList((await getJson(auth("/sports/?all=false"))).body);
+  let degradedReason: string | undefined;
+
+  if (sportsListIsShort(inSeason.length)) {
+    log(
+      `!! SPORTS LIST SHORT: /sports/?all=false returned ${inSeason.length} in-season sports` +
+        (previous ? ` (previous index recorded ${previous.sportsInSeason})` : "") +
+        ` — floor is ${SPORTS_LIST_FLOOR}, retrying once before trusting it`,
+    );
+    await sleep(retryDelayMs);
+    const retry = parseList((await getJson(auth("/sports/?all=false"))).body);
+
+    if (!sportsListIsShort(retry.length)) {
+      log(`sports list recovered on retry: ${retry.length} in-season sports`);
+      inSeason = retry;
+    } else if (previous && previousListIsUsable(previous.sportsInSeason)) {
+      degradedReason = `vendor sports list returned ${retry.length} in-season sports (previous index recorded ${previous.sportsInSeason})`;
+      const keys =
+        Array.isArray(previous.inSeason) && previous.inSeason.length >= SPORTS_LIST_FLOOR
+          ? previous.inSeason
+          : null;
+      if (keys) {
+        // Best case: we know the full list, so rebuild it with FRESH fixture
+        // counts (still 0 credits — the events endpoints are free).
+        const titles = new Map(previous.sports.map((s) => [s.key, s.title]));
+        log(
+          `!! SPORTS LIST STILL SHORT (${retry.length}) — reusing the previous index's ` +
+            `${keys.length} in-season sports and re-counting their fixtures`,
+        );
+        inSeason = keys.map((key) => ({ key, title: titles.get(key) }));
+      } else {
+        // An index written before this guard existed has no key list: reuse its
+        // coverage as-is rather than guess. Its `ts` is left alone (it is already
+        // past the TTL), so the next scan asks the vendor again instead of
+        // sitting on this fallback for another TTL window.
+        log(
+          `!! SPORTS LIST STILL SHORT (${retry.length}) — reusing the previous index unchanged ` +
+            `(${previous.sports.length} sports with fixtures, recorded ${previous.sportsInSeason} in season)`,
+        );
+        return { ...previous, degraded: true, degradedReason };
+      }
+    } else {
+      degradedReason = `vendor sports list returned ${retry.length} in-season sports and there is no previous index to fall back on`;
+      log(
+        `!! SPORTS LIST STILL SHORT (${retry.length}) and there is no previous index to fall back on ` +
+          `— continuing with ${Math.max(inSeason.length, retry.length)} sports; coverage will be understated`,
+      );
+      if (retry.length > inSeason.length) inSeason = retry;
+    }
+  }
 
   const sports: SportIndexEntry[] = [];
   let totalFixturesInWindow = 0;
@@ -418,10 +544,14 @@ export async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIn
     sports,
     totalFixturesInWindow,
     failed,
+    // Persisted so the NEXT scan can judge a short list against a known-good one
+    // and rebuild from it instead of publishing the collapse.
+    inSeason: inSeason.map((s) => s.key as string),
+    ...(degradedReason ? { degraded: true, degradedReason } : {}),
   };
   try {
-    mkdirSync(RUN_DIR, { recursive: true });
-    writeFileSync(INDEX_FILE, JSON.stringify(index));
+    mkdirSync(opts.runDir ?? RUN_DIR, { recursive: true });
+    writeFileSync(indexFile, JSON.stringify(index));
   } catch (e) {
     log(`sports index write failed: ${String(e)}`);
   }
@@ -907,7 +1037,7 @@ async function deliver(o: Opportunity): Promise<void> {
 
   // C — Telegram (critical). Throws on failure so the caller does NOT mark the
   // opportunity seen, and it is retried on the next scan.
-  await postTelegram(telegramText(o));
+  await postTelegram(telegramText(o), "alerts");
 }
 
 // ── Telegram delivery (response-checked, throttled, retried) ───────────────
@@ -931,10 +1061,38 @@ const TG_MIN_INTERVAL_MS = 300;
  * failures (429 / 5xx) are retried, respecting `retry_after`; a permanent
  * failure throws so the caller leaves the opportunity unseen and retries it on
  * the next scan. No-op unless the channel is configured.
+ *
+ * `kind` picks the destination and is the whole point of this signature:
+ *   "alerts" — an opportunity for a customer → TELEGRAM_ALERTS_CHAT_ID (a group is fine)
+ *   "system" — the machinery talking about itself (stall alarms, delivery tests,
+ *              health pings) → TELEGRAM_ADMIN_CHAT_ID, PRIVATE ONLY.
+ * A system message with no private admin chat is SUPPRESSED and logged; it is
+ * never redirected to the alerts channel, because that may be a customer group.
+ * See src/server/telegram-channels.ts.
  */
-async function postTelegram(text: string): Promise<{ ok: boolean; messageId: number | null }> {
-  if (!TG_TOKEN || !TG_CHAT_ID) {
-    log("telegram skipped — TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set in this process");
+export async function postTelegram(
+  text: string,
+  kind: TelegramChannel = "alerts",
+): Promise<{ ok: boolean; messageId: number | null }> {
+  const token = tgToken();
+  const chatId = resolveChatId(kind);
+
+  if (!chatId) {
+    if (kind === "system") {
+      log(`telegram SYSTEM message suppressed — ${systemSuppressionReason()}; logged, not sent`);
+    } else {
+      log("telegram skipped — TELEGRAM_ALERTS_CHAT_ID / TELEGRAM_CHAT_ID not set in this process");
+    }
+    return { ok: false, messageId: null };
+  }
+  // Belt and braces at the send site: the hard rule, enforced even if a caller
+  // resolves a chat id by hand. A system message to a group is refused.
+  if (kind === "system" && !/^\d+$/.test(chatId)) {
+    log(`telegram SYSTEM message refused — ${chatId} is not a private chat id; logged, not sent`);
+    return { ok: false, messageId: null };
+  }
+  if (!token) {
+    log("telegram skipped — TELEGRAM_BOT_TOKEN not set in this process");
     return { ok: false, messageId: null };
   }
 
@@ -945,13 +1103,13 @@ async function postTelegram(text: string): Promise<{ ok: boolean; messageId: num
   }
   lastTelegramSendAt = Date.now();
 
-  const url = `https://api.telegram.org/bot${TG_TOKEN}/sendMessage`;
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
   const maxRetries = 4;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: TG_CHAT_ID, text }),
+      body: JSON.stringify({ chat_id: chatId, text }),
     });
 
     const rawBody = await responseText(res);
@@ -965,7 +1123,7 @@ async function postTelegram(text: string): Promise<{ ok: boolean; messageId: num
     const ok = res.ok && !!data && data.ok === true;
     if (ok) {
       const msgId = data?.result?.message_id;
-      log(`telegram ok${msgId != null ? ` msg_id=${msgId}` : ""}`);
+      log(`telegram ${kind} ok${msgId != null ? ` msg_id=${msgId}` : ""}`);
       return { ok: true, messageId: msgId ?? null };
     }
 
@@ -975,7 +1133,7 @@ async function postTelegram(text: string): Promise<{ ok: boolean; messageId: num
       res.status === 429 || res.status >= 500 || (retryAfter != null && retryAfter > 0);
 
     if (!retriable || attempt === maxRetries) {
-      log(`telegram FAILED (${desc}) — body: ${brief(rawBody)}`);
+      log(`telegram ${kind} FAILED (${desc}) — body: ${brief(rawBody)}`);
       throw new Error(
         `telegram send failed: ${desc}${retryAfter != null && retryAfter > 0 ? ` (retry after ${retryAfter}s)` : ""}`
       );
@@ -1001,7 +1159,8 @@ async function postTelegram(text: string): Promise<{ ok: boolean; messageId: num
  */
 export async function sendTestAlert(): Promise<{ ok: boolean; messageId: number | null }> {
   return postTelegram(
-    "✅ Everyone's A Winner — alert delivery check. Scans run every 10 minutes. (Test message, not an opportunity.)"
+    "✅ Everyone's A Winner — alert delivery check. Scans run every 10 minutes. (Test message, not an opportunity.)",
+    "system",
   );
 }
 
@@ -1049,7 +1208,7 @@ async function checkSiteHealth(): Promise<void> {
   saveHealth(h);
   if (h.domainBroken === 2) {
     log("health: domain odds broken for 2 consecutive scans");
-    await postTelegram("⚠️ Site odds are broken on the live domain — investigating");
+    await postTelegram("⚠️ Site odds are broken on the live domain — investigating", "system");
   }
 }
 
@@ -1228,7 +1387,7 @@ export async function runAlertCheck(): Promise<{
 }
 export function hasAlertChannel(): boolean {
   return Boolean(
-    WEBHOOK_URL || (EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM) || (TG_TOKEN && TG_CHAT_ID),
+    WEBHOOK_URL || (EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM) || Boolean(tgToken() && resolveChatId("alerts")),
   );
 }
 
@@ -1240,8 +1399,12 @@ export function alertStatus() {
     webhookSecretSet: Boolean(WEBHOOK_SECRET),
     email: Boolean(EMAIL_TO && EMAIL_API_KEY && EMAIL_FROM),
     emailToSet: Boolean(EMAIL_TO),
-    telegram: Boolean(TG_TOKEN && TG_CHAT_ID),
-    telegramTokenSet: Boolean(TG_TOKEN),
+    telegram: Boolean(tgToken() && resolveChatId("alerts")),
+    telegramTokenSet: Boolean(tgToken()),
+    // Two destinations: alerts (may be a group) and the private admin chat for
+    // system messages. `adminChat` false means system messages are suppressed.
+    telegramAlertsChat: Boolean(resolveChatId("alerts")),
+    telegramAdminChat: Boolean(resolveChatId("system")),
     intervalMin: CHECK_INTERVAL_MIN,
     sportOddsTtlMin: SPORT_ODDS_TTL_MIN,
     maxSportFetchesPerScan: MAX_SPORT_FETCHES,

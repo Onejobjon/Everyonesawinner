@@ -46,6 +46,8 @@ fi
 echo "[ensure-alert-worker $(date -u +%FT%TZ)] starting supervisor (trigger: ${1:-boot})"
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" \
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}" \
+  TELEGRAM_ALERTS_CHAT_ID="${TELEGRAM_ALERTS_CHAT_ID:-}" \
+  TELEGRAM_ADMIN_CHAT_ID="${TELEGRAM_ADMIN_CHAT_ID:-}" \
 ODDS_API_KEY="${ODDS_API_KEY:-}" \
   setsid nohup bash scripts/alert-keepalive.sh >> .run/alerts.log 2>&1 < /dev/null &
 sleep 1

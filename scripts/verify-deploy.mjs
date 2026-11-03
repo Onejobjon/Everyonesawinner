@@ -14,7 +14,19 @@ const DOMAIN_URL =
   "https://www.everyonesawinner.uk/api/odds?sport=upcoming";
 
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
+// A post-deploy smoke failure is a SYSTEM message: the owner's PRIVATE admin
+// chat only. It must never land in the customer-facing alerts group (any chat
+// id starting with "-"), and if no private admin chat is configured it is
+// suppressed rather than redirected. Same rule as src/server/telegram-channels.ts
+// — duplicated here because this file is plain node and cannot import TS.
+const TG_ADMIN_RAW = (process.env.TELEGRAM_ADMIN_CHAT_ID || "").trim();
+const TG_CHAT_ID = /^\d+$/.test(TG_ADMIN_RAW) ? TG_ADMIN_RAW : "";
+if (!TG_CHAT_ID && TG_TOKEN) {
+  console.warn(
+    "[verify-deploy] no private TELEGRAM_ADMIN_CHAT_ID — failure ping suppressed " +
+      (TG_ADMIN_RAW ? `(${TG_ADMIN_RAW} is not a private chat id)` : "(not set)"),
+  );
+}
 
 async function isHealthy(url) {
   try {

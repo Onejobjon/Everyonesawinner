@@ -13,8 +13,13 @@
  * down — notifyOwner() never throws, and it still logs to the process log when
  * no channel is configured.
  *
- * Customer email is NOT sent from here. This is the owner's channel only.
+ * Customer email is NOT sent from here. This is the owner's channel only, and
+ * since 2026-11-03 it is the PRIVATE admin chat (TELEGRAM_ADMIN_CHAT_ID) — never
+ * the customer-facing alerts group and never the legacy TELEGRAM_CHAT_ID. If no
+ * private admin chat is configured the message is logged and suppressed; it is
+ * not redirected anywhere. See src/server/telegram-channels.ts.
  */
+import { resolveChatId, systemSuppressionReason } from "./telegram-channels";
 
 const MAX_RECENT = 50;
 const recent: Array<{ at: string; text: string }> = [];
@@ -39,9 +44,14 @@ export async function notifyOwner(text: string): Promise<boolean> {
   console.error(`[owner-alert] ${text}`);
 
   const token = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
-  const chatId = (process.env.TELEGRAM_CHAT_ID || "").trim();
-  if (!token || !chatId) {
-    console.warn("[owner-alert] no Telegram channel configured — logged only");
+  // System message: private admin chat only. No alerts fallback, ever.
+  const chatId = resolveChatId("system");
+  if (!chatId) {
+    console.warn(`[owner-alert] suppressed — ${systemSuppressionReason()}; logged only`);
+    return false;
+  }
+  if (!token) {
+    console.warn("[owner-alert] TELEGRAM_BOT_TOKEN not set — logged only");
     return false;
   }
   try {

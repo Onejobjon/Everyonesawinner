@@ -39,5 +39,7 @@ PORT="$ALERT_PORT" \
 ODDS_API_KEY="${ODDS_API_KEY:-}" \
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" \
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}" \
+  TELEGRAM_ALERTS_CHAT_ID="${TELEGRAM_ALERTS_CHAT_ID:-}" \
+  TELEGRAM_ADMIN_CHAT_ID="${TELEGRAM_ADMIN_CHAT_ID:-}" \
   setsid nohup bun serve-static.ts >> .run/alerts-worker.log 2>&1 < /dev/null &
 echo "[watchdog] restarted on ${ALERT_PORT} (pid $!)"

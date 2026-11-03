@@ -92,9 +92,11 @@ describe("the window rule", () => {
 
 describe("the free index counts the overnight slate (0 credits, stubbed provider)", () => {
   test("an NBA game after midnight is indexed; a fixture 30h out is not", async () => {
+    // `runDir` is passed explicitly: the module-level default is fixed at import,
+    // so relying on ALERTS_RUN_DIR made this test depend on which file imported
+    // alerts.ts first — and when the live worker's own index was fresh, the test
+    // read THAT instead of its own stub.
     const dir = mkdtempSync(join(tmpdir(), "eaw-index-"));
-    const previous = process.env.ALERTS_RUN_DIR;
-    process.env.ALERTS_RUN_DIR = dir;
     const originalFetch = globalThis.fetch;
     try {
       // The index is a set of free GETs: the sport list, then one events call per
@@ -122,7 +124,7 @@ describe("the free index counts the overnight slate (0 credits, stubbed provider
       }) as typeof fetch;
 
       const { fetchSportsIndex } = await import("../src/server/alerts");
-      const index = await fetchSportsIndex(NINE_PM);
+      const index = await fetchSportsIndex(NINE_PM, { runDir: dir, retryDelayMs: 0 });
 
       expect(index.sports.map((s) => s.key)).toEqual(["basketball_nba"]);
       expect(index.sports[0].fixturesInWindow).toBe(1);
@@ -134,8 +136,6 @@ describe("the free index counts the overnight slate (0 credits, stubbed provider
       expect(index.sports[0]).not.toHaveProperty("todayFixtures");
     } finally {
       globalThis.fetch = originalFetch;
-      if (previous === undefined) delete process.env.ALERTS_RUN_DIR;
-      else process.env.ALERTS_RUN_DIR = previous;
       rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -169,8 +169,6 @@ describe("the cache prune uses the same rule", () => {
 describe("an index file from before the rename is rebuilt, not trusted", () => {
   test("a fresh old-shape index is ignored and re-fetched on the new rule", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eaw-index-old-"));
-    const previous = process.env.ALERTS_RUN_DIR;
-    process.env.ALERTS_RUN_DIR = dir;
     const originalFetch = globalThis.fetch;
     try {
       // A file written seconds ago by the calendar-day build: fresh enough for the
@@ -200,13 +198,11 @@ describe("an index file from before the rename is rebuilt, not trusted", () => {
       }) as typeof fetch;
 
       const { fetchSportsIndex } = await import("../src/server/alerts");
-      const index = await fetchSportsIndex(NINE_PM);
+      const index = await fetchSportsIndex(NINE_PM, { runDir: dir, retryDelayMs: 0 });
       expect(index.sports.map((s) => s.key)).toEqual(["basketball_nba"]);
       expect(index.totalFixturesInWindow).toBe(1);
     } finally {
       globalThis.fetch = originalFetch;
-      if (previous === undefined) delete process.env.ALERTS_RUN_DIR;
-      else process.env.ALERTS_RUN_DIR = previous;
       rmSync(dir, { recursive: true, force: true });
     }
   });

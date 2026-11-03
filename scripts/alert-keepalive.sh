@@ -67,6 +67,8 @@ ensure_status_host() {
   PORT="$ALERT_PORT" ALERT_WORKER_DISABLED=1 \
   TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" \
   TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}" \
+  TELEGRAM_ALERTS_CHAT_ID="${TELEGRAM_ALERTS_CHAT_ID:-}" \
+  TELEGRAM_ADMIN_CHAT_ID="${TELEGRAM_ADMIN_CHAT_ID:-}" \
   ODDS_API_KEY="${ODDS_API_KEY:-}" \
     setsid nohup bun serve-static.ts >> .run/alerts-worker.log 2>&1 < /dev/null &
 }
