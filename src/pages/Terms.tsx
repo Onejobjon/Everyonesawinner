@@ -15,15 +15,16 @@ import { Ext, H2, LegalLayout, P, UL } from "../components/legal";
  *     and there is no affiliate arrangement in place today.
  * Nothing is promised about uptime, accuracy or outcomes.
  *
- * The trader's legal name and VAT status are deliberately absent: the owner is
- * still deciding between incorporating and trading as a sole trader, and an
- * unregistered "Ltd" is an offence. Section 1 gives the operating address only.
+ * The trader's identity is stated in section 1: Jonathan Revill, sole trader,
+ * trading as Everyone's A Winner, with the operating address. There is no
+ * company and no company number, and no VAT registration, so neither is
+ * printed; an unregistered "Ltd" would be an offence.
  *
  * Governing law is Northern Ireland (the business operates from Downpatrick),
  * worded so a UK consumer keeps the consumer law of their own part of the UK.
  */
 
-const LAST_UPDATED = "2 November 2026";
+const LAST_UPDATED = "3 November 2026";
 const CONTACT = "support@everyonesawinner.uk";
 
 export default function Terms() {
@@ -40,8 +41,13 @@ export default function Terms() {
         what a matched bet returns.
       </P>
       <P>
-        Everyone's A Winner is operated from 3 Clanmaghery Grove, Ballykinler, Downpatrick, BT30
-        8EX, in the United Kingdom. That is the address for anything to do with a subscription.
+        Everyone's A Winner is the trading name of Jonathan Revill, a sole trader, of 3 Clanmaghery
+        Grove, Ballykinler, Downpatrick, BT30 8EX, in the United Kingdom. That is the address for
+        anything to do with a subscription.
+      </P>
+      <P>
+        We are not a registered company, so there is no company number, and we are not registered
+        for VAT, so no VAT is added to any price shown on this site.
       </P>
       <P>
         We are not a bookmaker and we are not an exchange. We do not place bets for you, we do not

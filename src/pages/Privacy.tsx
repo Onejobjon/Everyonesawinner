@@ -1,4 +1,4 @@
-import { Ext, H2, LegalLayout, P, PlaceholderNote, UL } from "../components/legal";
+import { Ext, H2, LegalLayout, P, UL } from "../components/legal";
 
 /**
  * /privacy — the privacy notice.
@@ -21,7 +21,7 @@ import { Ext, H2, LegalLayout, P, PlaceholderNote, UL } from "../components/lega
  * company name or registration number is printed — printing one would be false.
  */
 
-const LAST_UPDATED = "2 November 2026";
+const LAST_UPDATED = "3 November 2026";
 const CONTACT = "support@everyonesawinner.uk";
 
 export default function Privacy() {
@@ -37,9 +37,9 @@ export default function Privacy() {
         explains what we hold about you, why we hold it, and what you can ask us to do with it.
       </P>
       <P>
-        Everyone's A Winner is operated from 3 Clanmaghery Grove, Ballykinler, Downpatrick, BT30
-        8EX, in the United Kingdom, and that is the controller of the information described in this
-        notice.
+        Everyone's A Winner is the trading name of Jonathan Revill, a sole trader, of 3 Clanmaghery
+        Grove, Ballykinler, Downpatrick, BT30 8EX, in the United Kingdom. He is the controller of
+        the information described in this notice. There is no registered company behind the site.
       </P>
       <P>
         For anything in this notice — including a request to delete your details — write to{" "}
@@ -51,10 +51,6 @@ export default function Privacy() {
         </a>
         .
       </P>
-      <PlaceholderNote>
-        Our company registration number is not printed on this page yet. Ask us at the address
-        above and we will confirm it in writing.
-      </PlaceholderNote>
 
       <H2>2. What we collect</H2>
       <P>

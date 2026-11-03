@@ -159,6 +159,19 @@ export default function Subscribe() {
           </p>
         </div>
 
+        {/* Trader identity at the point of sale: the Consumer Contracts
+            Regulations require the trader's name and a geographic address
+            before anyone can order, and the prices must be honest about VAT. */}
+        <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-6 text-left dark:border-gray-800 dark:bg-gray-900/40">
+          <h2 className="text-lg font-semibold">Who you would be paying</h2>
+          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+            Everyone's A Winner is the trading name of Jonathan Revill, a sole trader, of 3
+            Clanmaghery Grove, Ballykinler, Downpatrick, BT30 8EX, in the United Kingdom. We are not
+            a registered company, so there is no company number. We are not registered for VAT, so
+            no VAT is added to any price shown on this page — the price you see is the whole price.
+          </p>
+        </div>
+
         <div className="mt-8 text-center border-t border-gray-200 dark:border-gray-800 pt-8">
           <p className="text-sm text-gray-500">
             Checkout isn't open yet. When it is, a completed payment will be confirmed by our server before any tool unlocks — not by this page.
