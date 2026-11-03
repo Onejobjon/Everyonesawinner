@@ -6,6 +6,8 @@ import EmailCapture from "../components/EmailCapture";
 import PageHeader from "../components/PageHeader";
 import offersData from "../content/free-bets-offers.json";
 import { licenceEvidence, minOddsLabel, type FreeBetOffer } from "../lib/free-bets";
+import { goHref } from "../lib/affiliates";
+import AffiliateDisclosure from "../components/AffiliateDisclosure";
 import { LicenceLine } from "../components/LicenceLine";
 
 // ── URL policy ─────────────────────────────────────────────────────────────
@@ -299,9 +301,9 @@ export default function FreeBets() {
                           <span className="text-xs text-amber-600 dark:text-amber-400">Check with bookmaker</span>
                         ) : (
                           <a
-                            href={o.url}
+                            href={goHref(o.bookmaker, o.url)}
                             target="_blank"
-                            rel="noopener noreferrer"
+                            rel="sponsored nofollow noopener noreferrer"
                             className="inline-block rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
                           >
                             Claim →
@@ -320,6 +322,7 @@ export default function FreeBets() {
             )}
           </div>
 
+          <AffiliateDisclosure className="mt-6 text-center" />
           <p className="mt-4 text-center text-xs text-gray-400">
             Where we re-confirmed an operator on the Gambling Commission register and hold their account number, the
             row says so and links to the register — click it and check us. Where we could not check, the row says that

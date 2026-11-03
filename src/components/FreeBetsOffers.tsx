@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import offersData from "../content/free-bets-offers.json";
 import { LicenceLine } from "./LicenceLine";
+import { goHref } from "../lib/affiliates";
 import {
   keptOffers,
   licenceEvidence,
@@ -174,9 +175,9 @@ export default function FreeBetsOffers({
                     <div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <a
-                          href={o.url}
+                          href={goHref(o.bookmaker, o.url)}
                           target="_blank"
-                          rel="noopener noreferrer"
+                          rel="sponsored nofollow noopener noreferrer"
                           className="font-semibold text-gray-900 hover:text-indigo-600 hover:underline dark:text-gray-100 dark:hover:text-indigo-400"
                         >
                           {o.bookmaker}

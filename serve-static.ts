@@ -19,6 +19,8 @@ import { readGreenHistory } from "./src/server/green-history";
 import { pushSnapshot, rememberSnapshot, SNAPSHOT_HEADER, verifyBridgeToken } from "./src/server/scan-bridge";
 import { handleStripeEvent, verifyStripeSignature } from "./src/server/stripe-webhook";
 import { resolveSportParam, REJECTED_SPORT_MESSAGE } from "./src/lib/sport-params";
+import { brandBySlug, taggedDestination } from "./src/lib/affiliates";
+import { logAffiliateClick, referringPath } from "./src/server/click-log";
 
 // Port is configurable: the platform now runs its own dev server on 3000, so
 // the alert host runs alongside it on PORT (default 3000 for the VPS recipe).
@@ -712,6 +714,42 @@ const server = Bun.serve({
       const out = new TextDecoder().decode(r.stdout).trim();
       const err = new TextDecoder().decode(r.stderr).trim();
       return Response.json({ ok: true, out: out.slice(0, 500), err: err.slice(0, 300) });
+    }
+
+    // OUTBOUND OPERATOR LINKS — /go/<slug> (src/lib/affiliates.ts).
+    //
+    // Every bookmaker link on the site goes through here instead of pointing
+    // straight at the operator. This is a SERVER redirect, so:
+    //   • the click is logged once — slug, ISO timestamp, and the path of our
+    //     own page it came from. No IP, no user agent, no cookie, no session,
+    //     no query string (see src/server/click-log.ts);
+    //   • the destination lives in one config file, so an affiliate tag can be
+    //     added later without touching a single page;
+    //   • while no tag is configured the visitor lands on the operator's page
+    //     EXACTLY as configured — no tracking parameter is invented.
+    // A slug we do not know sends the visitor to the offers list rather than to
+    // a dead end; it is never used as an open redirect.
+    if (url.pathname === "/go" || url.pathname.startsWith("/go/")) {
+      const slug = decodeURIComponent(url.pathname.replace(/^\/go\/?/, "")).replace(/\/+$/, "").trim().toLowerCase();
+      const brand = brandBySlug(slug);
+      if (!brand) {
+        console.warn(`[go] unknown slug "${slug.slice(0, 60)}" — sending the visitor to /free-bets`);
+        return new Response(null, {
+          status: 302,
+          headers: { location: "/free-bets", "cache-control": "no-store", "x-robots-tag": "noindex" },
+        });
+      }
+      const record = logAffiliateClick({ slug: brand.slug, from: referringPath(req.headers.get("referer")) });
+      console.log(`[go] ${record.slug} from ${record.from || "(unknown page)"}`);
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: taggedDestination(brand),
+          "cache-control": "no-store",
+          "x-robots-tag": "noindex",
+          "referrer-policy": "no-referrer",
+        },
+      });
     }
 
     let path = decodeURIComponent(url.pathname);

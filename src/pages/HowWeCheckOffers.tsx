@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
+import AffiliateDisclosure from "../components/AffiliateDisclosure";
 import source from "../content/how-we-check-offers.md?raw";
 
 /**
@@ -134,6 +135,7 @@ export default function HowWeCheckOffers() {
             </ListTag>
           );
         })}
+        <AffiliateDisclosure className="mt-6" />
         <p className="mt-10 border-t border-gray-200 pt-6 text-xs text-gray-400 dark:border-gray-800">
           18+ · begambleaware.org ·{" "}
           <Link to="/free-bets" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
