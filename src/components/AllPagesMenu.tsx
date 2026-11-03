@@ -121,7 +121,7 @@ export default function AllPagesMenu() {
                     >
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>
                       {item.pro ? (
-                        <span className="shrink-0 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-200">
+                        <span className="shrink-0 rounded-full border border-emerald-500 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:border-emerald-400 dark:text-emerald-400">
                           Pro
                         </span>
                       ) : null}
