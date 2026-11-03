@@ -23,6 +23,7 @@
  */
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import AllPagesMenu from "./AllPagesMenu";
 
 interface PageHeaderProps {
   /** Page title. Omitted only by Home, whose `hero` carries its own <h1>. */
@@ -63,7 +64,7 @@ export default function PageHeader({
             </span>
           </Link>
           {home ? (
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               <Link
                 to="/free-bets"
                 className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
@@ -72,18 +73,22 @@ export default function PageHeader({
               </Link>
               <Link
                 to="/oddsmatcher"
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 sm:px-4"
               >
                 Best odds
               </Link>
+              <AllPagesMenu />
             </div>
           ) : (
-            <Link
-              to="/"
-              className="shrink-0 text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
-            >
-              ← Back to Home
-            </Link>
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              <Link
+                to="/"
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                ← Back to Home
+              </Link>
+              <AllPagesMenu />
+            </div>
           )}
         </div>
       </nav>
