@@ -328,6 +328,11 @@ export default function Home() {
               </div>
             ))}
           </div>
+          <p className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            Everyone's A Winner is the trading name of Jonathan Revill, a sole trader. We are not
+            registered for VAT, so no VAT is added to any price — the price you see is the whole
+            price.
+          </p>
         </div>
       </section>
 
