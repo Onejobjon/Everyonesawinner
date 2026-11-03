@@ -53,7 +53,14 @@ export PORT="$ALERT_PORT" ALERT_WORKER_DISABLED=1
 echo "[alert-keepalive $(date -u +%FT%TZ)] supervising scan loop + status host on ${ALERT_PORT}"
 
 ensure_status_host() {
-  if curl -sf -m 3 "http://127.0.0.1:${ALERT_PORT}/api/alert-status" >/dev/null 2>&1; then
+  # "Up" means the port ANSWERS, not that the answer is 2xx. /api/alert-status
+  # is owner-gated (pro-gate.ts, 2026-11-02) and correctly returns 404 to an
+  # unauthenticated caller — curl -sf read that 404 as "host down" and spawned
+  # a second serve-static every minute, which could not bind the port and
+  # spammed .run/alerts-worker.log. Only a refused connection (000) is down.
+  local code
+  code="$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${ALERT_PORT}/api/alert-status" 2>/dev/null || echo 000)"
+  if [ -n "$code" ] && [ "$code" != "000" ]; then
     return 0
   fi
   echo "[alert-keepalive $(date -u +%FT%TZ)] status host down — starting serve-static on ${ALERT_PORT}"
