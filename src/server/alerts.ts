@@ -250,8 +250,20 @@ function lastKnownRemaining(): number | null {
 // At today's measured 20 same-day sports that is ~20 fetches per 90 minutes
 // (~13/hour, ~320/day, ~9.6k/month) instead of 20 credits every 10 minutes
 // (~2,900/day). Exact per-scan spend is logged and rolled up in credits.jsonl.
-const SPORT_ODDS_TTL_MIN = num(process.env.ALERT_SPORT_ODDS_TTL_MIN, 90);
-const MAX_SPORT_FETCHES = Math.max(1, Math.floor(num(process.env.ALERT_MAX_SPORT_FETCHES, 3)));
+const SPORT_ODDS_TTL_MIN = num(process.env.ALERT_SPORT_ODDS_TTL_MIN, 60);
+const MAX_SPORT_FETCHES = Math.max(1, Math.floor(num(process.env.ALERT_MAX_SPORT_FETCHES, 24)));
+/**
+ * OWNER DECISION 2026-11-03 ("set it"): every sport with a fixture today is now
+ * refreshed, not three of them. TTL 90 → 60 minutes and the per-scan cap 3 → 24
+ * (24 is above the worst measured same-day count of 20, so nothing is ever left
+ * out because of the cap). Measured cost on 2026-11-03: 1 credit per sport.
+ *   • 9-sport day, hourly refresh ≈ 6.5k credits/month
+ *   • 20-sport day, hourly refresh ≈ 14.4k credits/month
+ * against a 20,000/month allowance, leaving the rest for on-demand searches.
+ * This is why the cadence can stay at 30 minutes: the TTL does the rationing,
+ * not the cap.
+ */
+const MIN_CREDITS_FLOOR = Math.max(0, Math.floor(num(process.env.ALERT_MIN_CREDITS, 500)));
 const INDEX_TTL_MIN = num(process.env.ALERT_INDEX_TTL_MIN, 30);
 const INDEX_FILE = join(RUN_DIR, "alerts-sports-index.json");
 /** How far ahead the per-sport odds call is asked for. Today's fixtures plus slack. */
@@ -465,6 +477,16 @@ async function getMatches(): Promise<Match[]> {
   let data = [...cache.data];
 
   for (const sport of queue.slice(0, MAX_SPORT_FETCHES)) {
+    // Spend guard: never run the quota into the ground chasing freshness. If the
+    // vendor's own remaining count drops to the floor, stop paying for sports
+    // this scan and say so — a stale row is better than an empty account.
+    if (remaining != null && remaining <= MIN_CREDITS_FLOOR) {
+      log(
+        `sweep stopped early: ${remaining} credits left, floor is ${MIN_CREDITS_FLOOR} — ` +
+          `${queue.length - fetched} sport(s) left at their cached prices`,
+      );
+      break;
+    }
     const path =
       `/sports/${sport.key}/odds/?regions=${REGIONS}&markets=${MARKETS}&oddsFormat=decimal` +
       `&commenceTimeFrom=${from}&commenceTimeTo=${to}`;
