@@ -15,7 +15,8 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Match } from "../lib/odds-api";
-import { STALE_AFTER_MIN, selectSameDayMatches } from "../lib/instant-wins";
+import { STALE_AFTER_MIN, selectWindowMatches } from "../lib/instant-wins";
+import { windowPhrase } from "../lib/scan-window";
 import { readGreenHistory, type GreenHistorySummary } from "./green-history";
 import { bridgeSecret, lastPush, pushTargets, readRememberedSnapshot } from "./scan-bridge";
 
@@ -41,22 +42,22 @@ export interface InstantWinsPayload {
   /** True when the scan is older than STALE_AFTER_MIN — the prices may have moved. */
   stale: boolean;
   staleAfterMin: number;
-  /** Fixtures the scan looked at (before the same-day filter). */
+  /** Fixtures the scan looked at (before the window filter). */
   fixturesScanned: number;
   /** Distinct sports among those fixtures — the "M sports" of the coverage line. */
   sportsScanned: number;
   /** Fixtures kicking off today in Europe/London that have not started. */
-  sameDayFixtures: number;
-  /** Distinct sports among the same-day fixtures. */
-  sameDaySports: number;
+  fixturesInWindow: number;
+  /** Distinct sports among `fixturesInWindow`. */
+  sportsInWindow: number;
   /** Sports in season at the last free index refresh (0 when unknown). */
   sportsInSeason: number;
-  /** Sports that had at least one same-day fixture at that refresh. */
-  sportsWithToday: number;
-  /** Same-day fixtures the free index saw across every sport — the honest ceiling. */
-  fixturesToday: number;
+  /** Sports that had at least one in-window fixture at that refresh. */
+  indexSportsInWindow: number;
+  /** In-window fixtures the free index saw across every sport — the honest ceiling. */
+  indexFixturesInWindow: number;
   /**
-   * The same-day fixtures, already passed through the shared transform's sanity
+   * The in-window fixtures, already passed through the shared transform's sanity
    * rules. The page builds its rows from these with the shared calcLay at the
    * user's own stake and commission.
    */
@@ -135,11 +136,11 @@ function noScan(
     staleAfterMin: STALE_AFTER_MIN,
     fixturesScanned: 0,
     sportsScanned: 0,
-    sameDayFixtures: 0,
-    sameDaySports: 0,
+    fixturesInWindow: 0,
+    sportsInWindow: 0,
     sportsInSeason: 0,
-    sportsWithToday: 0,
-    fixturesToday: 0,
+    indexSportsInWindow: 0,
+    indexFixturesInWindow: 0,
     matches: [],
     reason,
     greens30d: greens,
@@ -186,7 +187,7 @@ function asSource(
 }
 
 /**
- * Read the last scan and return the same-day slice of it.
+ * Read the last scan and return the in-window slice of it.
  *
  * TWO SOURCES, NEWEST WINS:
  *  1. the snapshot the scan pushed to this process (works on the published host,
@@ -281,25 +282,25 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
 
   const ageMs = Math.max(0, now.getTime() - ts);
   const ageMinutes = Math.floor(ageMs / 60_000);
-  const sameDay = selectSameDayMatches(matches, now);
+  const inWindow = selectWindowMatches(matches, now);
   const sportsOf = (list: Match[]) => new Set(list.map((m) => m.sportKey).filter(Boolean)).size;
 
-  // The free index the sweep kept: how much of today the scan knows about, even
+  // The free index the sweep kept: how much of the window the scan knows about, even
   // for sports whose odds it has not paid for yet.
   const idx = (chosen.index ?? {}) as {
     sportsInSeason?: unknown;
-    sportsWithToday?: unknown;
-    totalTodayFixtures?: unknown;
+    sportsInWindow?: unknown;
+    totalFixturesInWindow?: unknown;
   };
   const count = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-  const sameDaySports = sportsOf(sameDay);
+  const sportsInWindow = sportsOf(inWindow);
 
   // When was the OLDEST price in this list fetched? Per-sport clocks, because a
-  // same-day sweep pays one credit per sport and therefore rotates. Falls back to
+  // in-window sweep pays one credit per sport and therefore rotates. Falls back to
   // the scan timestamp for a cache written before per-sport clocks existed.
   const perSport = (chosen.perSport ?? {}) as Record<string, { fetchedAt?: unknown }>;
-  const priceTimes = sameDay
+  const priceTimes = inWindow
     .map((m) => perSport[m.sportKey]?.fetchedAt)
     .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
   const oldestTs = priceTimes.length > 0 ? Math.min(...priceTimes) : ts;
@@ -309,10 +310,10 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
     ok: true,
     status: "ok",
     message:
-      sameDay.length > 0
-        ? `${sameDay.length} fixture${sameDay.length === 1 ? "" : "s"} kicking off today across ` +
-          `${sameDaySports} sport${sameDaySports === 1 ? "" : "s"}.`
-        : "The last scan found no fixtures kicking off today.",
+      inWindow.length > 0
+        ? `${inWindow.length} fixture${inWindow.length === 1 ? "" : "s"} kicking off ` +
+          `${windowPhrase()} across ${sportsInWindow} sport${sportsInWindow === 1 ? "" : "s"}.`
+        : `The last scan found no fixtures kicking off ${windowPhrase()}.`,
     scannedAt: new Date(ts).toISOString(),
     ageMinutes,
     oldestPriceAt: new Date(oldestTs).toISOString(),
@@ -323,12 +324,12 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
     staleAfterMin: STALE_AFTER_MIN,
     fixturesScanned: matches.length,
     sportsScanned: sportsOf(matches),
-    sameDayFixtures: sameDay.length,
-    sameDaySports,
+    fixturesInWindow: inWindow.length,
+    sportsInWindow,
     sportsInSeason: count(idx.sportsInSeason),
-    sportsWithToday: count(idx.sportsWithToday),
-    fixturesToday: count(idx.totalTodayFixtures),
-    matches: sameDay,
+    indexSportsInWindow: count(idx.sportsInWindow),
+    indexFixturesInWindow: count(idx.totalFixturesInWindow),
+    matches: inWindow,
     source: chosen.kind,
     // Greens found in the last 30 days. On the scanner's own host this is read
     // from `.run/greens.jsonl`; on the published host it arrived with the pushed

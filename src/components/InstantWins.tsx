@@ -1,9 +1,12 @@
 /**
- * INSTANT WINS panel — today's GREEN trades, already on screen when the page
- * opens. No click, no search, and (the point) no provider call.
+ * INSTANT WINS panel — the GREEN trades in the next 26 hours, already on screen
+ * when the page opens. No click, no search, and (the point) no provider call.
  *
- * It reads `GET /api/instant-wins`, which returns the same-day slice of the last
- * scheduled scan. Every number below is produced by the SHARED `calcLay` at the
+ * It reads `GET /api/instant-wins`, which returns the in-window slice of the last
+ * scheduled scan. "In the window" is the rolling 26 hours in `lib/scan-window.ts`,
+ * NOT today's calendar date — the overnight NBA/NHL/NFL slate tips off after
+ * midnight in London and is the reason the scan runs through the night.
+ * Every number below is produced by the SHARED `calcLay` at the
  * user's own stake and the SHARED exchange-commission control, so this panel can
  * never disagree with the Lay Bet Finder or the calculator about money.
  *
@@ -32,6 +35,7 @@ import {
   STALE_AFTER_MIN,
 } from "../lib/instant-wins";
 import { londonDayKey, londonDayLabel, londonTimeLabel } from "../lib/london-day";
+import { SCAN_WINDOW_HOURS, windowPhrase } from "../lib/scan-window";
 import { money } from "../lib/laybets-common";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "./CommissionControl";
 import GreensPanel, { type GreensSummary } from "./GreensPanel";
@@ -48,11 +52,11 @@ interface Payload {
   staleAfterMin?: number;
   fixturesScanned?: number;
   sportsScanned?: number;
-  sameDayFixtures?: number;
-  sameDaySports?: number;
+  fixturesInWindow?: number;
+  sportsInWindow?: number;
   sportsInSeason?: number;
-  sportsWithToday?: number;
-  fixturesToday?: number;
+  indexSportsInWindow?: number;
+  indexFixturesInWindow?: number;
   matches?: Match[];
   /** Greens found in the last 30 days — already in the payload, so no extra cost. */
   greens30d?: GreensSummary;
@@ -190,7 +194,7 @@ export default function InstantWins() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-            <span>⚡</span> Instant wins — today&apos;s green trades
+            <span>⚡</span> Instant wins — green trades in the next {SCAN_WINDOW_HOURS} hours
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
             Already on screen when you open this page — no search, no click. Every sport we
@@ -250,8 +254,9 @@ export default function InstantWins() {
                   ? ` (${ageWords(payload.priceAgeMinutes)} ago — the oldest in this list)`
                   : ""}{" "}
                 —{" "}
-                {built.sameDayFixtures} fixture{built.sameDayFixtures === 1 ? "" : "s"} across{" "}
-                {built.sameDaySports} sport{built.sameDaySports === 1 ? "" : "s"} kicking off today.
+                {built.fixturesInWindow} fixture{built.fixturesInWindow === 1 ? "" : "s"} across{" "}
+                {built.sportsInWindow} sport{built.sportsInWindow === 1 ? "" : "s"} kicking off{" "}
+                {windowPhrase()}.
               </>
             ) : (
               <>We did not record a time for these prices.</>
@@ -266,9 +271,10 @@ export default function InstantWins() {
             </p>
           )}
           <p className="mt-1 text-[11px] text-gray-400">
-            Same-day only: a fixture qualifies when it kicks off today (Europe/London) and has not
-            started. Anything tomorrow or later is excluded by design — for those, use the Lay Bet
-            Finder&apos;s date option.
+            Next {SCAN_WINDOW_HOURS} hours only: a fixture qualifies when it has not started and
+            kicks off within the next {SCAN_WINDOW_HOURS} hours — whatever the date, so an overnight
+            US tip-off is included. Anything further out is excluded by design — for those, use the
+            Lay Bet Finder&apos;s date option.
           </p>
         </div>
       )}
@@ -285,7 +291,7 @@ export default function InstantWins() {
       )}
 
       {phase === "loading" && (
-        <p className="mt-6 text-sm text-gray-500">Loading today&apos;s prices…</p>
+        <p className="mt-6 text-sm text-gray-500">Loading prices…</p>
       )}
 
       {phase === "error" && (
@@ -319,14 +325,14 @@ export default function InstantWins() {
           </p>
           {payload?.refreshing && (
             <p className="mt-2 text-sm font-medium text-purple-700 dark:text-purple-300" role="status">
-              We are reading today&rsquo;s prices now — this page will fill in on its own.
+              We are reading the latest prices now — this page will fill in on its own.
             </p>
           )}
         </div>
       )}
 
-      {/* Scanned, but nothing green today. Says so in exactly those words, and
-          still shows what the scan covered. */}
+      {/* Scanned, but nothing green in the window. Says so in exactly those words,
+          and still shows what the scan covered. */}
       {phase === "ready" && payload?.status === "ok" && built.rows.length === 0 && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-6 dark:border-gray-800 dark:bg-gray-900/50">
           <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">
@@ -355,12 +361,13 @@ export default function InstantWins() {
               </li>
             )}
           </ul>
-          {typeof payload.fixturesToday === "number" && payload.fixturesToday > 0 && (
+          {typeof payload.indexFixturesInWindow === "number" && payload.indexFixturesInWindow > 0 && (
             <p className="mt-2 text-xs text-gray-500">
-              Today has {payload.fixturesToday} fixture{payload.fixturesToday === 1 ? "" : "s"} across{" "}
-              {payload.sportsWithToday} sport{payload.sportsWithToday === 1 ? "" : "s"} in total; we
-              refresh sports in turn rather than all at once, so we hold prices for{" "}
-              {built.sameDayFixtures} of them right now.
+              The next {SCAN_WINDOW_HOURS} hours hold {payload.indexFixturesInWindow} fixture
+              {payload.indexFixturesInWindow === 1 ? "" : "s"} across{" "}
+              {payload.indexSportsInWindow} sport{payload.indexSportsInWindow === 1 ? "" : "s"} in
+              total; we refresh sports in turn rather than all at once, so we hold prices for{" "}
+              {built.fixturesInWindow} of them right now.
             </p>
           )}
           <p className="mt-2 text-sm text-gray-500">

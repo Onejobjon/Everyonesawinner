@@ -1,5 +1,5 @@
 /**
- * INSTANT WINS — same-day GREEN trades, built from the last scan's cache.
+ * INSTANT WINS — GREEN trades in the next 26 hours, built from the last scan's cache.
  *
  * This is the feed the owner remembers from the original build: open the site and
  * the opportunities are already there, no click and no search. It is a SEPARATE
@@ -29,19 +29,22 @@
  *   • The money comes from the SHARED `calcLay`, at the user's own stake and the
  *     shared exchange-commission rate. Nothing here has its own arithmetic.
  *
- * SAME DAY means: kick-off falls on today's date in Europe/London AND the match
- * has not started. A fixture tomorrow, or one next week, is excluded — that is
- * the whole point of the name.
+ * IN THE WINDOW means: the match has not started AND it kicks off no later than
+ * SCAN_WINDOW_HOURS (26) from now — the rolling window in `scan-window.ts`, which
+ * is the same rule the free index and the paid sweep use. It is deliberately NOT
+ * "today in London": at 21:00 that rule hid every overnight NBA / NHL / NFL
+ * fixture, which is precisely the market the overnight scan runs for.
  */
 import { calcLay, layGap, round2, DEFAULT_COMMISSION } from "./odds";
 import type { Match } from "./odds-api";
-import { londonDayKey, londonTimeLabel } from "./london-day";
+import { londonTimeLabel } from "./london-day";
+import { SCAN_WINDOW_HOURS, isInScanWindow } from "./scan-window";
 
 /**
  * How old the OLDEST price on screen may be before the feed says so out loud.
  *
  * The worker refreshes each sport's odds on a budget (see src/server/alerts.ts:
- * a full same-day sweep is one credit PER SPORT, so sports rotate rather than all
+ * a full in-window sweep is one credit PER SPORT, so sports rotate rather than all
  * refreshing every ten minutes). With a 90-minute per-sport refresh window, 100
  * minutes means "this sport has missed a full rotation" — the prices on screen
  * may no longer exist. Deliberately tied to the refresh window rather than to
@@ -85,12 +88,12 @@ export interface InstantWinsResult {
   /** Distinct sports among `fixturesScanned`. */
   sportsScanned: number;
   /** Fixtures that kick off today in London and have not started. */
-  sameDayFixtures: number;
-  /** Distinct sports among `sameDayFixtures` — the "M sports" of the coverage line. */
-  sameDaySports: number;
-  /** Same-day outcomes examined (the denominator behind the green test). */
+  fixturesInWindow: number;
+  /** Distinct sports among `fixturesInWindow` — the "M sports" of the coverage line. */
+  sportsInWindow: number;
+  /** In-window outcomes examined (the denominator behind the green test). */
   outcomesConsidered: number;
-  /** Same-day outcomes with no usable exchange lay price — counted, not hidden. */
+  /** In-window outcomes with no usable exchange lay price — counted, not hidden. */
   noLayPrice: number;
   /** Rows withheld because the back/lay pair failed the shared sanity check. */
   withheld: number;
@@ -109,27 +112,17 @@ export interface InstantWinsOptions {
   commission?: number;
 }
 
-/** True when this kick-off is on today's date in London. */
-export function isSameDayLondon(commenceTime: string, now: Date): boolean {
-  const key = londonDayKey(commenceTime);
-  const today = londonDayKey(now);
-  return Boolean(key && today && key === today);
-}
-
-/** True when the match has not started yet. An unparseable time is not "today". */
-export function hasNotStarted(commenceTime: string, now: Date): boolean {
-  const t = new Date(commenceTime).getTime();
-  return Number.isFinite(t) && t > now.getTime();
-}
-
 /**
- * Keep only fixtures that kick off today (Europe/London) and have not started.
- * Everything days away is dropped — this feed is same-day only.
+ * Keep only fixtures inside the rolling scan window: not started, and kicking off
+ * no later than SCAN_WINDOW_HOURS from `now`. Whatever the calendar date — a 03:00
+ * tip-off is in the window at 21:00, which is the whole point of the rule.
  */
-export function selectSameDayMatches(matches: readonly Match[], now: Date = new Date()): Match[] {
-  return matches.filter(
-    (m) => isSameDayLondon(m.commenceTime, now) && hasNotStarted(m.commenceTime, now),
-  );
+export function selectWindowMatches(
+  matches: readonly Match[],
+  now: Date = new Date(),
+  hours: number = SCAN_WINDOW_HOURS,
+): Match[] {
+  return matches.filter((m) => isInScanWindow(m.commenceTime, now, hours));
 }
 
 /**
@@ -153,10 +146,10 @@ export function greenTrade(
 }
 
 /**
- * Build the rows: same-day fixtures only, GREEN trades only, each priced with the
+ * Build the rows: in-window fixtures only, GREEN trades only, each priced with the
  * shared calcLay at the caller's stake and commission.
  *
- * Every same-day outcome is accounted for in exactly one of `rows`, `notGreen`,
+ * Every in-window outcome is accounted for in exactly one of `rows`, `notGreen`,
  * `noLayPrice`, `withheld` — so the page can print an honest coverage line
  * ("looked at N fixtures across M sports, K outcomes, 0 green") instead of an
  * empty table that reads like a broken feed.
@@ -175,12 +168,12 @@ export function buildInstantWins(
   let notGreen = 0;
   let outcomesConsidered = 0;
 
-  const sameDay = [...selectSameDayMatches(matches, now)].sort(
+  const inWindow = [...selectWindowMatches(matches, now)].sort(
     (a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime(),
   );
 
   const rows: InstantWinRow[] = [];
-  for (const m of sameDay) {
+  for (const m of inWindow) {
     laySourceExcluded += m.backWithheldAsLaySource ?? 0;
     for (const o of m.outcomes) {
       outcomesConsidered++;
@@ -233,8 +226,8 @@ export function buildInstantWins(
     rows,
     fixturesScanned: matches.length,
     sportsScanned: new Set(matches.map((m) => m.sportKey).filter(Boolean)).size,
-    sameDayFixtures: sameDay.length,
-    sameDaySports: new Set(sameDay.map((m) => m.sportKey).filter(Boolean)).size,
+    fixturesInWindow: inWindow.length,
+    sportsInWindow: new Set(inWindow.map((m) => m.sportKey).filter(Boolean)).size,
     outcomesConsidered,
     noLayPrice,
     withheld,
@@ -248,7 +241,7 @@ export function buildInstantWins(
  * the numbers reach the screen: "looked at 55 fixtures across 20 sports".
  */
 export function coverageLine(result: InstantWinsResult): string {
-  const f = result.sameDayFixtures;
-  const s = result.sameDaySports;
+  const f = result.fixturesInWindow;
+  const s = result.sportsInWindow;
   return `looked at ${f} fixture${f === 1 ? "" : "s"} across ${s} sport${s === 1 ? "" : "s"}`;
 }

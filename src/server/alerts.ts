@@ -41,6 +41,7 @@ import { checkBackLayPair, isSameBookmakerKey } from "../lib/odds-sanity";
 import { readGreenHistory, recordGreens } from "./green-history";
 import { pushSnapshot } from "./scan-bridge";
 import { SCAN_INTERVAL_MIN } from "../lib/cadence";
+import { SCAN_WINDOW_HOURS, isInScanWindow, windowPhrase } from "../lib/scan-window";
 
 const BASE = "https://api.the-odds-api.com/v4";
 const REGIONS = "uk";
@@ -240,8 +241,8 @@ function lastKnownRemaining(): number | null {
 // So a full same-day sweep of 20 sports is 20 credits — 20× the old 1-credit
 // scan. To keep the owner's quota intact the sweep is budgeted rather than
 // widened blindly:
-//   • the free index says WHICH sports have a fixture today (refreshed every
-//     INDEX_TTL_MIN, costs nothing);
+//   • the free index says WHICH sports have a fixture in the rolling window
+//     (refreshed every INDEX_TTL_MIN, costs nothing);
 //   • a sport's odds are only re-fetched once its own copy is older than
 //     SPORT_ODDS_TTL_MIN;
 //   • at most MAX_SPORT_FETCHES sports are paid for in one scan, most urgent
@@ -253,39 +254,42 @@ function lastKnownRemaining(): number | null {
 const SPORT_ODDS_TTL_MIN = num(process.env.ALERT_SPORT_ODDS_TTL_MIN, 60);
 const MAX_SPORT_FETCHES = Math.max(1, Math.floor(num(process.env.ALERT_MAX_SPORT_FETCHES, 24)));
 /**
- * OWNER DECISION 2026-11-03 ("set it"): every sport with a fixture today is now
- * refreshed, not three of them. TTL 90 → 60 minutes and the per-scan cap 3 → 24
- * (24 is above the worst measured same-day count of 20, so nothing is ever left
+ * OWNER DECISION 2026-11-03 ("set it"): every sport with a fixture in the window
+ * is now refreshed, not three of them. TTL 90 → 60 minutes and the per-scan cap
+ * 3 → 24 (24 is above the worst measured count of 20, so nothing is ever left
  * out because of the cap). Measured cost on 2026-11-03: 1 credit per sport.
  *   • 9-sport day, hourly refresh ≈ 6.5k credits/month
  *   • 20-sport day, hourly refresh ≈ 14.4k credits/month
  * against a 20,000/month allowance, leaving the rest for on-demand searches.
  * This is why the cadence can stay at 30 minutes: the TTL does the rationing,
  * not the cap.
+ *
+ * NOTE 2026-11-03 (later): the window is now 26 rolling hours, not a London
+ * calendar day, so the count is no longer "today's sports" — overnight it is the
+ * US slate that fills it. Watch the logged per-scan spend: a Saturday with NBA,
+ * NHL, NFL and college basketball all inside the window is the busy case.
  */
 const MIN_CREDITS_FLOOR = Math.max(0, Math.floor(num(process.env.ALERT_MIN_CREDITS, 500)));
 const INDEX_TTL_MIN = num(process.env.ALERT_INDEX_TTL_MIN, 30);
 const INDEX_FILE = join(RUN_DIR, "alerts-sports-index.json");
-/** How far ahead the per-sport odds call is asked for. Today's fixtures plus slack. */
-const ODDS_WINDOW_HOURS = 26;
 /** Small gap between free index calls: a concurrency-8 burst earned HTTP 429s. */
 const INDEX_GAP_MS = 90;
 
-interface SportIndexEntry {
+export interface SportIndexEntry {
   key: string;
   title: string;
-  /** Fixtures kicking off today in Europe/London that have not started. */
-  todayFixtures: number;
+  /** Fixtures that kick off within the scan window and have not started. */
+  fixturesInWindow: number;
   /** Soonest such kick-off (ISO), for priority ordering. */
   nextKickoff: string | null;
 }
 
-interface SportsIndex {
+export interface SportsIndex {
   ts: number;
   sportsInSeason: number;
-  /** Only sports with at least one same-day fixture — the ones worth paying for. */
+  /** Only sports with at least one fixture in the window — the ones worth paying for. */
   sports: SportIndexEntry[];
-  totalTodayFixtures: number;
+  totalFixturesInWindow: number;
   /** Free calls that failed (rate limit, network) — coverage is understated, not invented. */
   failed: number;
 }
@@ -300,7 +304,7 @@ interface ScanCache {
   ts: number;
   data: Match[];
   perSport?: Record<string, SportCacheEntry>;
-  index?: { ts: number; sportsInSeason: number; sportsWithToday: number; totalTodayFixtures: number };
+  index?: { ts: number; sportsInSeason: number; sportsInWindow: number; totalFixturesInWindow: number };
 }
 
 /** One HTTP GET that also reads the vendor's own credit headers. */
@@ -336,30 +340,35 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** London calendar day of an instant, as YYYY-MM-DD. */
-function londonDay(iso: string | Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/London",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(typeof iso === "string" ? new Date(iso) : iso);
-}
-
 /**
  * The free half of the sweep: which sports are in season, and which of them have
- * a fixture kicking off TODAY (Europe/London) that has not started.
+ * a fixture kicking off INSIDE THE ROLLING WINDOW that has not started.
+ *
+ * The window is `now < commence_time <= now + SCAN_WINDOW_HOURS` (see
+ * src/lib/scan-window.ts), not a London calendar day. The old calendar-day rule
+ * dropped every US fixture that tips off after midnight in London — at 21:00 the
+ * index read "2 fixtures" while the whole NBA/NHL/NFL slate was live an hour
+ * later. Whatever the date, if it kicks off in the next 26 hours it is counted.
  *
  * Costs zero credits. Cached on disk for INDEX_TTL_MIN so a 10-minute scan loop
  * does not hammer 78 free endpoints every time. A failed call is COUNTED, never
  * treated as "that sport has nothing on" — an understated coverage number that
  * says so is honest; a silently short list is not.
  */
-async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIndex> {
+export async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIndex> {
   try {
     if (existsSync(INDEX_FILE)) {
       const cached = JSON.parse(readFileSync(INDEX_FILE, "utf8")) as SportsIndex;
-      if (Number.isFinite(cached?.ts) && Date.now() - cached.ts < INDEX_TTL_MIN * 60_000) {
+      // A file written before the window rename has `totalTodayFixtures` and no
+      // `totalFixturesInWindow`. Its numbers were built on the calendar-day rule,
+      // so it is not merely stale — it is answering the wrong question. Rebuild.
+      const rightShape =
+        Array.isArray(cached?.sports) && Number.isFinite(cached?.totalFixturesInWindow);
+      if (
+        rightShape &&
+        Number.isFinite(cached?.ts) &&
+        Date.now() - cached.ts < INDEX_TTL_MIN * 60_000
+      ) {
         return cached;
       }
     }
@@ -371,9 +380,8 @@ async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIndex> {
   const all = Array.isArray(list.body) ? (list.body as { key?: string; title?: string; active?: boolean }[]) : [];
   const inSeason = all.filter((s) => s.active !== false && typeof s.key === "string");
 
-  const today = londonDay(now);
   const sports: SportIndexEntry[] = [];
-  let totalTodayFixtures = 0;
+  let totalFixturesInWindow = 0;
   let failed = 0;
 
   for (const s of inSeason) {
@@ -388,20 +396,18 @@ async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIndex> {
       failed++;
       continue;
     }
-    const todays = (r.body as { commence_time?: string }[]).filter((e) => {
-      const t = e?.commence_time;
-      if (typeof t !== "string") return false;
-      return londonDay(t) === today && new Date(t).getTime() > now.getTime();
-    });
-    if (todays.length > 0) {
-      const times = todays.map((e) => e.commence_time as string).sort();
+    const upcoming = (r.body as { commence_time?: string }[]).filter((e) =>
+      isInScanWindow(e?.commence_time, now),
+    );
+    if (upcoming.length > 0) {
+      const times = upcoming.map((e) => e.commence_time as string).sort();
       sports.push({
         key,
         title: s.title ?? key,
-        todayFixtures: todays.length,
+        fixturesInWindow: upcoming.length,
         nextKickoff: times[0] ?? null,
       });
-      totalTodayFixtures += todays.length;
+      totalFixturesInWindow += upcoming.length;
     }
     await sleep(INDEX_GAP_MS);
   }
@@ -410,7 +416,7 @@ async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIndex> {
     ts: Date.now(),
     sportsInSeason: inSeason.length,
     sports,
-    totalTodayFixtures,
+    totalFixturesInWindow,
     failed,
   };
   try {
@@ -420,16 +426,47 @@ async function fetchSportsIndex(now: Date = new Date()): Promise<SportsIndex> {
     log(`sports index write failed: ${String(e)}`);
   }
   log(
-    `coverage index: ${inSeason.length} sports in season, ${sports.length} with a fixture today, ` +
-      `${totalTodayFixtures} same-day fixtures${failed ? `, ${failed} sports index calls failed` : ""} (0 credits)`,
+    `coverage index: ${inSeason.length} sports in season, ${sports.length} with a fixture ${windowPhrase()}, ` +
+      `${totalFixturesInWindow} fixtures in the window${failed ? `, ${failed} sports index calls failed` : ""} (0 credits)`,
   );
   return index;
 }
 
 /**
+ * The cache prune, as a pure function so the rule can be tested without spending
+ * a provider credit. Keep a cached fixture only when it is inside the rolling
+ * window (see `scan-window.ts`) and its sport is still in season.
+ *
+ * The season test only applies to sports we have actually paid for: a sport we
+ * never fetched has no cache entry to judge, and its fixtures are left alone.
+ */
+export function pruneScanCache(
+  data: readonly Match[],
+  opts: {
+    now?: Date;
+    sportsInSeason?: Iterable<string>;
+    fetchedSports?: Iterable<string>;
+  } = {},
+): Match[] {
+  const now = opts.now ?? new Date();
+  const inSeason = new Set(opts.sportsInSeason ?? []);
+  const fetched = new Set(opts.fetchedSports ?? []);
+  return data.filter((m) => {
+    if (!isInScanWindow(m.commenceTime, now)) return false;
+    if (m.sportKey && fetched.has(m.sportKey) && !inSeason.has(m.sportKey)) return false;
+    return true;
+  });
+}
+
+/**
  * Read the scan cache, widening it: refresh the free index, then pay for odds for
- * the sports that (a) have a same-day fixture, (b) whose cached odds are older
- * than SPORT_ODDS_TTL_MIN, most urgent kick-off first, up to MAX_SPORT_FETCHES.
+ * the sports that (a) have a fixture in the rolling window, (b) whose cached odds
+ * are older than SPORT_ODDS_TTL_MIN, most urgent kick-off first, up to
+ * MAX_SPORT_FETCHES.
+ *
+ * "In the window" is `now < commence_time <= now + SCAN_WINDOW_HOURS`, so the US
+ * slate that tips off after midnight London time is paid for like any other —
+ * that is what the overnight scan is for.
  *
  * The cache holds what the scan SAW — every fixture for a fetched sport, whether
  * or not it has a lay price, and whether or not it is green. The green test
@@ -457,7 +494,7 @@ async function getMatches(): Promise<Match[]> {
 
   const index = await fetchSportsIndex();
 
-  // Most urgent first: the sport whose next same-day fixture starts soonest is
+  // Most urgent first: the sport whose next in-window fixture starts soonest is
   // the one a user can still act on, so it gets the freshest prices.
   const queue = [...index.sports]
     .filter((s) => {
@@ -468,7 +505,7 @@ async function getMatches(): Promise<Match[]> {
     .sort((a, b) => (a.nextKickoff ?? "9").localeCompare(b.nextKickoff ?? "9"));
 
   const from = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-  const to = new Date(Date.now() + ODDS_WINDOW_HOURS * 3600_000).toISOString().replace(/\.\d+Z$/, "Z");
+  const to = new Date(Date.now() + SCAN_WINDOW_HOURS * 3600_000).toISOString().replace(/\.\d+Z$/, "Z");
 
   let spent = 0;
   let fetched = 0;
@@ -512,15 +549,15 @@ async function getMatches(): Promise<Match[]> {
     fetched++;
   }
 
-  // Prune what can no longer be shown or traded: started fixtures and sports
-  // that are no longer in season. Keeps the cache from growing without bound.
-  const nowMs = Date.now();
-  const inSeason = new Set(index.sports.map((s) => s.key));
-  data = data.filter((m) => {
-    const t = Date.parse(m.commenceTime);
-    if (Number.isFinite(t) && t <= nowMs) return false;
-    if (m.sportKey && perSport[m.sportKey] && !inSeason.has(m.sportKey)) return false;
-    return true;
+  // Prune what can no longer be shown or traded, on exactly the window rule the
+  // index and the feed use: started fixtures, fixtures beyond the far edge of the
+  // window, and sports that are no longer in season. Keeps the cache from growing
+  // without bound — and, just as importantly, keeps it from disagreeing with the
+  // page about what "in the window" means.
+  data = pruneScanCache(data, {
+    now: new Date(),
+    sportsInSeason: index.sports.map((s) => s.key),
+    fetchedSports: Object.keys(perSport),
   });
 
   const next: ScanCache = {
@@ -530,8 +567,8 @@ async function getMatches(): Promise<Match[]> {
     index: {
       ts: index.ts,
       sportsInSeason: index.sportsInSeason,
-      sportsWithToday: index.sports.length,
-      totalTodayFixtures: index.totalTodayFixtures,
+      sportsInWindow: index.sports.length,
+      totalFixturesInWindow: index.totalFixturesInWindow,
     },
   };
   try {
@@ -552,7 +589,7 @@ async function getMatches(): Promise<Match[]> {
   log(
     `sweep: ${fetched} sport${fetched === 1 ? "" : "s"} refreshed (${spent} credit${spent === 1 ? "" : "s"}), ` +
       `${queue.length - fetched} due, ${data.length} fixtures held, ` +
-      `${index.sports.length} sports with a fixture today / ${index.totalTodayFixtures} fixtures`,
+      `${index.sports.length} sports with a fixture ${windowPhrase()} / ${index.totalFixturesInWindow} fixtures`,
   );
   return data;
 }

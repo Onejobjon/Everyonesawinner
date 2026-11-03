@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   buildInstantWins,
   coverageLine,
-  selectSameDayMatches,
+  selectWindowMatches,
   STALE_AFTER_MIN,
 } from "../src/lib/instant-wins";
 import { readInstantWins } from "../src/server/instant-wins";
@@ -70,14 +70,14 @@ const TOMORROW = match("2026-11-03T15:00:00Z");
 const NEXT_WEEK = match("2026-11-09T15:00:00Z");
 const TODAY_STARTED = match("2026-11-02T09:00:00Z");
 
-describe("ITEM 1 — Instant Wins is same-day only", () => {
+describe("ITEM 1 — Instant Wins covers the next 26 hours", () => {
   test("a fixture tomorrow and one next week are both excluded", () => {
-    const kept = selectSameDayMatches([TODAY_LATER, TOMORROW, NEXT_WEEK], NOW);
+    const kept = selectWindowMatches([TODAY_LATER, TOMORROW, NEXT_WEEK], NOW);
     expect(kept.map((m) => m.commenceTime)).toEqual(["2026-11-02T15:00:00Z"]);
   });
 
   test("a fixture that already kicked off today is excluded (not started only)", () => {
-    const kept = selectSameDayMatches([TODAY_LATER, TODAY_STARTED], NOW);
+    const kept = selectWindowMatches([TODAY_LATER, TODAY_STARTED], NOW);
     expect(kept).toHaveLength(1);
     expect(kept[0].commenceTime).toBe("2026-11-02T15:00:00Z");
   });
@@ -91,19 +91,23 @@ describe("ITEM 1 — Instant Wins is same-day only", () => {
       stake: 20,
     });
     expect(built.fixturesScanned).toBe(4); // every fixture the scan looked at
-    expect(built.sameDayFixtures).toBe(1); // today, not started
+    expect(built.fixturesInWindow).toBe(1); // in the window, not started
     expect(built.rows).toHaveLength(1);
     expect(built.rows[0].kickoff).toBe("2026-11-02T15:00:00Z");
   });
 
-  test("a 23:30 London kick-off is today, a 00:30 one is tomorrow", () => {
-    // 23:30 UTC on 2 Nov is 23:30 in London (GMT) — still today.
+  test("a 23:30 kick-off and a 00:30 one are BOTH in — the calendar date is not the rule", () => {
+    // This is the test that used to pin the bug: under the old London-calendar-day
+    // rule 00:30 on 3 Nov was "tomorrow" and vanished from the feed, which is how
+    // every overnight NBA/NHL/NFL game disappeared at 21:00. The window is now
+    // absolute time, so an hour apart on either side of midnight makes no difference.
     const late = match("2026-11-02T23:30:00Z");
-    // 00:30 UTC on 3 Nov is 00:30 in London — tomorrow, even though it is only
-    // an hour later in wall-clock terms.
     const early = match("2026-11-03T00:30:00Z");
-    const kept = selectSameDayMatches([late, early], NOW);
-    expect(kept.map((m) => m.commenceTime)).toEqual(["2026-11-02T23:30:00Z"]);
+    const kept = selectWindowMatches([late, early], NOW);
+    expect(kept.map((m) => m.commenceTime)).toEqual([
+      "2026-11-02T23:30:00Z",
+      "2026-11-03T00:30:00Z",
+    ]);
   });
 
   test("kick-off time shown is London time", () => {
@@ -207,8 +211,8 @@ describe("ITEM 1 — Instant Wins is same-day only", () => {
     expect(built.rows).toHaveLength(0); // all three are qualifying-grade
     expect(built.fixturesScanned).toBe(4);
     expect(built.sportsScanned).toBe(2);
-    expect(built.sameDayFixtures).toBe(3); // the 3rd soccer fixture is tomorrow
-    expect(built.sameDaySports).toBe(2);
+    expect(built.fixturesInWindow).toBe(3); // the 3rd soccer fixture is tomorrow
+    expect(built.sportsInWindow).toBe(2);
     expect(coverageLine(built)).toBe("looked at 3 fixtures across 2 sports");
   });
 
@@ -285,18 +289,18 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
       JSON.stringify({
         ts,
         data: [tennis, soccer, TOMORROW],
-        index: { ts, sportsInSeason: 78, sportsWithToday: 20, totalTodayFixtures: 55 },
+        index: { ts, sportsInSeason: 78, sportsInWindow: 20, totalFixturesInWindow: 55 },
       }),
     );
     try {
       const p = readInstantWins({ file, now: NOW });
       expect(p.sportsScanned).toBe(2); // tennis + soccer (tomorrow's is also soccer)
-      expect(p.sameDaySports).toBe(2);
-      expect(p.sameDayFixtures).toBe(2);
+      expect(p.sportsInWindow).toBe(2);
+      expect(p.fixturesInWindow).toBe(2);
       expect(p.sportsInSeason).toBe(78);
-      expect(p.sportsWithToday).toBe(20);
-      expect(p.fixturesToday).toBe(55);
-      expect(p.message).toContain("2 fixtures kicking off today across 2 sports");
+      expect(p.indexSportsInWindow).toBe(20);
+      expect(p.indexFixturesInWindow).toBe(55);
+      expect(p.message).toContain("2 fixtures kicking off in the next 26 hours across 2 sports");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -311,7 +315,7 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
       expect(p.ageMinutes).toBe(5);
       expect(p.stale).toBe(false);
       expect(p.fixturesScanned).toBe(2);
-      expect(p.sameDayFixtures).toBe(1);
+      expect(p.fixturesInWindow).toBe(1);
       expect(p.matches).toHaveLength(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -354,7 +358,7 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
       expect(p.reason).toBe("missing");
       expect(p.message).toContain("No prices to show yet");
       // The distinction that matters: it must not read as "we looked, nothing on".
-      expect(p.message).not.toContain("no fixtures kicking off today");
+      expect(p.message).not.toContain("no fixtures kicking off in the next 26 hours");
       expect(p.scannedAt).toBeNull();
       expect(p.matches).toEqual([]);
     } finally {
@@ -389,11 +393,11 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
     const { dir, file } = tempCache(JSON.stringify({ ts: NOW.getTime() - 60_000, data: [TOMORROW] }));
     try {
       const p = readInstantWins({ file, now: NOW });
-      // The scan exists, so this is "scanned, nothing on today" — not "no scan".
+      // The scan exists, so this is "scanned, nothing in the window" — not "no scan".
       expect(p.status).toBe("ok");
       expect(p.fixturesScanned).toBe(1);
-      expect(p.sameDayFixtures).toBe(0);
-      expect(p.message).toContain("no fixtures kicking off today");
+      expect(p.fixturesInWindow).toBe(0);
+      expect(p.message).toContain("no fixtures kicking off in the next 26 hours");
       expect(p.message).not.toContain("No prices to show yet");
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -415,7 +419,7 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
       for (let i = 0; i < 10; i++) {
         const p = readInstantWins({ file, now: NOW });
         expect(p.status).toBe("ok");
-        expect(p.sameDayFixtures).toBe(1);
+        expect(p.fixturesInWindow).toBe(1);
       }
       expect(calls).toBe(0);
     } finally {

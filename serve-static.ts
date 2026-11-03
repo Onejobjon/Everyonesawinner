@@ -340,7 +340,7 @@ const server = Bun.serve({
         }
         console.log(
           `[instant-wins] status=${payload.status} age=${payload.ageMinutes ?? "-"}m stale=${payload.stale} ` +
-            `fixtures=${payload.fixturesScanned} sameDay=${payload.sameDayFixtures} ` +
+            `fixtures=${payload.fixturesScanned} inWindow=${payload.fixturesInWindow} ` +
             `refreshing=${refreshing} (${refreshNote})`,
         );
         const onOpen = scanOnOpenState();
@@ -370,7 +370,7 @@ const server = Bun.serve({
             stale: false,
             staleAfterMin: 20,
             fixturesScanned: 0,
-            sameDayFixtures: 0,
+            fixturesInWindow: 0,
             matches: [],
             refreshing: false,
           },

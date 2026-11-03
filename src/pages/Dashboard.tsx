@@ -14,9 +14,10 @@ export default function Dashboard() {
           <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-900 dark:text-green-300">✅ Active</span>
         </div>
 
-          {/* INSTANT WINS — the pre-loaded same-day feed. Top of the page because
-              the whole point is that it is already there when you arrive. Paid
-              tier (any plan), not Pro-only: the old pre-loaded list never was. */}
+          {/* INSTANT WINS — the pre-loaded feed for the next 26 hours. Top of the
+              page because the whole point is that it is already there when you
+              arrive. Paid tier (any plan), not Pro-only: the old pre-loaded list
+              never was. */}
           <InstantWins />
 
           <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
