@@ -5,7 +5,25 @@ import FreeBetsOffers from "../components/FreeBetsOffers";
 import Paywall from "../components/Paywall";
 import PageHeader from "../components/PageHeader";
 
-const STAKE = 10; // Fixed stake on favourite
+/**
+ * Starting values for the amount box — NOT a fixed stake.
+ *
+ * Every card on this page is worked out from one number: the free bet in
+ * free-bet mode, or the stake on the ⭐ favourite in cash mode. Those used to
+ * be invisible defaults of 10 inside calcDutchFreeBet / calcDutch, so the page
+ * printed "£10" figures the visitor never typed and could not change. The
+ * amount is now a visible input that starts at these values, and whatever is
+ * typed is passed straight through: no cap, no rescale (see the note on
+ * assertUsableStake in lib/odds.ts — a £200 free bet gets £200-sized stakes).
+ */
+const DEFAULT_FREE_BET = 10;
+const DEFAULT_CASH_STAKE = 10;
+
+/** Parse the amount box; an empty or nonsense box falls back to the default. */
+function parseAmount(raw: string, fallback: number): number {
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
 
 function getIcon(name: string, home: string, away: string): string {
   const lower = name.toLowerCase();
@@ -20,6 +38,13 @@ export default function Oddsmatcher() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("All");
   const [freeBetMode, setFreeBetMode] = useState(true);
+  const [freeBetInput, setFreeBetInput] = useState(String(DEFAULT_FREE_BET));
+  const [cashStakeInput, setCashStakeInput] = useState(String(DEFAULT_CASH_STAKE));
+
+  // The one number every card below is worked out from, exactly as typed.
+  const amountInput = freeBetMode ? freeBetInput : cashStakeInput;
+  const setAmountInput = freeBetMode ? setFreeBetInput : setCashStakeInput;
+  const amount = parseAmount(amountInput, freeBetMode ? DEFAULT_FREE_BET : DEFAULT_CASH_STAKE);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +120,34 @@ export default function Oddsmatcher() {
                   💷 All Cash
                 </button>
               </div>
+
+              <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+                <label className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {freeBetMode ? "Free bet amount" : "Stake on the ⭐ favourite"}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    (default £{freeBetMode ? DEFAULT_FREE_BET : DEFAULT_CASH_STAKE} — change it to anything)
+                  </span>
+                  <span className="ml-auto flex items-center gap-1.5">
+                    <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">£</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      aria-label={freeBetMode ? "Free bet amount in pounds" : "Stake on the favourite in pounds"}
+                      value={amountInput}
+                      onChange={(e) => setAmountInput(e.target.value)}
+                      onBlur={() => setAmountInput(String(amount))}
+                      className="w-24 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                    />
+                  </span>
+                </label>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  {freeBetMode
+                    ? `Every figure below is worked out from this £${amount.toFixed(2)} stake-not-returned free bet — the cash stakes, the return if either side wins, and the profit. Nothing is capped or rescaled: a £200 free bet would get £200-sized stakes.`
+                    : `Every figure below is worked out from this £${amount.toFixed(2)} cash stake, placed on the ⭐ favourite; the other outcomes are staked to return the same either way. Nothing is capped or rescaled.`}
+                </p>
+              </div>
               <div className="mt-6 mb-6">
                 <FreeBetsOffers />
               </div>
@@ -108,8 +161,8 @@ export default function Oddsmatcher() {
                 const dutch = incomplete
                   ? null
                   : freeBetMode
-                    ? calcDutchFreeBet(oddsArr)
-                    : calcDutch(oddsArr);
+                    ? calcDutchFreeBet(oddsArr, amount)
+                    : calcDutch(oddsArr, amount);
                 return (
                   <div key={m.matchId}
                     className={`rounded-xl border-2 p-5 bg-white dark:bg-gray-950 shadow-sm transition-shadow hover:shadow-md ${
@@ -135,7 +188,7 @@ export default function Oddsmatcher() {
                           </span>
                           <span className="font-medium text-indigo-700 dark:text-indigo-400">
                             {dutch && freeBetMode && i === (dutch as any).freeBetIndex
-                              ? <span className="text-purple-600 dark:text-purple-400">— FREE BET <strong>£10</strong></span>
+                              ? <span className="text-purple-600 dark:text-purple-400">— your <strong>£{amount.toFixed(2)}</strong> free bet</span>
                               : dutch
                                 ? `— stake £${dutch.stakes[i].toFixed(2)}`
                                 : "—"
