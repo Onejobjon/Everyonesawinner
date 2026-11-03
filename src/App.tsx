@@ -17,6 +17,7 @@ import Dashboard from "./pages/Dashboard";
 import Subscribe from "./pages/Subscribe";
 import SubscribeSuccess from "./pages/SubscribeSuccess";
 import OwnerComps from "./pages/OwnerComps";
+import BudgetChooser from "./components/BudgetChooser";
 
 export default function App() {
   return (
@@ -54,6 +55,12 @@ export default function App() {
         {/* /preview used to promise "no auth or subscription required" while the ?preview=1 bypass was removed for security — it now only showed a paywall, so send people to the real door */}
         <Route path="/preview" element={<Navigate to="/login" replace />} />
       </Routes>
+      {/* One-time "how much can you start with" question. It only ever opens on
+          the landing page, only while this browser has no stored answer, and it
+          writes that answer to localStorage — never to the server. Mounted inside
+          AuthProvider because the £150+ answer has to know whether the account
+          actually has the Pro tool before recommending it. */}
+      <BudgetChooser />
     </AuthProvider>
   );
 }
