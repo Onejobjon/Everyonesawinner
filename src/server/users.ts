@@ -3,7 +3,15 @@ import { dirname, join } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { ensureSchema, hasDatabase, query } from "./db-pg";
 import { issueSession } from "./sessions";
-import { isEntitled, type Plan, type SubscriptionState } from "./entitlement";
+import {
+  compGrants,
+  isEntitled,
+  isKnownPlan,
+  type CompState,
+  type Plan,
+  type SubscriptionState,
+} from "./entitlement";
+import { compOf, liveComp } from "./comps";
 
 /**
  * Server-side user store. Accounts persist to a JSON file (`.run/users.json`
@@ -39,6 +47,13 @@ export interface StoredUser {
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   createdAt: string;
+  /**
+   * A FREE-ACCESS GRANT — this person uses the site without paying (a trialist,
+   * a reviewer, a friend). Written by the owner's grant panel (src/server/comps.ts)
+   * and decided by compGrants() in entitlement.ts: dated, or explicitly undated,
+   * and revocable. Absent means no comp — it never means "no end date".
+   */
+  comp?: CompState | null;
 }
 
 /**
@@ -57,6 +72,9 @@ export interface PublicUser {
   subscriptionStatus: string | null;
   currentPeriodEnd: string | null;
   graceEndsAt: string | null;
+  /** The free-access grant behind this session, if any — so the page can say
+   *  "free access until <date>" instead of showing a price. */
+  comp: CompState | null;
   token: string;
 }
 
@@ -140,14 +158,22 @@ function isOwnerSeat(email: string): boolean {
 }
 
 /** The entitlement inputs for one stored record (owner seat included). */
-export function stateOf(record: StoredUser): SubscriptionState {
+export function stateOf(record: StoredUser, nowMs: number = Date.now()): SubscriptionState {
   const ownerSeat = isOwnerSeat(record.email);
+  const comp = record.comp ?? null;
+  // A live grant speaks for the account: it sets the plan the tools read, so a
+  // comped Pro unlocks the Pro-only pages even with no subscription at all.
+  // An EXPIRED or revoked grant grants nothing and is not allowed to make the
+  // account look like a subscriber either.
+  const compLive = compGrants(comp, nowMs);
   return {
-    plan: ownerSeat ? "pro" : record.plan ?? null,
-    status: ownerSeat ? "active" : record.subscriptionStatus ?? null,
-    currentPeriodEnd: record.currentPeriodEnd ?? null,
+    plan: ownerSeat ? "pro" : compLive && comp ? comp.plan : record.plan ?? null,
+    status: ownerSeat ? "active" : compLive ? "comp" : record.subscriptionStatus ?? null,
+    currentPeriodEnd:
+      compLive && comp ? (comp.permanent === true ? null : comp.endsAt) : record.currentPeriodEnd ?? null,
     graceEndsAt: record.graceEndsAt ?? null,
     ownerSeat,
+    comp,
   };
 }
 
@@ -161,6 +187,7 @@ function toPublic(record: StoredUser): PublicUser {
     subscriptionStatus: state.status,
     currentPeriodEnd: state.currentPeriodEnd,
     graceEndsAt: state.graceEndsAt,
+    comp: state.comp ?? null,
     token: newToken(),
   };
 }
@@ -187,6 +214,8 @@ function registerUserJson(name: string, email: string, password: string): Public
   if (owner && !ownerSecretMatches(password)) {
     throw new Error("An account with that email already exists.");
   }
+  const granted = liveComp(cleanEmail);
+  const pending: CompState | null = granted ? compOf(granted) : null;
   const record: StoredUser = {
     name: cleanName,
     email: cleanEmail,
@@ -202,6 +231,10 @@ function registerUserJson(name: string, email: string, password: string): Public
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     createdAt: new Date().toISOString(),
+    // A GRANT GIVEN BEFORE SIGNUP APPLIES NOW: the owner comps an address from
+    // the panel, the person registers with it, and the free access is on the
+    // account from its first second (src/server/comps.ts).
+    comp: pending,
   };
   users[cleanEmail] = record;
   saveUsers(users);
@@ -292,6 +325,13 @@ interface UserRow {
   grace_ends_at: string | Date | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  /** Free-access grant columns (migrations/004_free_access_grants.sql). */
+  comp_plan?: string | null;
+  comp_ends_at?: string | Date | null;
+  comp_permanent?: boolean | null;
+  comp_note?: string | null;
+  comp_granted_by?: string | null;
+  comp_granted_at?: string | Date | null;
 }
 
 /** Postgres timestamps arrive as Date or string depending on the driver. */
@@ -303,6 +343,16 @@ function isoOrNull(v: string | Date | null | undefined): string | null {
 }
 
 function rowToStored(row: UserRow): StoredUser {
+  const comp: CompState | null = isKnownPlan(row.comp_plan)
+    ? {
+        plan: row.comp_plan,
+        endsAt: isoOrNull(row.comp_ends_at),
+        permanent: row.comp_permanent === true,
+        note: row.comp_note ?? undefined,
+        grantedBy: row.comp_granted_by ?? undefined,
+        grantedAt: isoOrNull(row.comp_granted_at) ?? undefined,
+      }
+    : null;
   return {
     name: row.name,
     email: row.email,
@@ -315,12 +365,13 @@ function rowToStored(row: UserRow): StoredUser {
     stripeCustomerId: row.stripe_customer_id,
     stripeSubscriptionId: row.stripe_subscription_id,
     createdAt: new Date().toISOString(),
+    comp,
   };
 }
 
 /** The columns rowToStored() needs — keep in step with the SELECTs below. */
 const USER_COLUMNS =
-  "email, name, password_hash, salt, plan, subscription_status, current_period_end, grace_ends_at, stripe_customer_id, stripe_subscription_id";
+  "email, name, password_hash, salt, plan, subscription_status, current_period_end, grace_ends_at, stripe_customer_id, stripe_subscription_id, comp_plan, comp_ends_at, comp_permanent, comp_note, comp_granted_by, comp_granted_at";
 
 async function registerUserDb(name: string, email: string, password: string): Promise<PublicUser> {
   await ensureSchema();
@@ -344,7 +395,15 @@ async function registerUserDb(name: string, email: string, password: string): Pr
     [cleanEmail, cleanName, hashPassword(pw, salt), salt, isOwnerSeat(cleanEmail) ? "pro" : null],
   );
   if (rows.length === 0) throw new Error("An account with that email already exists.");
-  return toPublic(rowToStored(rows[0]!));
+  const stored = rowToStored(rows[0]!);
+  // A grant given before signup applies now — same rule as the JSON path.
+  const granted = liveComp(cleanEmail);
+  if (granted) {
+    const comp = compOf(granted);
+    await setComp(cleanEmail, comp);
+    stored.comp = comp;
+  }
+  return toPublic(stored);
 }
 
 async function authenticateUserDb(email: string, password: string): Promise<PublicUser> {
@@ -402,8 +461,16 @@ export async function authenticateUser(email: string, password: string): Promise
   const user = hasDatabase()
     ? await authenticateUserDb(email, password)
     : (warnNonDurableOnce(), authenticateUserJson(email, password));
+  // A free-access grant given before signup — or one the record does not carry
+  // yet — applies at sign-in too, not only at registration.
+  let effective = user;
+  try {
+    effective = (await findByEmail(user.email)) ?? user;
+  } catch (e) {
+    console.warn(`[users] could not apply free-access grants at sign-in: ${String(e)}`);
+  }
   // Real, server-persisted session token (see src/server/sessions.ts).
-  return { ...user, token: await issueSession(user.email) };
+  return { ...effective, token: await issueSession(user.email) };
 }
 
 /**
@@ -474,6 +541,77 @@ export async function updateSubscription(
   users[cleanEmail] = record;
   saveUsers(users); // throws on a failed write — the caller must hear about it
   return true;
+}
+
+/**
+ * Write (or clear, with `null`) the free-access grant on one account.
+ *
+ * This is the account-record half of a comp; the owner's list lives in
+ * src/server/comps.ts and both are written together by the grant endpoints. The
+ * grant is stored as given — it is NOT re-dated here, so revoking or shortening
+ * a grant is immediate. `stateOf()` decides whether it grants anything.
+ *
+ * Returns TRUE when an account was updated, FALSE when there is no account with
+ * that email (the grant then waits in the ledger for signup).
+ */
+export async function setComp(email: string, comp: CompState | null): Promise<boolean> {
+  const cleanEmail = (email ?? "").trim().toLowerCase();
+  if (!cleanEmail) return false;
+
+  if (hasDatabase()) {
+    await ensureSchema();
+    const rows = await query<{ email: string }>(
+      `UPDATE users
+          SET comp_plan = $2, comp_ends_at = $3, comp_permanent = $4,
+              comp_note = $5, comp_granted_by = $6, comp_granted_at = $7
+        WHERE lower(email) = $1
+        RETURNING email`,
+      [
+        cleanEmail,
+        comp?.plan ?? null,
+        comp?.endsAt ?? null,
+        comp?.permanent === true,
+        comp?.note ?? null,
+        comp?.grantedBy ?? null,
+        comp?.grantedAt ?? null,
+      ],
+    );
+    return rows.length > 0;
+  }
+
+  warnNonDurableOnce();
+  const users = loadUsers();
+  const record = users[cleanEmail];
+  if (!record) return false;
+  record.comp = comp;
+  users[cleanEmail] = record;
+  saveUsers(users); // throws on a failed write — the caller must hear about it
+  return true;
+}
+
+/**
+ * Copy a grant from the owner's ledger onto the account record when the record
+ * does not already carry it.
+ *
+ * WHY: a grant can be given before the account exists, and the ledger is the
+ * list the owner sees. This is what makes "comp an address, they sign up, they
+ * are in" true on every path (signup, login, /api/me, the server-side gates)
+ * without any of them having to know about comps. It only ever ADDS a live
+ * grant; it never removes one, so a revoke is never undone by a stale ledger.
+ */
+async function withLedgerComp(record: StoredUser): Promise<StoredUser> {
+  const granted = liveComp(record.email);
+  if (!granted) return record;
+  if (record.comp && record.comp.grantedAt === granted.grantedAt) return record;
+  const comp = compOf(granted);
+  try {
+    await setComp(record.email, comp);
+  } catch (e) {
+    // The write failed, but the grant is real: this request is still entitled
+    // (the copy below is what entitlement reads). The next lookup retries.
+    console.warn(`[users] could not store the free-access grant for ${record.email}: ${String(e)}`);
+  }
+  return { ...record, comp };
 }
 
 /**
@@ -576,9 +714,9 @@ export async function findByEmail(email: string): Promise<PublicUser | null> {
       `SELECT ${USER_COLUMNS} FROM users WHERE lower(email) = $1`,
       [cleanEmail],
     );
-    return rows[0] ? toPublic(rowToStored(rows[0])) : null;
+    return rows[0] ? toPublic(await withLedgerComp(rowToStored(rows[0]))) : null;
   }
   const users = loadUsers();
   const record = users[cleanEmail];
-  return record ? toPublic(record) : null;
+  return record ? toPublic(await withLedgerComp(record)) : null;
 }

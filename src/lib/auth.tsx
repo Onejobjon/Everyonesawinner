@@ -21,6 +21,21 @@ interface User {
   subscriptionStatus?: string | null;
   /** While a renewal is failing, access continues until this date (ISO). */
   graceEndsAt?: string | null;
+  /**
+   * A free-access grant from the owner (trialist, reviewer, friend), as the
+   * server reports it: the plan, when it stops, and whether it was deliberately
+   * left open-ended. Absent means "not comped".
+   */
+  comp?: {
+    plan: Plan;
+    endsAt: string | null;
+    permanent?: boolean;
+    note?: string;
+    grantedBy?: string;
+    grantedAt?: string;
+  } | null;
+  /** True only for the owner's own seat — used to show him his admin link. */
+  owner?: boolean;
 }
 
 /**

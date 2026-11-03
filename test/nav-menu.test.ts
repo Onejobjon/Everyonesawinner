@@ -36,8 +36,14 @@ function routesInApp(): { path: string; element: string }[] {
   return routes;
 }
 
-/** Pages that exist but are deliberately not in the menu, with the reason. */
-const NOT_IN_MENU = new Set<string>(["/subscribe/success"]);
+/**
+ * Pages that exist but are deliberately not in the menu, with the reason.
+ *  - `/subscribe/success` is the landing a payment provider returns you to;
+ *  - `/owner/comps` is the owner's own free-access panel (2026-11-02). It is
+ *    linked from his dashboard and refused with a 404 for everyone else, so it
+ *    must not appear in a menu every visitor sees.
+ */
+const NOT_IN_MENU = new Set<string>(["/subscribe/success", "/owner/comps"]);
 
 describe("header All pages menu", () => {
   const routes = routesInApp();

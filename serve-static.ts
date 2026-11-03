@@ -9,7 +9,8 @@ import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./src/server/odds
 import { runLeagueSearch, parseLeagueParam } from "./src/server/league-search";
 import { runEventFetch, parseMarkets, isCatalogueSport } from "./src/server/same-match";
 import { storeLead } from "./src/server/leads";
-import { registerUser, authenticateUser, findByEmail } from "./src/server/users";
+import { registerUser, authenticateUser, findByEmail, ownerEmails } from "./src/server/users";
+import { handleCompsApi } from "./src/server/comps-api";
 import { resolveSession, revokeSession } from "./src/server/sessions";
 import { requireProSession, requirePaidSession, requireOwnerSession } from "./src/server/pro-gate";
 import { readInstantWins, feedDiagnostics, candidateCacheFiles } from "./src/server/instant-wins";
@@ -100,6 +101,14 @@ const server = Bun.serve({
         envNames: names,
         allNames,
       });
+    }
+
+    // FREE-ACCESS GRANTS (owner only). The panel at /owner/comps grants a named
+    // person free use of the site for a set number of days and can revoke it.
+    // Anyone who is not the owner gets the same bare 404 — the check lives in
+    // src/server/comps-api.ts and reuses requireOwnerSession().
+    if (url.pathname.startsWith("/api/comps")) {
+      return handleCompsApi(req, url);
     }
 
     // Odds proxy — fetches live odds server-side so the API key never ships
@@ -633,6 +642,13 @@ const server = Bun.serve({
             subscriptionStatus: found.subscriptionStatus,
             currentPeriodEnd: found.currentPeriodEnd,
             graceEndsAt: found.graceEndsAt,
+            // A free-access grant, so a comped account can be told when its free
+            // access ends instead of being shown a price.
+            comp: found.comp ?? null,
+            // Is this the owner's own seat? Used only to show the owner his own
+            // admin link — it grants nothing by itself (every admin endpoint
+            // re-checks the seat server-side).
+            owner: ownerEmails().includes(found.email.trim().toLowerCase()),
             token,
           },
         });

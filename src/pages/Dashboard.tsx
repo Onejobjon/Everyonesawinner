@@ -46,8 +46,33 @@ export default function Dashboard() {
               <div className="flex justify-between"><span className="text-gray-500">Email</span><span>{user?.email}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Name</span><span>{user?.name}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Plan</span><span className="font-semibold text-green-600">{user?.plan === "pro" ? "Pro" : user?.plan === "annual" ? "Pro Annual" : "Starter"}</span></div>
+              {/* A free-access grant: say when it ends, so a comped user is never
+                  surprised and never shown a price they do not owe. */}
+              {user?.comp ? (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Free access</span>
+                  <span>
+                    {user.comp.permanent || !user.comp.endsAt
+                      ? "no end date"
+                      : `until ${new Date(user.comp.endsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
+
+          {/* OWNER ONLY: the free-access grant panel. Shown on the owner's own
+              seat so he does not need to remember a web address. */}
+          {user?.owner ? (
+            <div className="mt-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900 dark:bg-indigo-950">
+              <p className="text-sm text-indigo-900 dark:text-indigo-200">
+                Want a friend to try the site for free?{" "}
+                <Link to="/owner/comps" className="font-semibold underline hover:text-indigo-700 dark:hover:text-indigo-100">
+                  Give someone free access →
+                </Link>
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-6 text-center">
             <Link to="/logout" className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Sign out</Link>

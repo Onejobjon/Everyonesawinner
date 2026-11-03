@@ -25,6 +25,18 @@
  * A missing or unparseable period end is NOT "forever" — it is not entitled.
  * Fail closed: an account whose paid period we cannot date is an account we
  * cannot say has paid.
+ *
+ * FREE-ACCESS COMPS (owner request, 2026-11-02: "How can I give someone free use
+ * of the site? I need to get feedback from a human new to match betting."). A
+ * named person can be granted a plan without paying — a trialist, a reviewer, a
+ * friend. The grant is a `CompState` on the account record and it follows the
+ * same discipline as a paid period:
+ *   • it is DATED — access ends when the end date passes;
+ *   • an UNDATED comp must say so explicitly (`permanent: true`), so "no end
+ *     date" is a decision somebody made, never a field somebody forgot;
+ *   • it is REVOCABLE — clearing the comp removes access on the next request;
+ *   • an unknown plan, or a comp we cannot date, grants nothing.
+ * Everything else still fails closed.
  */
 
 export type Plan = "starter" | "pro" | "annual";
@@ -65,6 +77,39 @@ export function isFutureDate(value: unknown, nowMs: number = Date.now()): boolea
   return Number.isFinite(t) && t > nowMs;
 }
 
+/**
+ * A free-access grant ("comp") on an account — no payment, no subscription.
+ *
+ * `endsAt` is the date access stops. `permanent` is the ONLY way to say "no end
+ * date": an undated comp with `permanent` absent grants NOTHING, because a
+ * missing field is not a decision. Both are checked by compGrants() below.
+ */
+export interface CompState {
+  /** The plan this grant unlocks (pro => the Pro-only tools too). */
+  plan: Plan;
+  /** When the free access stops (ISO 8601). null only with `permanent: true`. */
+  endsAt: string | null;
+  /** Explicit "runs until it is revoked" — required when endsAt is null. */
+  permanent?: boolean;
+  /** Why this person has it, in the owner's words. */
+  note?: string;
+  /** Which owner account granted it. */
+  grantedBy?: string;
+  /** When it was granted (ISO 8601). */
+  grantedAt?: string;
+}
+
+/**
+ * Does this comp grant access right now? Fail closed: an unknown plan, a comp
+ * that is missing, or an undated comp that was not explicitly made permanent
+ * all answer NO.
+ */
+export function compGrants(comp: CompState | null | undefined, nowMs: number = Date.now()): boolean {
+  if (!comp || !isKnownPlan(comp.plan)) return false;
+  if (comp.permanent === true) return true;
+  return isFutureDate(comp.endsAt, nowMs);
+}
+
 /** Everything the rule needs — the same shape on the JSON and Postgres paths. */
 export interface SubscriptionState {
   plan: Plan | null;
@@ -73,6 +118,8 @@ export interface SubscriptionState {
   graceEndsAt: string | null;
   /** The owner's comped seat: no subscription, no period, always entitled. */
   ownerSeat?: boolean;
+  /** A named person's free-access grant, if any (see CompState). */
+  comp?: CompState | null;
 }
 
 /**
@@ -80,6 +127,9 @@ export interface SubscriptionState {
  */
 export function isEntitled(state: SubscriptionState, nowMs: number = Date.now()): boolean {
   if (state.ownerSeat) return true;
+  // A free-access grant is checked on its own terms (see compGrants): dated, or
+  // explicitly undated. It is not a "plan with no period", which would fail.
+  if (compGrants(state.comp, nowMs)) return true;
   if (!isKnownPlan(state.plan)) return false;
   if (ACTIVE_STATUSES.includes(state.status ?? "") && isFutureDate(state.currentPeriodEnd, nowMs)) {
     return true;
@@ -93,7 +143,10 @@ export function isEntitled(state: SubscriptionState, nowMs: number = Date.now())
 /** Entitled AND on a plan that unlocks the Pro-only tools. */
 export function isProEntitled(state: SubscriptionState, nowMs: number = Date.now()): boolean {
   if (!isEntitled(state, nowMs)) return false;
-  return state.plan === "pro" || state.plan === "annual";
+  if (state.plan === "pro" || state.plan === "annual") return true;
+  // A live comp on a Pro plan unlocks the Pro tools even if the record's own
+  // plan field says otherwise (a comped Pro on top of an old Starter plan).
+  return compGrants(state.comp, nowMs) && (state.comp?.plan === "pro" || state.comp?.plan === "annual");
 }
 
 /** Entitled AND on any paid plan (Starter and above). */

@@ -16,6 +16,7 @@ import Logout from "./pages/Logout";
 import Dashboard from "./pages/Dashboard";
 import Subscribe from "./pages/Subscribe";
 import SubscribeSuccess from "./pages/SubscribeSuccess";
+import OwnerComps from "./pages/OwnerComps";
 
 export default function App() {
   return (
@@ -46,6 +47,10 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/subscribe/success" element={<SubscribeSuccess />} />
+        {/* Owner only: give a named person free use of the site. The page hides
+            itself from everyone else, and the endpoints behind it (src/server/
+            comps-api.ts) return a bare 404 — the page is convenience, not the lock. */}
+        <Route path="/owner/comps" element={<OwnerComps />} />
         {/* /preview used to promise "no auth or subscription required" while the ?preview=1 bypass was removed for security — it now only showed a paywall, so send people to the real door */}
         <Route path="/preview" element={<Navigate to="/login" replace />} />
       </Routes>
