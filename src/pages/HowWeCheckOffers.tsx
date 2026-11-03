@@ -8,6 +8,17 @@ import source from "../content/how-we-check-offers.md?raw";
  * rendered as prose. A page that cites the Gambling Commission register has to
  * say how it does the checking, so this is linked from the offers panel.
  *
+ * 2026-11-03: extended rather than duplicated. The page now also answers "where
+ * does every number on this site come from?" — odds (the-odds-api.com, 10-minute
+ * page cache, 30-minute scan), lay prices (Betfair, inside the same feed; never
+ * Smarkets), the offers list (our own file, register link per row), the profit
+ * figures (computed in the browser from what is on screen), commission (2% by
+ * default, 0–10%, one setting site-wide) and affiliate income (none tagged
+ * today, so the disclosure stays hidden). Every sentence there is checkable in
+ * src/lib/odds-api.ts, src/lib/commission.ts, src/lib/cadence.ts, api/odds.ts,
+ * src/lib/free-bets.ts and src/lib/affiliates.ts. Keeping it on this page avoids
+ * a second trust page repeating sections 1–4.
+ *
  * Rendered with a deliberately small formatter: headings, paragraphs, lists and
  * **bold**. No profit figure is introduced here, and the copy itself says the
  * checks cannot confirm an offer is live.
