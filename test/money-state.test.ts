@@ -18,10 +18,7 @@ import {
 } from "../src/server/users";
 import { handleStripeEvent, planFromPriceId } from "../src/server/stripe-webhook";
 import { recentOwnerAlerts } from "../src/server/notify-owner";
-// The Vercel functions were consolidated into ONE catch-all file on 2026-11-04
-// (Vercel Hobby allows 12 functions and api/ held 12). The odds handler itself is
-// an unchanged move, so this test still drives the real code path.
-import { handleOdds as oddsHandler } from "../api/[...path]";
+import oddsHandler from "../api/odds";
 import { CATALOGUE_SPORT_KEYS, resolveSportParam } from "../src/lib/sport-params";
 
 /**
@@ -241,10 +238,9 @@ describe("ITEM 2: /api/odds refuses an unknown sport without spending a credit",
     expect(resolveSportParam("soccer_epl")).toBe("soccer_epl");
     expect(resolveSportParam("nonsense")).toBeNull();
 
-    // The Vercel function (api/[...path].ts) cannot import from src/, so it
-    // carries a copy. If the two ever disagree this fails — the copy cannot rot
-    // silently.
-    const source = readFileSync(join(import.meta.dir, "..", "api", "[...path].ts"), "utf8");
+    // api/odds.ts cannot import from src/, so it carries a copy. If the two ever
+    // disagree this fails — the copy cannot rot silently.
+    const source = readFileSync(join(import.meta.dir, "..", "api", "odds.ts"), "utf8");
     const listBody = source.split("new Set([")[1]?.split("])")[0] ?? "";
     const apiSports = new Set<string>();
     for (const m of listBody.matchAll(/"([a-z0-9_]+)"/g) as Iterable<RegExpExecArray>) {
