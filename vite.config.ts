@@ -75,4 +75,17 @@ function alertWorkerBoot(): Plugin {
 
 export default defineConfig({
   plugins: [tailwindcss(), react(), alertWorkerBoot()],
+  server: {
+    // The working-site preview is served through the platform's own hostname
+    // (…-dev.cto.site), not localhost. Vite 7 blocks any Host it does not know,
+    // which turned the preview into "Blocked request" / 403 whenever the dev
+    // server was restarted outside the platform's launcher (2026-11-04). Allow
+    // the platform hosts explicitly — no wildcard, no `true`.
+    allowedHosts: [
+      "515136800b641762e9aace79427eb7c4-dev.cto.site",
+      "515136800b641762e9aace79427eb7c4.cto.site",
+      "localhost",
+      "127.0.0.1",
+    ],
+  },
 });
