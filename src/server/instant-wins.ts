@@ -80,10 +80,11 @@ export interface InstantWinsPayload {
   greens30d?: GreenHistorySummary;
 }
 
-/** Same override the alert worker uses, so a test can point at a temp dir. */
-export function runDir(): string {
-  return process.env.ALERTS_RUN_DIR || join(import.meta.dir, "../../.run");
-}
+/**
+ * Same rule the alert worker uses — resolved by src/server/run-dir.ts, so under
+ * a test runner this is a per-run temp directory and never the live `.run/`.
+ */
+export { runDir } from "./run-dir";
 
 /**
  * Every path the feed will look for a scan file in, most specific first.

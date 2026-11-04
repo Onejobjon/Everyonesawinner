@@ -13,6 +13,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cwdRunFile, writeRunFile } from "./run-dir";
 import { dirname, join } from "node:path";
 import { ensureSchema, hasDatabase, query } from "./db-pg";
 
@@ -20,7 +21,7 @@ import { ensureSchema, hasDatabase, query } from "./db-pg";
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function sessionsFile(): string {
-  return process.env.SESSIONS_FILE || join(process.cwd(), ".run", "sessions.json");
+  return cwdRunFile(process.env.SESSIONS_FILE, "sessions.json");
 }
 
 interface SessionRecord {
@@ -42,8 +43,7 @@ function loadSessions(): Record<string, SessionRecord> {
 
 function saveSessions(sessions: Record<string, SessionRecord>): void {
   const file = sessionsFile();
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify(sessions, null, 2));
+  writeRunFile(file, JSON.stringify(sessions, null, 2));
 }
 
 /** Mint and persist a token for an account. Throws if it cannot be persisted —

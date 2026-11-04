@@ -1,0 +1,8 @@
+# Test configuration.
+#
+# The preload is load-bearing: it installs the guard that makes a write into the
+# repo's LIVE .run/ (the alert worker's state directory) throw and fail the run
+# instead of corrupting the live scanner. See test/setup/live-run-guard.ts and
+# src/server/run-dir.ts. Do not remove it.
+[test]
+preload = ["./test/setup/live-run-guard.ts"]

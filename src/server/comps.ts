@@ -24,6 +24,7 @@
  * file can grant access by being absent, blank or unparseable.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cwdRunFile, writeRunFile } from "./run-dir";
 import { dirname, join } from "node:path";
 import { compGrants, isKnownPlan, type CompState, type Plan } from "./entitlement";
 
@@ -41,7 +42,7 @@ export const DEFAULT_COMP_DAYS = 30;
 export const MAX_COMP_DAYS = 730;
 
 export function compsFile(): string {
-  return process.env.COMPS_FILE || join(process.cwd(), ".run", "comps.json");
+  return cwdRunFile(process.env.COMPS_FILE, "comps.json");
 }
 
 function loadComps(): Record<string, CompGrant> {
@@ -59,8 +60,7 @@ function loadComps(): Record<string, CompGrant> {
 
 function saveComps(comps: Record<string, CompGrant>): void {
   const file = compsFile();
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify(comps, null, 2));
+  writeRunFile(file, JSON.stringify(comps, null, 2));
 }
 
 /** The grant on file for this address, live or not. */

@@ -31,7 +31,10 @@
  */
 
 import { join } from "node:path";
-import { mkdirSync, readFileSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+// ONE place decides where runtime state lives, and it refuses to hand a test the
+// live `.run/` directory (see src/server/run-dir.ts for the 2026-11-04 defect).
+import { appendRunFile, runDir, writeRunFile } from "./run-dir";
 import { transformMatches, type Match, type MatchOutcome } from "../lib/odds-api";
 import { ODDS_API_KEY, oddsKeyProblem, logOddsKeyState } from "./odds-key";
 import {
@@ -115,8 +118,10 @@ function tgToken(): string {
   return (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 }
 
-// Overridable so tests can prove the instrumentation without touching real state.
-const RUN_DIR = process.env.ALERTS_RUN_DIR || join(import.meta.dir, "../../.run");
+// Resolved by src/server/run-dir.ts: `ALERTS_RUN_DIR` in production, and a
+// per-run temp directory under a test runner — so importing this module can
+// never hand a test the live worker's directory.
+const RUN_DIR = runDir();
 const CACHE_FILE = join(RUN_DIR, "alerts-cache.json");
 const SEEN_FILE = join(RUN_DIR, "alerts-seen.json");
 const LOG_FILE = join(RUN_DIR, "alerts.log");
@@ -148,9 +153,7 @@ function log(msg: string): void {
   const line = `[alerts ${new Date().toISOString()}] ${msg}`;
   console.log(line);
   try {
-    mkdirSync(RUN_DIR, { recursive: true });
-    const existing = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "";
-    writeFileSync(LOG_FILE, existing + line + "\n", "utf8");
+    appendRunFile(LOG_FILE, line + "\n");
   } catch {
     /* logging must never break the worker */
   }
@@ -550,8 +553,7 @@ export async function fetchSportsIndex(
     ...(degradedReason ? { degraded: true, degradedReason } : {}),
   };
   try {
-    mkdirSync(opts.runDir ?? RUN_DIR, { recursive: true });
-    writeFileSync(indexFile, JSON.stringify(index));
+    writeRunFile(indexFile, JSON.stringify(index));
   } catch (e) {
     log(`sports index write failed: ${String(e)}`);
   }
@@ -702,8 +704,7 @@ async function getMatches(): Promise<Match[]> {
     },
   };
   try {
-    mkdirSync(RUN_DIR, { recursive: true });
-    writeFileSync(CACHE_FILE, JSON.stringify(next));
+    writeRunFile(CACHE_FILE, JSON.stringify(next));
   } catch (e) {
     log(`cache write failed: ${String(e)}`);
   }
@@ -894,10 +895,9 @@ function loadSeen(): Set<string> {
 
 function saveSeen(seen: Set<string>): void {
   try {
-    mkdirSync(RUN_DIR, { recursive: true });
     let arr = [...seen];
     if (arr.length > SEEN_MAX) arr = arr.slice(arr.length - SEEN_MAX);
-    writeFileSync(SEEN_FILE, JSON.stringify(arr));
+    writeRunFile(SEEN_FILE, JSON.stringify(arr));
   } catch (e) {
     log(`seen write failed: ${String(e)}`);
   }
@@ -1183,8 +1183,7 @@ function loadHealth(): HealthState {
 
 function saveHealth(h: HealthState): void {
   try {
-    mkdirSync(RUN_DIR, { recursive: true });
-    writeFileSync(HEALTH_FILE, JSON.stringify(h));
+    writeRunFile(HEALTH_FILE, JSON.stringify(h));
   } catch { /* logging must never break the worker */ }
 }
 
@@ -1220,11 +1219,9 @@ function recordCredits(c: ScanCredits): void {
   const show = (n: number | null): string => (n == null ? "unknown" : String(n));
   log(`credits: last=${show(c.last)} remaining=${show(c.remaining)} events=${c.events} cache=${c.cache}`);
   try {
-    mkdirSync(RUN_DIR, { recursive: true });
-    appendFileSync(
+    appendRunFile(
       CREDITS_FILE,
       JSON.stringify({ ts: new Date().toISOString(), remaining: c.remaining, last: c.last, events: c.events, cache: c.cache }) + "\n",
-      "utf8",
     );
   } catch (e) {
     log(`credits rollup write failed: ${String(e)}`);
@@ -1246,12 +1243,7 @@ function recordScanComplete(result: {
   skippedStarted: number;
 }): void {
   try {
-    mkdirSync(RUN_DIR, { recursive: true });
-    writeFileSync(
-      LAST_SCAN_FILE,
-      JSON.stringify({ ts: new Date().toISOString(), ...result }),
-      "utf8",
-    );
+    writeRunFile(LAST_SCAN_FILE, JSON.stringify({ ts: new Date().toISOString(), ...result }));
   } catch (e) {
     log(`last-scan marker write failed: ${String(e)}`);
   }

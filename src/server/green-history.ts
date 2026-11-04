@@ -22,7 +22,8 @@
  * The file is JSONL (one record per line) at `.run/greens.jsonl`, append-only, so
  * a corrupt line can never destroy the rest of the history.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { alertsRunFile, appendRunFile } from "./run-dir";
 import { dirname, join } from "node:path";
 import { calcLay, DEFAULT_COMMISSION, round2 } from "../lib/odds";
 
@@ -68,7 +69,9 @@ export interface GreenCandidate {
 }
 
 export function greenHistoryFile(): string {
-  return process.env.GREENS_FILE || join(process.env.ALERTS_RUN_DIR || join(import.meta.dir, "../../.run"), "greens.jsonl");
+  // Same rule as the alert worker: GREENS_FILE wins, else the run directory —
+  // which under a test runner is a temp dir (src/server/run-dir.ts).
+  return alertsRunFile(process.env.GREENS_FILE, "greens.jsonl");
 }
 
 /** Read every record on disk, skipping anything malformed. */
@@ -201,8 +204,7 @@ export function recordGreens(
 
   if (fresh.length > 0) {
     try {
-      mkdirSync(dirname(file), { recursive: true });
-      appendFileSync(file, fresh.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
+      appendRunFile(file, fresh.map((r) => JSON.stringify(r)).join("\n") + "\n");
     } catch {
       // A failed write must not take a scan down; the count is reported anyway
       // so the log can show that nothing was stored.

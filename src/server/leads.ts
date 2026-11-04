@@ -14,6 +14,7 @@
 import { dirname, join } from "node:path";
 import { ensureSchema, hasDatabase, query } from "./db-pg";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cwdRunFile, writeRunFile } from "./run-dir";
 
 export interface LeadInput {
   name: string;
@@ -31,7 +32,7 @@ export interface LeadRecord extends LeadInput {
  *  `.run/leads.json` relative to the process working directory (gitignored, so
  *  never committed). */
 export function leadsFile(): string {
-  return process.env.LEADS_FILE || join(process.cwd(), ".run", "leads.json");
+  return cwdRunFile(process.env.LEADS_FILE, "leads.json");
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -51,7 +52,6 @@ function storeLeadJson(input: LeadInput): LeadRecord {
   }
 
   const file = leadsFile();
-  mkdirSync(dirname(file), { recursive: true });
 
   let leads: LeadRecord[] = [];
   if (existsSync(file)) {
@@ -70,7 +70,7 @@ function storeLeadJson(input: LeadInput): LeadRecord {
     createdAt: new Date().toISOString(),
   };
   leads.push(record);
-  writeFileSync(file, JSON.stringify(leads, null, 2));
+  writeRunFile(file, JSON.stringify(leads, null, 2));
   return record;
 }
 

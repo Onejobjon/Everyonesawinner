@@ -14,6 +14,7 @@
  * swallows its own errors and returns the record either way.
  */
 import { appendFileSync, mkdirSync } from "node:fs";
+import { cwdRunFile, appendRunFile } from "./run-dir";
 import { dirname, join } from "node:path";
 
 export interface ClickRecord {
@@ -27,7 +28,7 @@ export interface ClickRecord {
 
 /** Where the click log lives. Same `.run/` convention as the leads store. */
 export function clicksFile(): string {
-  return process.env.CLICKS_FILE || join(process.cwd(), ".run", "affiliate-clicks.jsonl");
+  return cwdRunFile(process.env.CLICKS_FILE, "affiliate-clicks.jsonl");
 }
 
 /**
@@ -71,8 +72,7 @@ export function logAffiliateClick(input: {
   };
   try {
     const file = clicksFile();
-    mkdirSync(dirname(file), { recursive: true });
-    appendFileSync(file, `${JSON.stringify(record)}\n`, "utf8");
+    appendRunFile(file, `${JSON.stringify(record)}\n`);
   } catch (e) {
     console.warn(`[go] click not logged (${record.slug}): ${String(e)}`);
   }

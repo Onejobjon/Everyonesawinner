@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cwdRunFile, writeRunFile } from "./run-dir";
 import { dirname, join } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { ensureSchema, hasDatabase, query } from "./db-pg";
@@ -79,7 +80,7 @@ export interface PublicUser {
 }
 
 export function usersFile(): string {
-  return process.env.USERS_FILE || join(process.cwd(), ".run", "users.json");
+  return cwdRunFile(process.env.USERS_FILE, "users.json");
 }
 
 function loadUsers(): Record<string, StoredUser> {
@@ -95,8 +96,7 @@ function loadUsers(): Record<string, StoredUser> {
 
 function saveUsers(users: Record<string, StoredUser>): void {
   const file = usersFile();
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify(users, null, 2));
+  writeRunFile(file, JSON.stringify(users, null, 2));
 }
 
 function hashPassword(password: string, salt: string): string {
