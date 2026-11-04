@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import offersData from "../content/free-bets-offers.json";
 import { LicenceLine } from "./LicenceLine";
-import { goHref } from "../lib/affiliates";
+import AffiliateDisclosure from "./AffiliateDisclosure";
+import { goHref, referralRowNote } from "../lib/affiliates";
 import {
   keptOffers,
   licenceEvidence,
@@ -208,6 +209,15 @@ export default function FreeBetsOffers({
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{o.offer}</p>
+                      {/* A referral link is the owner's own interest: say so on the row itself. */}
+                      {referralRowNote(o.bookmaker) && (
+                        <p
+                          data-testid="offers-row-referral-note"
+                          className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-300"
+                        >
+                          {referralRowNote(o.bookmaker)}
+                        </p>
+                      )}
                       <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
                         {o.jurisdiction ? `${o.jurisdiction} · ` : ""}checked {o.checked_on}
                         {o.verified_on ? ` · terms read ${o.verified_on}` : ""}
@@ -255,6 +265,7 @@ export default function FreeBetsOffers({
 
           {/* Footer */}
           <div className="border-t border-gray-100 px-6 py-3 dark:border-gray-800">
+            <AffiliateDisclosure className="mb-2 text-center" />
             <p className="text-xs text-gray-400 text-center">
               “✅ UK licensed” appears only where we re-confirmed the operator on the Gambling Commission register
               and hold their account number; the row then names the licensee, links to the register and gives the

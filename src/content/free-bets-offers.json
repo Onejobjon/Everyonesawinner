@@ -3,8 +3,8 @@
   "name": "Everyone's A Winner — Free Bet Offers Database",
   "lastVerified": "2026-10-27 (every URL checked; 2 offers re-read on the bookmaker page)",
   "source": "Team research (offers-database.md), researched June–July 2026",
-  "totalOffers": 37,
-  "ukIeCount": 30,
+  "totalOffers": 38,
+  "ukIeCount": 31,
   "globalCount": 7,
   "disclaimer": "Checked 2026-10-27 for whether each bookmaker's own page could be read — not for whether the offer is still running. No offer on this page is confirmed live except where marked. We do not quote an expected profit for any offer: what a free bet is worth depends on the odds you match at and the commission you pay. Always check the bookmaker's current terms before depositing.",
   "audit": {
@@ -23,7 +23,8 @@
    "nextSteps": "Re-research from a UK IP (or with owner confirmation) before the page is published as fact; rebuild estProfit only from verified terms using the shared working."
   },
   "last_pruned": "2026-10-27",
-  "prune_note": "Pruned 2026-10-27 from 61 rows to 37: rows were removed where the operator has no entry in the Gambling Commission business register, where the linked domain no longer serves that operator's own offer page, or where the row duplicated another. Offer terms are still unverified for every remaining row (most UK bookmakers block a non-UK IP), so nothing here should be read as a live offer — check the bookmaker's own terms. No profit figure is published for any row."
+  "prune_note": "Pruned 2026-10-27 from 61 rows to 37: rows were removed where the operator has no entry in the Gambling Commission business register, where the linked domain no longer serves that operator's own offer page, or where the row duplicated another. Offer terms are still unverified for every remaining row (most UK bookmakers block a non-UK IP), so nothing here should be read as a live offer — check the bookmaker's own terms. No profit figure is published for any row.",
+  "lastAddition": "MrQ added 2026-11-04 (row 38): offer read on MrQ's own invited-player page, licence confirmed on the Gambling Commission register. The MrQ link on this site is the owner's own referral link — disclosed on the page. Every other row is unchanged from the 2026-10-27 sweep."
  },
  "offers": [
   {
@@ -1441,6 +1442,48 @@
    "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=38898",
    "licenceCheckedOn": "2026-10-27",
    "licenceStatus": "verified"
+  },
+  {
+   "bookmaker": "MrQ",
+   "section": "uk",
+   "jurisdiction": "UK",
+   "offer": "Invited-player offer: deposit and wager £10+ for 100 free spins",
+   "headlineValue": "100 free spins (10p per spin)",
+   "minStake": "£10",
+   "minOdds": "Not applicable — casino free spins, no odds requirement",
+   "freeBetTokens": "100 free spins on Fishin' Frenzy Even Bigger Fish 3 Megaways Rapid Fire only",
+   "freeBetExpiry": "Free spins must be used within 48 hours of qualifying",
+   "estProfit": null,
+   "ukGbp": "✅",
+   "keyTerms": [
+    "Deposit and wager £10+ to earn the spins",
+    "100 free spins, valued at 10p per spin",
+    "Qualifying game: Fishin' Frenzy Even Bigger Fish 3 Megaways Rapid Fire only",
+    "Free spins must be used within 48 hours of qualifying",
+    "All winnings are uncapped and credited to your real money balance",
+    "Casino/bingo only — MrQ has no sportsbook, so this cannot be laid off on an exchange",
+    "New customers only",
+    "18+"
+   ],
+   "notes": "Casino offer, not a sports free bet: mrq.com/sports returns 404 and the Gambling Commission register lists MrQ's licensee for bingo and casino (remote) only, so there is no market to match this against. The wording is the page a visitor arriving through our link sees (the invited-player page); MrQ's general first-deposit offer on its promotions page is 100 free spins on Big Bass Splash instead — the two differ, so read the page you land on. Neither page states a wagering requirement (MrQ advertises its promotions as '100% wagering free'). The page loaded from a non-UK IP without a block, so we cannot say from experience whether it is geo-restricted; MrQ is GB-licensed only. THE LINK ON THIS ROW IS THE OWNER'S OWN REFERRAL LINK — see the disclosure next to the offers.",
+   "url": "https://mrq.com/invited/bikehuta9?src=popup",
+   "urlVerified": true,
+   "estProfitStatus": "removed",
+   "estProfitRemovedReason": "no profit figure is shown for any offer. Casino free spins have no exchange to lay them off against, so there is no matched-betting profit to estimate — what they return depends on the slot's own payout, which nobody can predict.",
+   "verified_on": "2026-11-04",
+   "status": "verified",
+   "statusReason": "terms read on MrQ's own invited-player page on 2026-11-04: deposit and wager £10+ for 100 free spins at 10p per spin on Fishin' Frenzy Even Bigger Fish 3 Megaways Rapid Fire only, spins used within 48 hours of qualifying, winnings uncapped and paid to the real-money balance. The page states no wagering requirement. Casino offer — it cannot be matched.",
+   "checked_on": "2026-11-04",
+   "httpCheck": {
+    "httpStatus": "200",
+    "finalUrl": "https://mrq.com/invited/bikehuta9?src=popup"
+   },
+   "licensee": "Tek Fox Ltd",
+   "registerAccount": "60629",
+   "registerUrl": "https://www.gamblingcommission.gov.uk/public-register/businesses/results?business-search=60629",
+   "licenceCheckedOn": "2026-11-04",
+   "licenceStatus": "verified",
+   "evidenceQuote": "MrQ invited-player page, https://mrq.com/invited/bikehuta9?src=popup, read 2026-11-04: \"Someone thinks you're worth 100 Free Spins. Bold of them. Let's find out. Join MrQ & spin. Deposit and wager £10+ to earn 100 Free Spins on Fishin' Frenzy Even Bigger Fish 3 Megaways Rapid Fire slot only, valued at 10p per spin. Free spins must be used within 48 hrs of qualifying. All winnings are uncapped and credited to your real money balance. Full T&Cs apply.\" Footer: \"Tek Fox Ltd is licensed and regulated in Great Britain by the Gambling Commission under account number: 60629.\" MrQ's promotions page https://mrq.com/promotions read the same day lists a different first-deposit offer: \"100 Free Spins credited upon your first £10 deposit on Big Bass Splash only, valued at 10p per spin. Free spins must be used within 48 hours of qualifying. All winnings are uncapped and credited to your real money balance.\" and describes all its promotions as \"100% wagering free\"."
   }
  ]
 }

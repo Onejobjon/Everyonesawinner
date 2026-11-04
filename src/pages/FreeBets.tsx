@@ -6,7 +6,7 @@ import EmailCapture from "../components/EmailCapture";
 import PageHeader from "../components/PageHeader";
 import offersData from "../content/free-bets-offers.json";
 import { licenceEvidence, minOddsLabel, type FreeBetOffer } from "../lib/free-bets";
-import { goHref } from "../lib/affiliates";
+import { goHref, referralRowNote } from "../lib/affiliates";
 import AffiliateDisclosure from "../components/AffiliateDisclosure";
 import { LicenceLine } from "../components/LicenceLine";
 
@@ -270,6 +270,15 @@ export default function FreeBets() {
                         </div>
                         <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{o.offer}</p>
                         <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">{o.headlineValue}</p>
+                        {/* A referral link is the owner's own interest: say so on the row itself. */}
+                        {referralRowNote(o.bookmaker) && (
+                          <p
+                            data-testid="free-bets-referral-note"
+                            className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-300"
+                          >
+                            {referralRowNote(o.bookmaker)}
+                          </p>
+                        )}
                         {/* Visible licence evidence + register link — a tooltip is not evidence. */}
                         <LicenceLine
                           offer={o}

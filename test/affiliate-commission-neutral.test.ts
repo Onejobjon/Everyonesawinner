@@ -2,15 +2,22 @@ import { describe, expect, test } from "bun:test";
 import { transformMatches } from "../src/lib/odds-api";
 import {
   BRANDS,
+  brandByBookmaker,
   brandBySlug,
   commissionDisclosure,
   goHref,
   goPath,
   hasAffiliateTags,
+  hasReferralLinks,
+  isReferralBrand,
+  referralDisclosure,
+  referralRowNote,
   taggedDestination,
 } from "../src/lib/affiliates";
 import offersData from "../src/content/free-bets-offers.json";
+import { licenceEvidence, profitText, NOT_QUOTED, type FreeBetOffer } from "../src/lib/free-bets";
 import { referringPath } from "../src/server/click-log";
+import { readFileSync } from "node:fs";
 
 /**
  * OUTBOUND LINKS — the commission rule the owner signed off.
@@ -183,5 +190,103 @@ describe("the link register matches the offers it serves", () => {
     expect(referringPath("https://www.google.com/search?q=matched+betting")).toBe("");
     expect(referringPath(null)).toBe("");
     expect(referringPath("not a url")).toBe("");
+  });
+});
+
+/**
+ * THE MRQ REFERRAL LINK — a material interest, so it is disclosed and proved.
+ *
+ * The owner gave us his own MrQ refer-a-friend link on 2026-11-04. It is not an
+ * affiliate tag (nothing is appended, we are paid by no network), but signing up
+ * through it rewards the owner personally. These tests hold three things
+ * together: the row carries real licence evidence like every other row; the
+ * disclosure text exists and is generated from the link register, so it cannot
+ * be silently dropped; and no OTHER brand has acquired a tag or a referral,
+ * which is what makes the sentence "no other link carries one" true.
+ */
+describe("the owner's MrQ referral link is disclosed, not hidden", () => {
+  const rows = offersData.offers as FreeBetOffer[];
+  const mrq = rows.find((r) => r.bookmaker === "MrQ");
+
+  test("MrQ is in the dataset with the same licence evidence as every other row", () => {
+    expect(mrq).toBeDefined();
+    const row = mrq as FreeBetOffer;
+    // (a) licensee + register account + register URL, exactly like the rest.
+    expect(row.licensee?.trim()).toBe("Tek Fox Ltd");
+    expect(row.registerAccount?.trim()).toBe("60629");
+    expect(row.registerUrl || "").toContain("gamblingcommission.gov.uk");
+    expect(row.registerUrl || "").toContain("60629");
+    expect(row.licenceStatus).toBe("verified");
+    expect(licenceEvidence(row).ok).toBe(true);
+    expect(row.checked_on).toBe("2026-11-04");
+    // No invented profit figure: the row quotes nothing, like every other row.
+    expect(row.estProfit ?? "").toBe("");
+    expect(profitText(row).text).toBe(NOT_QUOTED);
+  });
+
+  test("every row claiming a verified licence can show who and which account", () => {
+    for (const row of rows.filter((r) => r.licenceStatus === "verified")) {
+      expect((row.licensee || "").trim().length).toBeGreaterThan(0);
+      expect((row.registerAccount || "").trim().length).toBeGreaterThan(0);
+      expect((row.registerUrl || "").trim()).toContain("gamblingcommission.gov.uk");
+    }
+  });
+
+  test("the MrQ operator link is the owner's referral address, reached through /go/mrq", () => {
+    const brand = brandByBookmaker("MrQ");
+    expect(brand).toBeDefined();
+    expect(brand!.slug).toBe("mrq");
+    expect(brand!.referral).toBe(true);
+    expect(brand!.destination).toBe("https://mrq.com/invited/bikehuta9?src=popup");
+    // The row and the register are one address, not two.
+    expect(brand!.destination).toBe(mrq!.url);
+    expect(goPath("MrQ")).toBe("/go/mrq");
+    expect(goHref("MrQ", "https://fallback.invalid")).toBe("/go/mrq");
+    // A referral link is not a tag: nothing is appended to it.
+    expect(brand!.tag).toBe("");
+    expect(taggedDestination(brand!)).toBe(brand!.destination);
+    expect(isReferralBrand("MrQ")).toBe(true);
+    expect(isReferralBrand("Bet365")).toBe(false);
+  });
+
+  test("(b) the disclosure text exists while a referral destination is configured", () => {
+    expect(hasReferralLinks()).toBe(true);
+    const text = referralDisclosure();
+    expect(text).not.toBeNull();
+    expect(text!).toContain("MrQ");
+    expect(text!).toContain("referral link");
+    expect(text!).toMatch(/reward/i);
+    // It must not repeat the old, now-false claim that we earn nothing at all.
+    expect(text!).not.toMatch(/earn nothing/i);
+    // The row-level note is there for the same reason.
+    const note = referralRowNote("MrQ");
+    expect(note).not.toBeNull();
+    expect(note!).toMatch(/referral/i);
+    expect(note!).toMatch(/reward/i);
+    expect(referralRowNote("Bet365")).toBeNull();
+  });
+
+  test("no other link carries a referral or an affiliate tag — the claim stays true", () => {
+    for (const brand of BRANDS) {
+      if (brand.bookmaker === "MrQ") continue;
+      expect(brand.referral ?? false).toBe(false);
+      expect(brand.tag).toBe("");
+      expect(taggedDestination(brand)).toBe(brand.destination);
+    }
+    // A referral link is not an affiliate arrangement: the commission
+    // disclosure still stays silent, because nobody is paying us a commission.
+    expect(hasAffiliateTags()).toBe(false);
+    expect(commissionDisclosure()).toBeNull();
+  });
+
+  test("the transparency page says the same thing as the code", () => {
+    const md = readFileSync(new URL("../src/content/how-we-check-offers.md", import.meta.url), "utf8");
+    // The sentence that was true until this link existed is gone.
+    expect(md).not.toContain("Today no link carries an affiliate tag");
+    expect(md).not.toMatch(/so we earn nothing from them/);
+    // And the page now names the one link that does pay the owner.
+    expect(md).toContain("MrQ");
+    expect(md).toMatch(/owner's own referral link/);
+    expect(md).toMatch(/No other link carries a referral or affiliate tag/);
   });
 });

@@ -81,7 +81,11 @@ Exchange commission changes what a bet is worth, so it is never a hidden constan
 
 The way this site is meant to pay for itself is bookmaker affiliate links. If you open a bookmaker account through a link on this site and bet with them, that bookmaker may pay us a commission. It costs you nothing extra, and it never changes the odds we show, which price we call the best, or the order anything is listed in.
 
-**Today no link carries an affiliate tag**, so we earn nothing from them: every operator link goes straight to the bookmaker's own page with nothing added. A disclosure appears on this page by itself the day the first link carries a tag, and not before. We will not print a claim about money nobody is paying us.
+**One link on this site — MrQ — is the owner's own referral link.** It is MrQ's refer-a-friend address, with the owner as the referrer, and it is disclosed on the MrQ row itself as well as here. If you sign up to MrQ through it and qualify, MrQ rewards the owner personally. It does not change the odds we show, the price we call the best, or the order anything is listed in.
+
+**No other link carries a referral or affiliate tag.** Every other operator link goes to the bookmaker's own page with nothing added, so we earn nothing from it. A commission disclosure appears on this page by itself the day any link carries an affiliate tag, and not before. We will not print a claim about money nobody is paying us.
+
+The MrQ row is also a reminder of a limit on this page: MrQ is a casino and bingo operator with no sportsbook, so its offer is free spins that cannot be matched on an exchange. It is listed because it is a real, licensed offer, not because we can show you a profit on it — the row quotes no profit figure, like every other row here.
 
 ## 11. What we do not claim
 

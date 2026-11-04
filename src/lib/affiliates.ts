@@ -29,6 +29,16 @@ export interface AffiliateBrand {
    * (e.g. "btag=abc123&affid=7"). "" means no affiliate arrangement.
    */
   tag: string;
+  /**
+   * True when `destination` is the owner's OWN referral link (a refer-a-friend
+   * address with the owner as referrer) rather than an affiliate-network tag.
+   *
+   * It is a material interest, so it is disclosed in plain English wherever the
+   * link appears — see `referralDisclosure()`. It is deliberately NOT a `tag`:
+   * nothing is appended to the destination, and `hasAffiliateTags()` stays about
+   * paid affiliate arrangements only.
+   */
+  referral?: boolean;
 }
 
 export const BRANDS: readonly AffiliateBrand[] = [
@@ -253,7 +263,25 @@ export const BRANDS: readonly AffiliateBrand[] = [
     bookmaker: "SportPesa",
     destination: "https://www.sportpesa.com",
     tag: "",
-  },];
+  },
+  {
+    // ⚠️ THE OWNER'S OWN REFERRAL LINK, not an affiliate-network tag.
+    //
+    // The owner gave us this link on 2026-11-04: mrq.com/invited/<code> is MrQ's
+    // refer-a-friend address, and the owner is the referrer. If a visitor signs
+    // up through it and qualifies, MrQ rewards the owner. That is a material
+    // interest, so `referral: true` makes the plain-English disclosure render
+    // wherever operator links do (see `referralDisclosure`) — it must never be
+    // quietly added. `tag` stays "" because this is not a paid affiliate
+    // arrangement and no tracking parameter is appended: the destination is
+    // already the referral address, byte for byte.
+    slug: "mrq",
+    bookmaker: "MrQ",
+    destination: "https://mrq.com/invited/bikehuta9?src=popup",
+    tag: "",
+    referral: true,
+  },
+];
 
 /** Look a brand up by its public slug (case-insensitive). */
 export function brandBySlug(slug: string): AffiliateBrand | undefined {
@@ -318,4 +346,59 @@ export function commissionDisclosure(): string | null {
     "that bookmaker may pay us a commission. It costs you nothing extra and it never changes the odds we show, " +
     "which price we call the best, or the order anything is listed in."
   );
+}
+
+/** Every brand whose link is the owner's own referral link. */
+export function referralBrands(): readonly AffiliateBrand[] {
+  return BRANDS.filter((b) => b.referral === true);
+}
+
+/** True when the link for `bookmaker` is the owner's own referral link. */
+export function isReferralBrand(bookmaker: string): boolean {
+  const brand = brandByBookmaker(bookmaker);
+  return brand?.referral === true;
+}
+
+/** True once at least one operator link is the owner's own referral link. */
+export function hasReferralLinks(): boolean {
+  return referralBrands().length > 0;
+}
+
+/**
+ * The referral disclosure, or null when there is no referral link to disclose.
+ *
+ * A referral link is the owner's own commercial interest: the visitor is owed a
+ * plain statement of it, in the same breath as the link. It is written from the
+ * register rather than typed into a component, so it cannot drift out of step
+ * with what the links actually do — add a second referral and the sentence says
+ * two, remove the last one and it disappears.
+ */
+export function referralDisclosure(): string | null {
+  const brands = referralBrands();
+  if (brands.length === 0) return null;
+  const names = brands.map((b) => b.bookmaker);
+  const list =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  const opener =
+    names.length === 1
+      ? `One link on this site — ${list} — is the owner's own referral link.`
+      : `${names.length} links on this site are the owner's own referral links: ${list}.`;
+  return (
+    `${opener} If you sign up through ${names.length === 1 ? "it" : "one"}, ${list} may reward us, and the owner ` +
+    "keeps that reward personally. It costs you nothing extra, and it never changes the odds we show, which price " +
+    "we call the best, or the order anything is listed in." +
+    (hasAffiliateTags() ? "" : " No other link on this site carries a referral or affiliate tag today.")
+  );
+}
+
+/**
+ * The short note printed on a row whose operator link is a referral link — the
+ * disclosure has to sit with the link, not only in a footnote.
+ */
+export function referralRowNote(bookmaker: string): string | null {
+  const brand = brandByBookmaker(bookmaker);
+  if (!brand?.referral) return null;
+  return `Owner's referral link — if you sign up to ${brand.bookmaker} through it, the owner may be rewarded. It does not change the odds or prices we show.`;
 }

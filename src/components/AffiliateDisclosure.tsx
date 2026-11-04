@@ -1,22 +1,39 @@
-import { commissionDisclosure } from "../lib/affiliates";
+import { commissionDisclosure, referralDisclosure } from "../lib/affiliates";
 
 /**
- * The commission disclosure.
+ * The money disclosure.
  *
- * Renders NOTHING while no brand has an affiliate tag configured
- * (src/lib/affiliates.ts) — we are paid by nobody today, so saying otherwise
- * would be a false statement about money. It appears on its own the day a real
- * tag is set, and not before.
+ * Two separate facts, each rendered only while it is true:
+ *
+ *  - the REFERRAL disclosure, when an operator link is the owner's own referral
+ *    link (src/lib/affiliates.ts, `referral: true`). That is a material
+ *    interest, so it prints in plain English next to the links.
+ *  - the COMMISSION disclosure, only once a real affiliate tag is configured —
+ *    we are paid by nobody else today, so saying otherwise would be a false
+ *    statement about money.
  */
 export default function AffiliateDisclosure({ className = "" }: { className?: string }) {
-  const text = commissionDisclosure();
-  if (!text) return null;
+  const referral = referralDisclosure();
+  const commission = commissionDisclosure();
+  if (!referral && !commission) return null;
   return (
-    <p
-      data-testid="affiliate-disclosure"
-      className={`text-xs leading-5 text-gray-500 dark:text-gray-400 ${className}`}
-    >
-      {text}
-    </p>
+    <>
+      {referral && (
+        <p
+          data-testid="referral-disclosure"
+          className={`text-xs leading-5 text-gray-500 dark:text-gray-400 ${className}`}
+        >
+          {referral}
+        </p>
+      )}
+      {commission && (
+        <p
+          data-testid="affiliate-disclosure"
+          className={`text-xs leading-5 text-gray-500 dark:text-gray-400 ${className}`}
+        >
+          {commission}
+        </p>
+      )}
+    </>
   );
 }
