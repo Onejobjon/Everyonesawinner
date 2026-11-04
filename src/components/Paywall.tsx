@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import PageHeader from "./PageHeader";
+import PlanCheckoutButton, { useBillingReadiness } from "./PlanCheckoutButton";
 import { useAuth, isProPlan } from "../lib/auth";
+import { plansForSaleNotice, priceQualifier } from "../lib/checkout-client";
 
 interface PaywallProps {
   children: React.ReactNode;
@@ -13,6 +15,12 @@ interface PaywallProps {
 export default function Paywall({ children, title, tier = "any" }: PaywallProps) {
   const { user, sessionStatus, refresh } = useAuth();
   const navigate = useNavigate();
+  // The upgrade cards sell plans, so their buttons and their "planned" wording
+  // read the same billing switch the checkout endpoint reads. Hooks run before
+  // every early return below, as they must.
+  const readiness = useBillingReadiness();
+  const sale = plansForSaleNotice(readiness);
+  const qualifier = priceQualifier(readiness);
   // SECURITY (2026-10-27):
   //  - No query-string bypass: `?preview=1` used to render every Pro tool with
   //    all auth checks skipped. /preview is marketing copy only now.
@@ -112,11 +120,11 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
       >
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 text-left">
           <div className="rounded-2xl border-2 border-indigo-500 bg-white p-8 shadow-sm dark:bg-gray-950">
-            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">Planned plan</span>
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">{sale.onSale ? "Pro plan" : "Planned plan"}</span>
             <h3 className="mt-3 text-lg font-semibold">Pro Monthly</h3>
             <div className="mt-2 flex items-baseline gap-1">
               <span className="text-3xl font-extrabold text-indigo-600">£29.99</span>
-              <span className="text-sm text-gray-500">/mo (planned)</span>
+              <span className="text-sm text-gray-500">/mo{qualifier}</span>
             </div>
             <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <li>• Lay Bet Finder — close single lays</li>
@@ -124,32 +132,30 @@ export default function Paywall({ children, title, tier = "any" }: PaywallProps)
               <li>• Same-Match Planner</li>
               <li>• Oddsmatcher, calculator and dashboard</li>
             </ul>
-            <button type="button" disabled aria-disabled="true" className="mt-6 block w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500">
-              Checkout opens shortly
-            </button>
+            {/* The real control: it POSTs the chosen plan to /api/checkout and
+                renders the true outcome, including "you can't buy this yet". */}
+            <PlanCheckoutButton plan="pro" name="Pro" className="mt-6 block w-full rounded-xl bg-indigo-600 py-3 text-center text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-70" />
           </div>
           <div className="rounded-2xl border-2 border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-950">
             <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">Best value</span>
             <h3 className="mt-3 text-lg font-semibold">Pro Annual</h3>
             <div className="mt-2 flex items-baseline gap-1">
               <span className="text-3xl font-extrabold">£269.99</span>
-              <span className="text-sm text-gray-500">/yr</span>
+              <span className="text-sm text-gray-500">/yr{qualifier}</span>
             </div>
-            <p className="mt-1 text-xs text-gray-500">Paid once a year (planned)</p>
+            <p className="mt-1 text-xs text-gray-500">Paid once a year{qualifier}</p>
             <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <li>• Lay Bet Finder — close single lays</li>
               <li>• Acca Lay Planner — 2–4-leg lay plans</li>
               <li>• Same-Match Planner</li>
               <li>• One payment for the year instead of twelve</li>
             </ul>
-            <button type="button" disabled aria-disabled="true" className="mt-6 block w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500">
-              Checkout opens shortly
-            </button>
+            <PlanCheckoutButton plan="annual" name="Pro Annual" className="mt-6 block w-full rounded-xl border border-gray-300 py-3 text-center text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-70 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-900" />
           </div>
         </div>
 
         <p className="mt-8 text-sm text-gray-500">
-          Checkout isn't open yet — we're finishing the payment setup, and no payment can be taken until it does. These are the plans we intend to offer, not prices you can buy today.
+          <strong>{sale.headline}</strong> {sale.detail}
         </p>
       </PageHeader>
     );

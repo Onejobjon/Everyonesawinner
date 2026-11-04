@@ -4,6 +4,8 @@ import { getMatches, type Match } from "../lib/odds-api";
 import { calcDutch, calcDutchFreeBet } from "../lib/odds";
 import EmailCapture from "../components/EmailCapture";
 import PageHeader from "../components/PageHeader";
+import PlanCheckoutButton, { useBillingReadiness } from "../components/PlanCheckoutButton";
+import { plansForSaleNotice, priceQualifier } from "../lib/checkout-client";
 
 function FeaturedPicks() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -198,6 +200,12 @@ function Footer() {
 }
 
 export default function Home() {
+  // The pricing section below sells plans, so its claim ("No plan can be bought
+  // yet.") and its "(planned)" qualifiers come from the same billing switch the
+  // checkout endpoint reads — never from a sentence typed here.
+  const readiness = useBillingReadiness();
+  const sale = plansForSaleNotice(readiness);
+  const qualifier = priceQualifier(readiness);
   return (
     <PageHeader home flush>
       {/*
@@ -299,12 +307,12 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 md:py-28 bg-gray-50 dark:bg-gray-900/50">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and what each one would include. <strong>No plan can be bought yet.</strong> <span className="block mt-2 text-base">Checkout opens shortly — we're finishing the payment setup, and no payment can be taken until it does.</span></p></div>
+          <div className="text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Simple, transparent pricing</h2><p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">Plans and what each one would include. <strong>{sale.headline}</strong> <span className="block mt-2 text-base">{sale.detail}</span></p></div>
           <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3 max-w-5xl mx-auto">
             {[
-              {n:"Starter",p:"£19.99",pr:"/month (planned)",d:"The oddsmatcher and the calculator.",f:["Best Odds Finder (oddsmatcher)","Profit calculator with lay stake and liability","Dashboard with the instant-wins feed and your greens history"],pop:false},
-              {n:"Pro",orig:"",disc:"£29.99",pr:"/month (planned)",d:"Adds the three Pro-only tools.",f:["Everything in Starter","Lay Bet Finder — close single lays, searched on demand","Acca Lay Planner — 2–4 leg lay plans"],pop:true},
-              {n:"Annual",orig:"",disc:"£269.99",pr:"/year (planned)",d:"Twelve months of Pro.",f:["Everything in Pro","One payment for the year instead of twelve"],pop:false},
+              {id:"starter" as const,n:"Starter",p:"£19.99",pr:"/month",d:"The oddsmatcher and the calculator.",f:["Best Odds Finder (oddsmatcher)","Profit calculator with lay stake and liability","Dashboard with the instant-wins feed and your greens history"],pop:false},
+              {id:"pro" as const,n:"Pro",orig:"",disc:"£29.99",pr:"/month",d:"Adds the three Pro-only tools.",f:["Everything in Starter","Lay Bet Finder — close single lays, searched on demand","Acca Lay Planner — 2–4 leg lay plans"],pop:true},
+              {id:"annual" as const,n:"Annual",orig:"",disc:"£269.99",pr:"/year",d:"Twelve months of Pro.",f:["Everything in Pro","One payment for the year instead of twelve"],pop:false},
             ].map((plan,i) => (
               <div key={i} className={`relative rounded-2xl border-2 p-8 shadow-sm ${plan.pop ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950" : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"}`}>
                 {plan.pop && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">Best value for the tools you get</span>}
@@ -320,11 +328,13 @@ export default function Home() {
                   ) : (
                     <span className="text-4xl font-extrabold">{plan.disc}</span>
                   )}
-                  <span className="text-sm text-gray-500">{plan.pr}</span>
+                  <span className="text-sm text-gray-500">{plan.pr}{qualifier}</span>
                 </div>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{plan.d}</p>
                 <ul className="mt-6 space-y-3">{plan.f.map((feat,j) => (<li key={j} className="flex items-center gap-3 text-sm"><svg className="h-5 w-5 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>{feat}</li>))}</ul>
-                <button type="button" disabled aria-disabled="true" className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold block text-center cursor-not-allowed border border-gray-300 text-gray-400 dark:border-gray-700 dark:text-gray-500`}>Checkout opens shortly</button>
+                {/* The real control: it POSTs this plan to /api/checkout and
+                    renders whatever really happened — never a fake success. */}
+                <PlanCheckoutButton plan={plan.id} name={plan.n} />
               </div>
             ))}
           </div>

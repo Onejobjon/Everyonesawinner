@@ -1,11 +1,14 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
+import PlanCheckoutButton, { useBillingReadiness } from "../components/PlanCheckoutButton";
 import { useAuth, type Plan } from "../lib/auth";
+import { plansForSaleNotice, priceQualifier } from "../lib/checkout-client";
 
 const plans: {
   id: Plan;
   name: string;
   price: string;
+  /** "/month" or "/year" — the "(planned)" qualifier is added only while it is true. */
   period: string;
   desc: string;
   features: string[];
@@ -16,7 +19,7 @@ const plans: {
     id: "starter",
     name: "Starter",
     price: "£19.99",
-    period: "/month (planned)",
+    period: "/month",
     desc: "The oddsmatcher and the calculator.",
     features: [
       "Best Odds Finder (oddsmatcher)",
@@ -28,7 +31,7 @@ const plans: {
     id: "pro",
     name: "Pro",
     price: "£29.99",
-    period: "/month (planned)",
+    period: "/month",
     desc: "Adds the three Pro-only tools.",
     features: [
       "Everything in Starter",
@@ -41,7 +44,7 @@ const plans: {
     id: "annual",
     name: "Annual",
     price: "£269.99",
-    period: "/year (planned)",
+    period: "/year",
     desc: "Twelve months of Pro at the same tools.",
     features: [
       "Everything in Pro",
@@ -50,18 +53,70 @@ const plans: {
   },
 ];
 
+function isPlanId(value: unknown): value is Plan {
+  return value === "starter" || value === "pro" || value === "annual";
+}
+
+/**
+ * /subscribe — the plans, and the one place a plan is chosen.
+ *
+ * THE BUTTONS ARE REAL NOW (2026-11-05). They used to be `disabled` with
+ * "Checkout opens shortly" on every card. Each card now renders
+ * <PlanCheckoutButton>, which POSTs to `POST /api/checkout` with that plan and
+ * renders the true outcome: a Stripe URL, "sign in first and come back to this
+ * plan", or the specific sentence for whatever the endpoint refused with.
+ *
+ * THE CLAIM IS DERIVED, NOT TYPED. "No plan can be bought yet." and the
+ * "(planned)" qualifier beside each price come from `plansForSaleNotice()` /
+ * `priceQualifier()`, which read the endpoint's own readiness answer
+ * (`GET /api/checkout` → canTakeSubscriptionPayments, the same switch checkout
+ * itself reads). The day the flag flips, the sentence and the qualifiers go with
+ * it — nobody has to remember to edit this page. The amounts are the owner's and
+ * never move.
+ */
 export default function Subscribe() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const readiness = useBillingReadiness();
+  const sale = plansForSaleNotice(readiness);
+  const qualifier = priceQualifier(readiness);
 
+  const wanted = searchParams.get("plan");
+  const chosenPlan = isPlanId(wanted) ? wanted : null;
+  const chosenLabel = chosenPlan ? plans.find((p) => p.id === chosenPlan)?.name ?? null : null;
+  const cameBackFromCheckout = searchParams.get("checkout") === "cancelled";
 
   if (!user) {
+    // Keep the plan they picked: /login honours ?redirect= and sends them back to
+    // /subscribe?plan=<plan>, where that card is highlighted.
+    const back = chosenPlan ? `/subscribe?plan=${chosenPlan}` : "/subscribe";
     return (
-      <PageHeader title="Sign in to subscribe" subtitle="Create an account or sign in to choose a plan.">
+      <PageHeader
+        title="Sign in to subscribe"
+        subtitle={
+          chosenLabel
+            ? `You picked ${chosenLabel}. Sign in or create an account and you'll come straight back to it.`
+            : "Create an account or sign in to choose a plan."
+        }
+      >
         <div className="text-center">
           <div className="mt-6 flex gap-4 justify-center">
-            <Link to="/login" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">Sign in</Link>
-            <Link to="/signup" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300">Create account</Link>
+            <Link
+              to={`/login?redirect=${encodeURIComponent(back)}`}
+              className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white"
+            >
+              Sign in
+            </Link>
+            <Link
+              to={`/signup?redirect=${encodeURIComponent(back)}`}
+              className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300"
+            >
+              Create account
+            </Link>
           </div>
+          <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
+            {sale.headline} {sale.detail}
+          </p>
         </div>
       </PageHeader>
     );
@@ -80,57 +135,70 @@ export default function Subscribe() {
       title="Choose your plan"
       subtitle={
         <>
-          These are the plans we intend to offer. Play isn't open yet — we're finishing the payment setup, and no payment can be taken until it does.
+          <strong>{sale.headline}</strong> {sale.detail}
           <span className="mt-2 block text-sm">
             Starter includes the oddsmatcher, the calculator and the dashboard. Pro adds the Lay Bet Finder, the Bet Builder and the Same-Match Planner.
           </span>
         </>
       }
     >
+        {cameBackFromCheckout && (
+          <p className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-300">
+            You came back from checkout without completing a payment. Nothing was charged and no plan was started —
+            you can choose a plan again whenever you like.
+          </p>
+        )}
+
         <div className="mt-4 grid grid-cols-1 gap-8 lg:grid-cols-3">
-          {plans.map((plan, i) => (
-            <div
-              key={i}
-              className={`relative rounded-2xl border-2 p-8 shadow-sm ${
-                plan.badge
-                  ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950"
-                  : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
-              }`}
-            >
-              {plan.badge && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">
-                  {plan.badge}
-                </span>
-              )}
-              <h3 className="text-lg font-semibold">{plan.name}</h3>
-              <div className="mt-4 flex items-baseline gap-1">
-                <span className="text-4xl font-extrabold">{plan.price}</span>
-                <span className="text-sm text-gray-500">{plan.period}</span>
-              </div>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{plan.desc}</p>
-              <ul className="mt-6 space-y-3">
-                {plan.features.map((feat, j) => (
-                  <li key={j} className="flex items-center gap-3 text-sm">
-                    <svg className="h-5 w-5 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    {feat}
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                disabled
-                aria-disabled="true"
-                className="mt-6 w-full cursor-not-allowed rounded-xl border border-gray-300 py-3 text-sm font-semibold text-gray-400 dark:border-gray-700 dark:text-gray-500"
+          {plans.map((plan) => {
+            const highlighted = chosenPlan === plan.id;
+            return (
+              <div
+                key={plan.id}
+                id={`plan-${plan.id}`}
+                className={`relative rounded-2xl border-2 p-8 shadow-sm ${
+                  plan.badge || highlighted
+                    ? "border-indigo-500 bg-white shadow-indigo-200 dark:bg-gray-950"
+                    : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
+                }`}
               >
-                Checkout opens shortly
-              </button>
-              <p className="mt-2 text-xs text-gray-400 text-center">
-                No payment can be taken until checkout opens.
-              </p>
-            </div>
-          ))}
+                {plan.badge && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-indigo-600 px-4 py-1 text-xs font-semibold text-white">
+                    {plan.badge}
+                  </span>
+                )}
+                <h3 className="text-lg font-semibold">{plan.name}</h3>
+                <div className="mt-4 flex items-baseline gap-1">
+                  <span className="text-4xl font-extrabold">{plan.price}</span>
+                  <span className="text-sm text-gray-500">
+                    {plan.period}
+                    {qualifier}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{plan.desc}</p>
+                <ul className="mt-6 space-y-3">
+                  {plan.features.map((feat) => (
+                    <li key={feat} className="flex items-center gap-3 text-sm">
+                      <svg className="h-5 w-5 flex-shrink-0 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {feat}
+                    </li>
+                  ))}
+                </ul>
+
+                {highlighted && (
+                  <p className="mt-4 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                    The plan you picked.
+                  </p>
+                )}
+
+                {/* The real control. It reports what actually happened — never a
+                    fake success, and never silence. */}
+                <PlanCheckoutButton plan={plan.id} name={plan.name} />
+              </div>
+            );
+          })}
         </div>
 
         {/* How to cancel, at the point of sale. The old terms promised this
@@ -174,7 +242,9 @@ export default function Subscribe() {
 
         <div className="mt-8 text-center border-t border-gray-200 dark:border-gray-800 pt-8">
           <p className="text-sm text-gray-500">
-            Checkout isn't open yet. When it is, a completed payment will be confirmed by our server before any tool unlocks — not by this page.
+            {sale.onSale
+              ? "A completed payment is confirmed by our server before any tool unlocks — not by this page."
+              : "Checkout isn't open yet. When it is, a completed payment will be confirmed by our server before any tool unlocks — not by this page."}
           </p>
           <p className="mt-2 text-sm text-gray-500">
             Questions? <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 hover:text-indigo-700">Contact support</a>

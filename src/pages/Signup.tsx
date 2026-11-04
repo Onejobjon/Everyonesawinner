@@ -1,11 +1,15 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { useAuth } from "../lib/auth";
 
 export default function Signup() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signup } = useAuth();
+  // Only a same-site path is honoured, so this cannot become an open redirect.
+  const requested = searchParams.get("redirect") || "";
+  const redirect = requested.startsWith("/") && !requested.startsWith("//") ? requested : "/subscribe";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,8 +30,9 @@ export default function Signup() {
       setError(err);
       return;
     }
-    // After signup, redirect to /subscribe
-    navigate("/subscribe");
+    // After signup, go where they were headed — /subscribe?plan=pro, say — so a
+    // visitor who picked a plan before signing up comes back to it.
+    navigate(redirect);
   };
 
   return (
