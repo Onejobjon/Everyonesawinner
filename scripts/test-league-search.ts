@@ -405,7 +405,7 @@ console.log("9b. A Pro session is required before ANY provider work");
   check("platform gate is ABOVE the provider search", gateAt >= 0 && searchAt > gateAt, `${gateAt} vs ${searchAt}`);
   check("platform gate is ABOVE the odds-key check", gateAt >= 0 && keyAt > gateAt, `${gateAt} vs ${keyAt}`);
 
-  const apiSrc = readFileSync(join(ROOT, "api", "odds-leagues.ts"), "utf8");
+  const apiSrc = readFileSync(join(ROOT, "api", "router.ts"), "utf8");
   const meAt = apiSrc.indexOf("/api/me");
   const catAt = apiSrc.indexOf("loadCatalogue()");
   const providerAt = apiSrc.indexOf("encodeURIComponent(sport.key)}/odds/");
