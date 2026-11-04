@@ -405,7 +405,10 @@ console.log("9b. A Pro session is required before ANY provider work");
   check("platform gate is ABOVE the provider search", gateAt >= 0 && searchAt > gateAt, `${gateAt} vs ${searchAt}`);
   check("platform gate is ABOVE the odds-key check", gateAt >= 0 && keyAt > gateAt, `${gateAt} vs ${keyAt}`);
 
-  const apiSrc = readFileSync(join(ROOT, "api", "odds-leagues.ts"), "utf8");
+  // 2026-11-04: the twelve Vercel functions became ONE catch-all
+  // (api/[...path].ts) so the Hobby plan's 12-function ceiling stops blocking
+  // deploys. The handler bodies were moved, not rewritten.
+  const apiSrc = readFileSync(join(ROOT, "api", "[...path].ts"), "utf8");
   const meAt = apiSrc.indexOf("/api/me");
   const catAt = apiSrc.indexOf("loadCatalogue()");
   const providerAt = apiSrc.indexOf("encodeURIComponent(sport.key)}/odds/");
@@ -452,11 +455,17 @@ console.log("11. The alert worker's path is not shared with a search");
   const search = readFileSync(join(ROOT, "src", "server", "league-search.ts"), "utf8");
   const alerts = readFileSync(join(ROOT, "src", "server", "alerts.ts"), "utf8");
   const serve = readFileSync(join(ROOT, "serve-static.ts"), "utf8");
-  const oddsApi = readFileSync(join(ROOT, "api", "odds.ts"), "utf8");
+  const oddsApi = readFileSync(join(ROOT, "api", "[...path].ts"), "utf8");
   check("the search module has no cache of its own", !/new Map<[^>]*>\(\)/.test(search.replace(/new Map\(CATALOGUE[^)]*\)/, "")));
   check("the search module never touches the alert cache file", !/alerts-cache|alerts-seen/.test(search));
   check("the search module never writes a cache", !/oddsCache|caches\[/.test(search) && !/setItem\(/.test(search));
-  check("api/odds.ts is unchanged in role (still the cached proxy)", /CACHE_TTL_MS/.test(oddsApi) && !/odds-leagues/.test(oddsApi));
+  // The consolidated file holds every route, so "does not mention odds-leagues"
+  // is no longer the right test. What must still be true is that the odds proxy
+  // keeps its own cached path and does not share the search's provider call.
+  check(
+    "the odds proxy is unchanged in role (still cached, still its own fetch)",
+    /CACHE_TTL_MS/.test(oddsApi) && !/encodeURIComponent\(sport\.key\)\}\/odds\//.test(oddsApi),
+  );
   check("serve-static routes the search separately from /api/odds", /url\.pathname === "\/api\/odds-leagues"/.test(serve) && /url\.pathname === "\/api\/odds"/.test(serve));
   check("the alert worker's scan path is untouched", /CHECK_INTERVAL_MIN|CHECK_INTERVAL/.test(alerts));
 }
