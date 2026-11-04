@@ -300,7 +300,11 @@ export async function createCheckoutSession(
     return refuse(400, "invalid_email", "A signed-in account email is required to start a checkout.");
   }
 
-  // 4. The return origin must be a plain http(s) URL — no open redirect.
+  // 4. The return origin must be a plain http(s) URL — it cannot be `javascript:`
+  //    or a relative path. WHICH http(s) origin is allowed is decided by the
+  //    caller, because it depends on the hosts this build is served on: see
+  //    src/server/return-origin.ts, which serve-static.ts uses to turn the
+  //    proxy's claim into an allow-listed origin (or the request's own origin).
   const origin = (input.origin || "").trim().replace(/\/+$/, "");
   let originUrl: URL;
   try {

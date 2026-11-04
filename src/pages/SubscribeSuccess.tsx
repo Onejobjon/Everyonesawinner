@@ -97,31 +97,60 @@ export default function SubscribeSuccess() {
   }
 
   if (active) {
+    // Access is real (the server said so), but WHY it is real is not always a
+    // payment: a comped account writes the same entitlement record. Saying
+    // "you're subscribed" to someone the owner comped would be a small lie, and
+    // saying "renews automatically" to them would be a worse one.
+    const comped = !!user?.comp;
     return (
       <PageHeader
-        title="You're subscribed"
-        subtitle="Our server has confirmed your subscription on this account. Everything you've paid for is unlocked now."
+        title={comped ? "Your free access is active" : "You're subscribed"}
+        subtitle={
+          comped
+            ? "Our server has granted this account free access. There is nothing to pay and no card on file."
+            : "Our server has confirmed your subscription on this account. Everything you've paid for is unlocked now."
+        }
       >
         <div className="mx-auto mt-8 max-w-xl rounded-2xl border border-gray-200 bg-white p-6 text-left shadow-sm dark:border-gray-800 dark:bg-gray-950">
           <div className="flex items-baseline justify-between gap-4">
             <h2 className="text-lg font-semibold">{confirmedPlan?.name ?? "Your plan"}</h2>
-            {confirmedPlan && <span className="text-sm text-gray-600 dark:text-gray-400">{confirmedPlan.price}</span>}
+            {confirmedPlan && (
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {comped ? "free access" : confirmedPlan.price}
+              </span>
+            )}
           </div>
-          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
-            Your plan renews automatically until you cancel. To cancel, email{" "}
-            <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 underline hover:text-indigo-700">
-              support@everyonesawinner.uk
-            </a>{" "}
-            from the address on this account — cancelling stops future billing and your access runs to the end of
-            the period you've already paid for.
-          </p>
-          <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">
-            The full payment terms, including your 14-day right to cancel, are in our{" "}
-            <Link to="/terms" className="text-indigo-600 underline hover:text-indigo-700">
-              terms of use
-            </Link>
-            .
-          </p>
+          {comped ? (
+            <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+              {user?.comp?.permanent
+                ? "This free access has no end date. It stays until the owner changes it."
+                : user?.comp?.endsAt
+                  ? `This free access runs until ${new Date(user.comp.endsAt).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}. Nothing renews and no payment is taken.`
+                  : "Nothing renews and no payment is taken."}
+            </p>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+              Your plan renews automatically until you cancel. To cancel, email{" "}
+              <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 underline hover:text-indigo-700">
+                support@everyonesawinner.uk
+              </a>{" "}
+              from the address on this account — cancelling stops future billing and your access runs to the end of
+              the period you've already paid for.
+            </p>
+          )}
+          {!comped && (
+            <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">
+              The full payment terms, including your 14-day right to cancel, are in our{" "}
+              <Link to="/terms" className="text-indigo-600 underline hover:text-indigo-700">
+                terms of use
+              </Link>
+              .
+            </p>
+          )}
         </div>
 
         <p className="mx-auto mt-4 max-w-xl text-xs leading-5 text-gray-500 dark:text-gray-400">
@@ -170,10 +199,19 @@ export default function SubscribeSuccess() {
   }
 
   // Signed in, but the server has not confirmed a subscription (yet).
+  //
+  // THE HONEST VERSION (2026-11-04). Access is granted by the Stripe webhook
+  // (src/server/stripe-webhook.ts → src/server/entitlement.ts), which is a
+  // SEPARATE message from the browser coming back here: Stripe sends it when it
+  // is ready, so this page can load before the account has been switched on. The
+  // old subtitle promised "usually a minute or two" — a timing claim about our
+  // own machinery that nothing in this codebase can support, and one a customer
+  // would rightly hold us to. So: say what grants access, say we cannot promise
+  // when it lands, and offer a button that asks again.
   return (
     <PageHeader
       title="Waiting for our server to confirm your payment"
-      subtitle="You're signed in. Our payment provider hasn't told our server that the payment has gone through yet — this is usually a minute or two, occasionally a little longer."
+      subtitle="You're signed in. Access is switched on by our server when the payment provider's confirmation reaches it — that confirmation is a separate message from this page, so it can arrive before or after you land here."
     >
       {shownPlan && (
         <div className="mx-auto mt-8 max-w-xl rounded-2xl border border-gray-200 bg-white p-6 text-left shadow-sm dark:border-gray-800 dark:bg-gray-950">
@@ -190,9 +228,10 @@ export default function SubscribeSuccess() {
       )}
 
       <p className="mx-auto mt-6 max-w-xl text-sm leading-6 text-gray-600 dark:text-gray-400">
-        Nothing on this page can unlock your account — only our server can, and it does so the moment the
-        confirmation arrives. You don't need to stay here: the plan is attached to your account, so you can
-        close this page and sign in again later.
+        Nothing on this page can unlock your account — only our server can, and it does so when that confirmation
+        arrives. We can't say how long that will take, and we'd rather tell you that than give you a number we
+        can't keep. You don't need to stay here: the plan is attached to your account, so you can close this page
+        and sign in again later.
       </p>
 
       <div className="mt-8 flex flex-wrap justify-center gap-4">
@@ -212,7 +251,7 @@ export default function SubscribeSuccess() {
       </div>
 
       <p className="mx-auto mt-6 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">
-        Still showing this after ten minutes? Email{" "}
+        Still showing this later on? Email{" "}
         <a href="mailto:support@everyonesawinner.uk" className="text-indigo-600 underline hover:text-indigo-700">
           support@everyonesawinner.uk
         </a>{" "}

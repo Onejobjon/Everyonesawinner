@@ -1352,6 +1352,10 @@ export function handleStripeWebhook(req: any, res: any): void {
  *   GET  /api/checkout        → upstream GET  (readiness: { ok, billing })
  *   POST /api/checkout {plan} → upstream POST (a session URL, or a refusal)
  *   - method, body and the Authorization header are forwarded as they arrived
+ *   - `x-eaw-return-origin` carries the origin the BROWSER is on, so the
+ *     platform's success_url/cancel_url come back to www.everyonesawinner.uk
+ *     instead of the platform hostname. It is built here from the request, never
+ *     copied from an inbound header, and the platform allow-lists it.
  *   - the upstream status code and JSON body are returned unchanged
  *   - no caching, ever
  * FAILURE MODE (fail closed): if the platform host cannot be reached, or answers
@@ -1361,6 +1365,37 @@ export function handleStripeWebhook(req: any, res: any): void {
  *   and no payment has been taken". It never invents a success, and never
  *   returns a url.
  * ================================================================== */
+
+/** One request header as a trimmed string. Vercel lower-cases keys; accept both. */
+function headerValue(req: any, name: string): string {
+  const raw = req?.headers?.[name] ?? req?.headers?.[name.toLowerCase()] ?? req?.headers?.[name.toUpperCase()];
+  const first = Array.isArray(raw) ? raw[0] : raw;
+  return typeof first === "string" ? first.trim() : "";
+}
+
+/**
+ * The origin the customer's BROWSER is on, for the checkout return URLs.
+ *
+ * WHY THIS EXISTS (2026-11-04): the platform builds success_url/cancel_url from
+ * the origin ITS request arrived on, and on this domain that is always the
+ * platform host — so a customer who started a checkout on www.everyonesawinner.uk
+ * was returned to the platform hostname after paying. The platform cannot see
+ * this domain from a proxied request, so the proxy has to say it.
+ *
+ * `Origin` first: browsers set it on a POST, and it is the page the customer is
+ * actually looking at. Otherwise rebuild it from the host the request was
+ * addressed to. Either way this is only a CLAIM — the platform allow-lists it
+ * (src/server/return-origin.ts) and falls back to its own origin if it does not
+ * recognise it. Nothing here can widen where a customer is sent.
+ */
+export function browserOrigin(req: any): string {
+  const fromOrigin = headerValue(req, "origin");
+  if (fromOrigin) return fromOrigin;
+  const proto = (headerValue(req, "x-forwarded-proto").split(",")[0] || "https").trim().toLowerCase();
+  const host = (headerValue(req, "x-forwarded-host").split(",")[0] || headerValue(req, "host")).trim();
+  if (!host) return "";
+  return `${proto === "http" ? "http" : "https"}://${host}`;
+}
 
 export async function handleCheckout(req: any, res: any): Promise<void> {
   const method = String(req.method || "").toUpperCase();
@@ -1373,6 +1408,12 @@ export async function handleCheckout(req: any, res: any): Promise<void> {
   // Forwarded verbatim: the platform resolves the session from this token and
   // buys the plan for THAT account, never for an email in the body.
   if (authHeader) headers.authorization = authHeader;
+  // Which origin to return the customer to. Built here, never copied from an
+  // inbound header of the same name — `headers` is a fresh object, so a caller
+  // cannot smuggle its own value through, and the platform validates this one
+  // against its allow-list before using it.
+  const returnOrigin = browserOrigin(req);
+  if (returnOrigin) headers["x-eaw-return-origin"] = returnOrigin;
   let body: string | undefined;
   if (method === "POST") {
     const ct = typeof req.headers?.["content-type"] === "string" ? req.headers["content-type"] : "application/json";

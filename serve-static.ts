@@ -19,6 +19,7 @@ import { readGreenHistory } from "./src/server/green-history";
 import { pushSnapshot, rememberSnapshot, SNAPSHOT_HEADER, verifyBridgeToken } from "./src/server/scan-bridge";
 import { receiveStripeEvent } from "./src/server/stripe-webhook";
 import { billingReadiness, createCheckoutSession } from "./src/server/checkout";
+import { RETURN_ORIGIN_HEADER, resolveReturnOrigin } from "./src/server/return-origin";
 import { resolveSportParam, REJECTED_SPORT_MESSAGE } from "./src/lib/sport-params";
 import { brandBySlug, taggedDestination } from "./src/lib/affiliates";
 import { logAffiliateClick, referringPath } from "./src/server/click-log";
@@ -636,9 +637,19 @@ const server = Bun.serve({
       const result = await createCheckoutSession({
         email: account.email,
         plan: (body as { plan?: unknown })?.plan,
-        // The origin the customer is actually on, so success/cancel return here
-        // and not to a hardcoded host.
-        origin: url.origin,
+        // The origin the customer is actually on, so success/cancel return
+        // there and not to a hardcoded host.
+        //
+        // Two sources, in order. On this host the request's own origin is the
+        // answer, exactly as before. A request that arrived through the
+        // /api/checkout proxy on the custom domain arrives HERE, so its own
+        // origin is the platform host — the proxy therefore says which origin
+        // the browser was on in `x-eaw-return-origin`, and that claim is honoured
+        // ONLY if it is one of our own origins (src/server/return-origin.ts).
+        // A forged, unknown or unparseable claim falls back to url.origin, which
+        // is the behaviour that existed before this header — so nothing a caller
+        // sends can turn the return URL into an open redirect.
+        origin: resolveReturnOrigin(req.headers.get(RETURN_ORIGIN_HEADER), url.origin),
       });
       if (!result.ok) {
         return Response.json(
