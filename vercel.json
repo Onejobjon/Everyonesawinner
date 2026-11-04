@@ -4,7 +4,8 @@
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
-    { "source": "/go/(.*)", "destination": "/api/go?slug=$1" },
+    { "source": "/api/(.*)", "destination": "/api/router?path=$1" },
+    { "source": "/go/(.*)", "destination": "/api/router?path=go&slug=$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
