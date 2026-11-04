@@ -33,8 +33,15 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { findEmailByStripeIds, findByEmail, updateSubscription, type SubscriptionPatch } from "./users";
-import { GRACE_STATUS, graceEndFrom, isFutureDate, isKnownPlan, type Plan } from "./entitlement";
+import { GRACE_STATUS, graceEndFrom, isFutureDate, isKnownPlan } from "./entitlement";
 import { notifyOwner } from "./notify-owner";
+import { planFromPriceId, configuredPriceEnvs } from "./price-catalogue";
+import { isCheckoutEnabled, CHECKOUT_DISABLED_CODE, CHECKOUT_DISABLED_MESSAGE } from "./billing-switch";
+import { withEventIdempotency } from "./processed-events";
+
+// Re-exported: the price → plan table moved to price-catalogue.ts (2026-11-03) so
+// checkout and the webhook read ONE table. Existing imports keep working.
+export { planFromPriceId };
 
 export function verifyStripeSignature(rawBody: string, header: string | null, secret: string): boolean {
   if (!header) return false;
@@ -55,38 +62,15 @@ export function verifyStripeSignature(rawBody: string, header: string | null, se
 }
 
 // ── Price → plan ────────────────────────────────────────────────────────────
-
-/** The environment variable that carries each plan's Stripe price id. */
-const PRICE_ENV: ReadonlyArray<{ env: string; plan: Plan }> = [
-  { env: "STRIPE_PRICE_STARTER", plan: "starter" },
-  { env: "STRIPE_PRICE_PRO", plan: "pro" },
-  { env: "STRIPE_PRICE_ANNUAL", plan: "annual" },
-];
-
-/**
- * Which plan a Stripe price id is, from the environment and nowhere else.
- *
- * There is deliberately NO default. The old code ended in `?? "pro"`, so an
- * unrecognised (or newly created) price silently bought the top tier. A price
- * we cannot name is a price we do not grant.
- */
-export function planFromPriceId(priceId: string | null | undefined): Plan | null {
-  if (!priceId) return null;
-  for (const { env, plan } of PRICE_ENV) {
-    const configured = (process.env[env] || "").trim();
-    if (configured && configured === priceId) return plan;
-  }
-  return null;
-}
-
-/** The Stripe price ids that are configured at all (for the alert text). */
-function configuredPriceEnvs(): string[] {
-  return PRICE_ENV.filter(({ env }) => (process.env[env] || "").trim() !== "").map(({ env }) => env);
-}
+// The table lives in src/server/price-catalogue.ts: checkout needs the same one
+// (to refuse a price that disagrees with /subscribe), and two copies of
+// "starter = £19.99/month" is how a £19.99 payment buys Pro.
 
 // ── Reading Stripe objects (they are untyped JSON to us) ────────────────────
 
 interface StripeEvent {
+  /** Stripe's event id (evt_...) — the idempotency key. */
+  id?: string;
   type: string;
   data: { object: Record<string, any> };
 }
@@ -180,6 +164,7 @@ function emailCandidates(obj: AnyObject): unknown[] {
     obj?.client_reference_id,
     obj?.customer_details?.email,
     obj?.customer_email,
+    obj?.receipt_email,
     obj?.subscription_details?.metadata?.email,
     obj?.billing_details?.email,
   ];
@@ -406,14 +391,173 @@ export async function handleStripeEvent(event: StripeEvent): Promise<string> {
 
       if (!alreadyInGrace) {
         await notifyOwner(
-          `Card failed for ${email} — access continues on grace until ${graceEndsAt}. ` +
-            `A customer email quoting that date is still to be sent.`,
+          `EMAIL DUE — card failed for ${email}: access continues on grace until ${graceEndsAt}. ` +
+            `The customer has to be emailed a message quoting that date (terms §9).`,
         );
       }
-      return `invoice.payment_failed: ${email} in grace until ${graceEndsAt}`;
+      return alreadyInGrace
+        ? `invoice.payment_failed: ${email} still in grace until ${graceEndsAt} (date unchanged, no new email due)`
+        : `invoice.payment_failed: ${email} in grace until ${graceEndsAt} (email due)`;
+    }
+
+    // A FULL REFUND REVOKES ACCESS NOW.
+    //
+    // A refund is money going back, so the plan it paid for goes with it. The
+    // period end and the plan are CLEARED, not just the status: entitlement keeps
+    // access for a `canceled` subscription until the period already paid for ends
+    // (terms §8), so leaving the dates behind would let a later cancellation event
+    // hand back access that has been refunded.
+    case "charge.refunded": {
+      const customerId = idOf(obj.customer);
+      const amount = typeof obj.amount === "number" ? obj.amount : null;
+      const refunded = typeof obj.amount_refunded === "number" ? obj.amount_refunded : null;
+      const fullRefund = obj.refunded === true || (amount !== null && refunded !== null && refunded >= amount);
+      if (!fullRefund) {
+        return "charge.refunded: partial refund — access unchanged, the owner decides";
+      }
+
+      const { email, via } = await resolveAccountEmail(emailCandidates(obj), { customerId });
+      if (!email) {
+        await notifyOwner(
+          `charge.refunded: could not tie charge ${idOf(obj.id) ?? "unknown"} to an account (${via}). ` +
+            `If that customer should lose access, revoke it by hand.`,
+        );
+        return "charge.refunded: no matching account, owner alerted";
+      }
+
+      await applyPatch(
+        email,
+        { status: "refunded", plan: null, currentPeriodEnd: null, graceEndsAt: null },
+        "charge.refunded",
+      );
+      await notifyOwner(
+        `Refund recorded for ${email}: access revoked now and the plan cleared. ` +
+          `If this refund was a mistake, re-grant access from the owner panel.`,
+      );
+      return `charge.refunded: ${email} revoked (full refund)`;
     }
 
     default:
       return `${event.type}: ignored`;
   }
+}
+
+// ── The HTTP boundary: flag, signature, idempotency ─────────────────────────
+
+/**
+ * What the endpoint answers. `status` is the HTTP code; the body is JSON.
+ *
+ * Codes: 503 checkout_disabled | webhook_not_configured, 400 bad_signature |
+ * invalid_payload, 200 applied/duplicate, 500 could_not_apply (Stripe retries).
+ */
+export interface ReceivedEvent {
+  status: number;
+  body: {
+    ok: boolean;
+    note?: string;
+    error?: string;
+    code?: string;
+    duplicate?: boolean;
+  };
+}
+
+export interface ReceiveOptions {
+  /** Overrides STRIPE_WEBHOOK_SECRET (tests). */
+  secret?: string | null;
+  /** Overrides handleStripeEvent (tests). */
+  handle?: (event: StripeEvent) => Promise<string>;
+}
+
+/**
+ * THE ONE ENTRY POINT for a Stripe event. Every HTTP route calls this and nothing
+ * else, so the order of the guards cannot drift between deployments:
+ *
+ *   1. the billing switch (CHECKOUT_ENABLED) — off means nothing is applied;
+ *   2. a webhook secret must exist, or we cannot verify anyone;
+ *   3. the HMAC over the RAW body must match, or the event is dropped;
+ *   4. the body must be JSON with a `type`;
+ *   5. the event id must not already be in the processed ledger;
+ *   6. only then does handleStripeEvent() write any state.
+ *
+ * Steps 1–4 answer 4xx/503 without touching an account. Step 6 throwing answers
+ * 500 so Stripe retries, and the ledger reservation is released first.
+ */
+export async function receiveStripeEvent(
+  rawBody: string,
+  signatureHeader: string | null,
+  opts: ReceiveOptions = {},
+): Promise<ReceivedEvent> {
+  // 1. THE SWITCH. With billing off, no event can change anyone's access.
+  if (!isCheckoutEnabled()) {
+    return {
+      status: 503,
+      body: { ok: false, code: CHECKOUT_DISABLED_CODE, error: CHECKOUT_DISABLED_MESSAGE },
+    };
+  }
+
+  // 2. No secret means no verification is possible. Fail closed.
+  const secret = opts.secret !== undefined ? opts.secret : (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
+  if (!secret) {
+    console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set — refusing the event");
+    return {
+      status: 503,
+      body: {
+        ok: false,
+        code: "webhook_not_configured",
+        error:
+          "No Stripe webhook secret is configured, so no event can be verified. Nothing was applied. " +
+          "Set STRIPE_WEBHOOK_SECRET to the signing secret of the endpoint in Stripe.",
+      },
+    };
+  }
+
+  // 3. The signature, over the exact bytes Stripe sent.
+  if (!verifyStripeSignature(rawBody, signatureHeader, secret)) {
+    return {
+      status: 400,
+      body: {
+        ok: false,
+        code: "bad_signature",
+        error: "Bad or missing signature — the event was not applied.",
+      },
+    };
+  }
+
+  // 4. A verified body we can still not read is not an event.
+  let event: StripeEvent;
+  try {
+    event = JSON.parse(rawBody) as StripeEvent;
+  } catch {
+    return { status: 400, body: { ok: false, code: "invalid_payload", error: "Body is not JSON." } };
+  }
+  if (!event || typeof event.type !== "string") {
+    return {
+      status: 400,
+      body: { ok: false, code: "invalid_payload", error: "Body is not a Stripe event (no type)." },
+    };
+  }
+
+  // 5 + 6. Apply at most once, and shout if it cannot be applied at all.
+  const handle = opts.handle ?? handleStripeEvent;
+  let run: Awaited<ReturnType<typeof withEventIdempotency<string>>>;
+  try {
+    run = await withEventIdempotency(event.id, () => handle(event));
+  } catch (e) {
+    console.error(`[stripe-webhook] failed: ${String(e)}`);
+    return {
+      status: 500,
+      body: { ok: false, code: "could_not_apply", error: "Could not apply the event — Stripe will retry." },
+    };
+  }
+
+  if (run.skipped) {
+    return {
+      status: 200,
+      body: { ok: true, duplicate: true, note: `already applied (${run.note ?? "no note"})` },
+    };
+  }
+  return {
+    status: 200,
+    body: { ok: true, note: typeof run.result === "string" ? run.result : "applied" },
+  };
 }

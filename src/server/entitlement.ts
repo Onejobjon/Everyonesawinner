@@ -18,6 +18,9 @@
  *   entitled = the plan is one we sell
  *              AND the subscription is active (or trialing)
  *              AND the paid period has not ended
+ *            OR the subscription was cancelled and the period already paid for
+ *               has not ended (terms §8: cancelling does not end the plan on the
+ *               spot)
  *            OR the subscription is in the failed-payment grace window and the
  *               grace end date has not passed
  *            OR this is the owner's comped seat (no subscription, no period).
@@ -46,6 +49,21 @@ export const KNOWN_PLANS: readonly Plan[] = ["starter", "pro", "annual"];
 
 /** Stripe statuses that mean "paid up right now". */
 export const ACTIVE_STATUSES: readonly string[] = ["active", "trialing"];
+
+/**
+ * Statuses that still have access UNTIL THE PERIOD ALREADY PAID FOR ENDS.
+ *
+ * WHY (2026-11-03): terms §8 promises that cancelling "does not end the plan on
+ * the spot: your access continues to the end of the period you have already paid
+ * for". Before this, any `canceled` status was an instant lock-out, so a customer
+ * who cancelled on day 2 of a month lost 28 days they had paid for — the code
+ * contradicted the page. The date is what governs: once `currentPeriodEnd` has
+ * passed, the same status grants nothing.
+ *
+ * A REFUND is not in this list: `charge.refunded` clears the plan and the period,
+ * because money that has gone back must not keep buying days.
+ */
+export const CANCELED_STATUSES: readonly string[] = ["canceled", "canceled_at_period_end"];
 
 /** Status used while a failed renewal is being retried (see GRACE below). */
 export const GRACE_STATUS = "past_due";
@@ -131,10 +149,15 @@ export function isEntitled(state: SubscriptionState, nowMs: number = Date.now())
   // explicitly undated. It is not a "plan with no period", which would fail.
   if (compGrants(state.comp, nowMs)) return true;
   if (!isKnownPlan(state.plan)) return false;
-  if (ACTIVE_STATUSES.includes(state.status ?? "") && isFutureDate(state.currentPeriodEnd, nowMs)) {
+  const status = state.status ?? "";
+  if (ACTIVE_STATUSES.includes(status) && isFutureDate(state.currentPeriodEnd, nowMs)) {
     return true;
   }
-  if (state.status === GRACE_STATUS && isFutureDate(state.graceEndsAt, nowMs)) {
+  // Cancelled, but inside the period that was already paid for (terms §8).
+  if (CANCELED_STATUSES.includes(status) && isFutureDate(state.currentPeriodEnd, nowMs)) {
+    return true;
+  }
+  if (status === GRACE_STATUS && isFutureDate(state.graceEndsAt, nowMs)) {
     return true;
   }
   return false;

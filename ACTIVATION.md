@@ -41,23 +41,58 @@ Where that lands matters:
 
 Either way, `OWNER_PASSWORD` in Secrets must match the password you set.
 
-## 3. Billing → plan (per-user subscription status)
+## 3. Billing → plan (the checkout + subscription state machine)
 
-Point a Stripe webhook endpoint at **`https://<platform-host>/api/stripe-webhook`**
-and save the signing secret as `STRIPE_WEBHOOK_SECRET`. Use the platform host,
-not the custom domain: the domain redirects to `www`, and the signature is
-checked against the raw request body, so the target must be the host that
-terminates the request directly. Events handled:
+**Nothing here is live until you flip one switch.** The whole billing surface is
+built and tested, and reads `CHECKOUT_ENABLED`, which is **OFF** unless it is
+exactly `1`, `true`, `on`, `yes` or `enabled`. With it off:
 
-- `checkout.session.completed` → plan set, subscription marked active
-- `customer.subscription.created` / `.updated` → plan + status updated
-- `customer.subscription.deleted` → access revoked (record kept)
+- `POST /api/checkout` refuses with `checkout_disabled` and never calls Stripe;
+- `POST /api/stripe-webhook` refuses with `checkout_disabled`, so **no event can
+  grant or revoke access**, even a perfectly signed one.
 
-Optional price mapping: `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`,
-`STRIPE_PRICE_ANNUAL`. Without a price mapping the plan comes from the price's
-`metadata.plan`, then falls back to `pro`. Without `STRIPE_WEBHOOK_SECRET` the
-endpoint returns 503 and grants nothing — paying customers would stay
-`subscription:false`, so this secret is required before selling anything.
+`GET /api/checkout` answers with a readiness report (booleans and plan names, no
+keys): which of the pieces below are still missing.
+
+### The switch, after the Stripe reconnect
+
+1. **Reconnect Stripe** on the Finance tab so the account is no longer express and
+   can create subscriptions.
+2. **Create three recurring prices** — Starter £19.99/month, Pro £29.99/month,
+   Pro Annual £269.99/year (the amounts `/subscribe` prints; checkout refuses any
+   price that disagrees with them, so a mismatch cannot be sold by accident).
+3. **Save four secrets**: `STRIPE_SECRET_KEY` (`sk_…` or `rk_…`), and
+   `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ANNUAL`.
+4. **Point a webhook endpoint at `https://<platform-host>/api/stripe-webhook`**
+   and save its signing secret as `STRIPE_WEBHOOK_SECRET`. Use the platform host,
+   not the custom domain: the domain redirects to `www`, and the signature is
+   checked against the raw request body, so the target must be the host that
+   terminates the request directly.
+5. **Set `CHECKOUT_ENABLED=on`.** One flag turns on both checkout and the webhook.
+6. `GET /api/checkout` must now say `canTakeSubscriptionPayments: true`.
+
+### What each event does to access
+
+| Event | Written | Access |
+|---|---|---|
+| `checkout.session.completed` | Stripe customer + subscription ids, plan if the price is named | **unchanged** — it links, it grants nothing (no period yet) |
+| `customer.subscription.created` / `.updated`, status `active`/`trialing` | plan, status, `current_period_end` | **in** until that period end |
+| … status `past_due` | status, `grace_ends_at` (first failure only) | **in** until the grace date |
+| … status `canceled` | status, period end kept | **in** until the period already paid for ends (terms §8) |
+| … status `unpaid` / `incomplete` / `incomplete_expired` | status | **out** |
+| `customer.subscription.deleted` | status `canceled`, period end kept | **in** to the period end, then **out** |
+| `invoice.paid` | status `active`, period end **extended**, grace cleared | **in** |
+| `invoice.payment_failed` | status `past_due`, grace date kept from the first failure | **in** during grace; the owner is told `EMAIL DUE` |
+| `charge.refunded` (full) | status `refunded`, plan and period **cleared** | **out** immediately; partial refunds change nothing |
+
+An **unrecognised price id grants NOTHING** and alerts the owner — never a
+default tier. Every event is deduplicated by its Stripe event id in
+`stripe-events.json` (beside the account store, `STRIPE_EVENTS_FILE` overrides):
+the same event delivered twice is applied once, so a replayed old event cannot
+resurrect a cancelled subscription. Unsigned, wrong-secret and stale (>5 min)
+payloads are rejected with 400 and change nothing.
+
+`STRIPE_GRACE_DAYS` (1–30, default 7) sets how long a failed card keeps access.
 
 ## 4. Verify
 

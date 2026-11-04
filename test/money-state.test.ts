@@ -275,7 +275,11 @@ describe("ITEM 3: entitlement is one rule, and a paid period that has passed is 
   test("a plan we do not sell grants nothing, whatever the status says", () => {
     expect(isEntitled(base({ plan: "platinum" as never }))).toBe(false);
     expect(isEntitled(base({ plan: null }))).toBe(false);
-    expect(isEntitled(base({ status: "canceled" }))).toBe(false);
+    // Cancelled INSIDE a period that was already paid for keeps access to the end
+    // of that period (terms §8), and no further. Refunded/unpaid do not.
+    expect(isEntitled(base({ status: "canceled" }))).toBe(true);
+    expect(isEntitled(base({ status: "canceled", currentPeriodEnd: isoAgo(1) }))).toBe(false);
+    expect(isEntitled(base({ status: "refunded" }))).toBe(false);
     expect(isEntitled(base({ status: "unpaid" }))).toBe(false);
   });
 
@@ -516,9 +520,18 @@ describe("ITEMS 4–6: Stripe events grant, renew, grace and link correctly", ()
     const user = await findByEmail(email);
     expect(user?.subscriptionStatus).toBe("canceled");
     expect(user?.currentPeriodEnd).toBe(paidTo); // not rewritten
-    // Access ended: the period it was cancelled in is over as far as Stripe is
-    // concerned, and entitlement needs a live status.
-    expect(user?.entitled).toBe(false);
+    // Terms §8: cancelling stops future billing but does NOT end the plan on the
+    // spot — access runs to the end of the period already paid for (2026-11-03;
+    // this used to be an instant lock-out, which contradicted the terms page).
+    expect(user?.entitled).toBe(true);
+    const state = {
+      plan: user!.plan,
+      status: user!.subscriptionStatus,
+      currentPeriodEnd: user!.currentPeriodEnd,
+      graceEndsAt: user!.graceEndsAt,
+    };
+    expect(isEntitled(state, Date.parse(paidTo) - 60_000)).toBe(true);
+    expect(isEntitled(state, Date.parse(paidTo) + 60_000)).toBe(false);
   });
 
   test("ITEM 6: an event for an account that does not exist is loud, not silent", async () => {

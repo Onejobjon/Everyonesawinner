@@ -100,13 +100,27 @@ const renewed = await findByEmail("buyer@example.com");
 ok(Date.parse(renewed?.currentPeriodEnd ?? "") > Date.parse(active?.currentPeriodEnd ?? ""), "a renewal extends the paid period");
 ok(renewed?.graceEndsAt === null, "a successful payment clears the grace window");
 
-// 5. Cancellation: status recorded, no invented end date, access off.
+// 5. Cancellation: status recorded, no invented end date, and access runs to the
+//    end of the period already paid for (terms §8) — not an instant lock-out.
 await handleStripeEvent({
   type: "customer.subscription.deleted",
   data: { object: { id: "sub_1", customer: "cus_1", status: "canceled", items: { data: [] } } },
 } as any);
 const cancelled = await findByEmail("buyer@example.com");
 ok(cancelled?.subscriptionStatus === "canceled", "cancellation is recorded");
-ok(cancelled?.entitled === false, "a cancelled subscription no longer grants access");
+ok(cancelled?.entitled === true, "a cancelled plan keeps access to the end of the paid period");
+const { isEntitled } = await import("../src/server/entitlement.ts");
+ok(
+  !isEntitled(
+    {
+      plan: cancelled!.plan,
+      status: cancelled!.subscriptionStatus,
+      currentPeriodEnd: cancelled!.currentPeriodEnd,
+      graceEndsAt: cancelled!.graceEndsAt,
+    },
+    Date.parse(cancelled!.currentPeriodEnd!) + 60_000,
+  ),
+  "and access ends when that period ends",
+);
 
 process.exit(0);

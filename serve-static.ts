@@ -17,7 +17,8 @@ import { readInstantWins, feedDiagnostics, candidateCacheFiles } from "./src/ser
 import { ensureScanOnOpen, scanOnOpenState } from "./src/server/scan-on-open";
 import { readGreenHistory } from "./src/server/green-history";
 import { pushSnapshot, rememberSnapshot, SNAPSHOT_HEADER, verifyBridgeToken } from "./src/server/scan-bridge";
-import { handleStripeEvent, verifyStripeSignature } from "./src/server/stripe-webhook";
+import { receiveStripeEvent } from "./src/server/stripe-webhook";
+import { billingReadiness, createCheckoutSession } from "./src/server/checkout";
 import { resolveSportParam, REJECTED_SPORT_MESSAGE } from "./src/lib/sport-params";
 import { brandBySlug, taggedDestination } from "./src/lib/affiliates";
 import { logAffiliateClick, referringPath } from "./src/server/click-log";
@@ -575,30 +576,80 @@ const server = Bun.serve({
     }
 
     // Stripe webhook — the ONLY way a customer's plan changes.
-    // Fails closed: with no STRIPE_WEBHOOK_SECRET we refuse the request (503)
-    // rather than trust an unauthenticated caller to grant a paid plan.
+    //
+    // Every guard lives in receiveStripeEvent() (src/server/stripe-webhook.ts), in
+    // a fixed order, so this route cannot drift from any other caller: the billing
+    // switch first (CHECKOUT_ENABLED off ⇒ 503 and NOTHING is applied), then the
+    // signing secret, then the HMAC over the raw bytes, then the processed-event
+    // ledger, and only then the state machine.
     if (url.pathname === "/api/stripe-webhook") {
       if (req.method !== "POST") {
         return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
       }
-      const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      if (!secret) {
-        console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set — refusing the event");
-        return Response.json({ ok: false, error: "Webhook not configured" }, { status: 503 });
-      }
       const raw = await req.text();
-      if (!verifyStripeSignature(raw, req.headers.get("stripe-signature"), secret)) {
-        return Response.json({ ok: false, error: "Bad signature" }, { status: 400 });
+      const received = await receiveStripeEvent(raw, req.headers.get("stripe-signature"));
+      if (received.body.note) console.log(`[stripe-webhook] ${received.body.note}`);
+      return Response.json(received.body, { status: received.status });
+    }
+
+    // Checkout — the ONLY way a plan is sold.
+    //
+    // GET  → readiness: what is configured, what is missing, whether billing is
+    //        switched on. Booleans and plan names only, never a key.
+    // POST { plan } → a Stripe Checkout session URL, or a refusal that says why.
+    //        The account email comes from the SESSION, never from the body, so a
+    //        caller cannot buy a plan onto someone else's account.
+    // With CHECKOUT_ENABLED unset this endpoint can only refuse: it is inert until
+    // the owner completes the Stripe reconnect.
+    if (url.pathname === "/api/checkout") {
+      if (req.method === "GET") {
+        return Response.json({ ok: true, billing: billingReadiness() }, { headers: { "cache-control": "no-store" } });
       }
+      if (req.method !== "POST") {
+        return Response.json({ ok: false, error: "Method not allowed" }, { status: 405 });
+      }
+      let body: unknown;
       try {
-        const event = JSON.parse(raw);
-        const note = await handleStripeEvent(event);
-        console.log(`[stripe-webhook] ${note}`);
-        return Response.json({ ok: true, note });
-      } catch (e) {
-        console.error(`[stripe-webhook] failed: ${String(e)}`);
-        return Response.json({ ok: false, error: "Could not apply event" }, { status: 500 });
+        body = await req.json();
+      } catch {
+        return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
       }
+      const token = (req.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i)?.[1] || "";
+      const session = token ? await resolveSession(token.trim()) : null;
+      if (!session) {
+        return Response.json(
+          {
+            ok: false,
+            code: "not_signed_in",
+            message: "Sign in first, then choose a plan. A plan is bought for the account you are signed in as.",
+          },
+          { status: 401 },
+        );
+      }
+      const account = await findByEmail(session.email);
+      if (!account) {
+        return Response.json(
+          { ok: false, code: "account_not_found", message: "That account no longer exists." },
+          { status: 401 },
+        );
+      }
+      const result = await createCheckoutSession({
+        email: account.email,
+        plan: (body as { plan?: unknown })?.plan,
+        // The origin the customer is actually on, so success/cancel return here
+        // and not to a hardcoded host.
+        origin: url.origin,
+      });
+      if (!result.ok) {
+        return Response.json(
+          { ok: false, code: result.code, message: result.message },
+          { status: result.status },
+        );
+      }
+      return Response.json(
+        { ok: true, url: result.url, sessionId: result.sessionId, plan: result.plan, mode: result.mode },
+        { headers: { "cache-control": "no-store" } },
+      );
     }
     // Session check — the ONLY source of truth for the paywall.
     // GET /api/me with `Authorization: Bearer <token>`.
