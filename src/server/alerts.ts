@@ -134,6 +134,23 @@ const LAST_SCAN_FILE = join(RUN_DIR, "alerts-last-scan.json");
 const CREDITS_FILE = join(RUN_DIR, "credits.jsonl");
 const SEEN_MAX = 4000; // cap the persisted dedup set so it can't grow unbounded
 
+/**
+ * DRY RUN — the VPS migration's comparison mode (deploy/vps/dry-run.sh,
+ * 2026-11-06). With EAW_ALERT_DRY_RUN=1 the scan is completely real: same
+ * vendor API, same fixtures, same maths, same greens history — but
+ *   · nothing is delivered (deliver() logs the message it WOULD have sent),
+ *   · the snapshot push to the published site is skipped, so a rehearsal can
+ *     never overwrite the live feed,
+ *   · the live health probe is skipped (it costs an odds-API request and its
+ *     result would describe the platform, not the VPS),
+ *   · state still goes wherever ALERTS_RUN_DIR points, which the dry run sets to
+ *     a scratch copy — so the real seen list is never written.
+ * Unset (production, and every existing caller) the behaviour is byte-for-byte
+ * what it was.
+ */
+const DRY_RUN = (process.env.EAW_ALERT_DRY_RUN || "").trim() === "1";
+
+
 // Live surface to health-check. Must serve JSON odds for the site to be
 // "working". Overridable via env for portability. NOTE: this hits the /api/odds
 // proxy, which forwards to the odds API — so it costs odds-API quota. The
@@ -986,6 +1003,14 @@ function brief(body: string, n = 300): string {
 }
 
 async function deliver(o: Opportunity): Promise<void> {
+  // Dry run: say exactly what would have been sent, then send nothing at all.
+  // The log line is the artefact the VPS comparison is read from, so it carries
+  // the same text the Telegram message would have carried.
+  if (DRY_RUN) {
+    log(`[dry-run] WOULD ALERT ${o.type} | ${telegramText(o).replace(/\s*\n\s*/g, " | ")}`);
+    return;
+  }
+
   // A — webhook with HMAC-SHA256 signature. BEST-EFFORT: a secondary-channel
   // failure must never block Telegram, the primary alert channel.
   if (WEBHOOK_URL && WEBHOOK_SECRET) {
@@ -1269,10 +1294,14 @@ export async function runAlertCheck(): Promise<{
   skippedTooSoon: number;
   skippedSameSource: number;
 }> {
-  try {
-    await checkSiteHealth();
-  } catch (e) {
-    log(`health check failed: ${String(e)}`);
+  if (DRY_RUN) {
+    log(`DRY RUN: alerting suppressed (EAW_ALERT_DRY_RUN=1) — state dir ${RUN_DIR}`);
+  } else {
+    try {
+      await checkSiteHealth();
+    } catch (e) {
+      log(`health check failed: ${String(e)}`);
+    }
   }
   // Say what the green-cash rule assumed, once per scan, so a log reader can
   // tell which commission a profit figure was computed at.
@@ -1336,7 +1365,10 @@ export async function runAlertCheck(): Promise<{
   // keeps it in memory and serves the feed from there. ZERO extra credits.
   try {
     const cacheFile = join(RUN_DIR, "alerts-cache.json");
-    if (existsSync(cacheFile)) {
+    if (DRY_RUN) {
+      // A rehearsal must never overwrite the published site's live feed.
+      log("snapshot push skipped (dry run)");
+    } else if (existsSync(cacheFile)) {
       const cache = JSON.parse(readFileSync(cacheFile, "utf8")) as unknown;
       const report = await pushSnapshot({
         cache,

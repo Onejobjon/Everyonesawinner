@@ -16,6 +16,29 @@
 #   . "$(dirname "$0")/pidfile.sh"
 #   if pid_is_ours "$(cat "$PIDFILE" 2>/dev/null)" "alert-loop"; then ...; fi
 
+# ── THE MACHINE-LEVEL OFF SWITCH (deploy/vps/cutover.sh, 2026-11-06) ────────
+# The alert worker is moving to the owner's VPS. Once it has moved, this machine
+# must never run it again — not on boot, not from `bun install` (postinstall), not
+# from the vite boot hook, which spawns scripts/alert-keepalive.sh every 60
+# seconds and would otherwise bring the worker straight back after a cutover and
+# scan alongside the VPS (double credits, duplicate alerts).
+#
+# The check lives HERE, and not in alert-keepalive.sh or alert-loop.sh, for two
+# reasons:
+#   · both of those source this file before they can spawn anything, so one guard
+#     covers every entry point;
+#   · a SOURCED file is read once, at start-up. Editing a shell script that is
+#     already running (a `while true` loop) can make bash re-read from a stale
+#     byte offset and execute garbage — this file is never executed as a loop, so
+#     adding to it is safe while the worker is live.
+# rollback.sh removes the file and the platform worker is allowed to run again.
+EAW_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EAW_WORKER_OFF_FILE="${EAW_WORKER_OFF_FILE:-$EAW_SCRIPTS_DIR/../.run/alert-worker.disabled}"
+if [ -f "$EAW_WORKER_OFF_FILE" ]; then
+  echo "[worker $(date -u +%FT%TZ)] alert worker is DISABLED on this machine ($EAW_WORKER_OFF_FILE) — it runs on the VPS now; see deploy/vps/README.md. Not starting."
+  exit 0
+fi
+
 # pid_is_ours <pid> <cmdline-substring>
 #   0 = the PID is alive AND its command line contains the substring (ours)
 #   1 = dead, empty, or a different process (stale — safe to start a new one)

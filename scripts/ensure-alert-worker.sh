@@ -24,6 +24,15 @@ if [ -n "${VERCEL:-}" ]; then
   exit 0
 fi
 
+# The worker has been MOVED to the owner's VPS (deploy/vps/cutover.sh): this file
+# is the machine-level off switch, and the same check is enforced inside
+# scripts/pidfile.sh, so alert-keepalive.sh refuses to start even when the vite
+# boot hook spawns it directly. See deploy/vps/README.md.
+if [ -f ".run/alert-worker.disabled" ]; then
+  echo "[ensure-alert-worker] alert worker is disabled on this machine (.run/alert-worker.disabled) — it runs on the VPS"
+  exit 0
+fi
+
 # Load the owner's Telegram credentials (0600 file, never committed).
 SECRETS="/home/team/shared/.secrets/telegram.env"
 if [ -f "$SECRETS" ]; then

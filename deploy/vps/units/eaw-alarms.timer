@@ -1,0 +1,11 @@
+[Unit]
+Description=Everyone's A Winner — run the alert alarms every 60 seconds
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=60
+AccuracySec=5s
+Unit=eaw-alarms.service
+
+[Install]
+WantedBy=timers.target

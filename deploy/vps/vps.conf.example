@@ -1,0 +1,31 @@
+# deploy/vps/vps.conf.example — copy to deploy/vps/vps.conf and fill in.
+#
+# deploy/vps/vps.conf is GIT-IGNORED (see .gitignore). Never commit it: it names
+# the owner's server. Everything here can also be supplied as an environment
+# variable, which wins over this file.
+#
+# WHAT IS NOT IN THIS FILE, ON PURPOSE: the Telegram token and the odds API key.
+# They live in /home/team/shared/.secrets/{telegram,odds}.env on this machine and
+# are copied to the VPS by install.sh as 0600 files. This file names paths only.
+
+# The VPS address the owner sends (IP or hostname).
+VPS_HOST="203.0.113.10"
+
+# The login user. If it is `root`, set SUDO="" below; otherwise the user needs
+# passwordless sudo (that is the one thing to confirm with the owner).
+VPS_USER="root"
+
+VPS_PORT="22"
+
+# The dedicated keypair generated for this job. The public half is already on
+# the owner's list to paste into the VPS's ~/.ssh/authorized_keys.
+SSH_KEY="/home/team/shared/.secrets/eaw-vps_ed25519"
+
+# "sudo -n" when VPS_USER is not root; empty when it is root.
+SUDO=""
+
+# Where the kit lives on the VPS.
+REMOTE_ROOT="/opt/eaw"
+
+# The unprivileged account the worker runs as (created by install.sh).
+EAW_USER="eaw"

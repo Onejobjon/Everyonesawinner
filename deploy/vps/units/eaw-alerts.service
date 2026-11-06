@@ -1,0 +1,44 @@
+[Unit]
+Description=Everyone's A Winner — alert worker (odds scan + Telegram alerts)
+Documentation=file://@EAW_ROOT@/site/deploy/vps/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@EAW_USER@
+Group=@EAW_USER@
+WorkingDirectory=@EAW_ROOT@/site
+
+# Secrets come from FILES, never from this unit file. systemd reads
+# EnvironmentFile as root; the values never appear in `systemctl show`, in the
+# unit file, or in journald — only in the worker's own environment.
+EnvironmentFile=@EAW_ROOT@/secrets/odds.env
+EnvironmentFile=-@EAW_ROOT@/secrets/telegram.env
+EnvironmentFile=-@EAW_ROOT@/secrets/push.env
+
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=ODDS_ENV_FILE=@EAW_ROOT@/secrets/odds.env
+Environment=EAW_SECRETS_FILE=@EAW_ROOT@/secrets/telegram.env
+Environment=ALERTS_RUN_DIR=@EAW_ROOT@/site/.run
+Environment=NODE_ENV=production
+
+# The same loop the platform runs. It binds no port and takes a PID-identity
+# lock, so starting it twice is a no-op rather than a second worker.
+ExecStart=/usr/bin/bash @EAW_ROOT@/site/scripts/alert-loop.sh
+
+# THE POINT OF THE MOVE: a VPS does not pause, so the loop is never left dead
+# for days by a platform credit stop. systemd replaces alert-keepalive.sh here.
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=eaw-alerts
+
+# Let a scan in flight finish, but never let a hung bun process survive a stop.
+TimeoutStopSec=120
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

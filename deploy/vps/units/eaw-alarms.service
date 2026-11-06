@@ -1,0 +1,28 @@
+[Unit]
+Description=Everyone's A Winner — alert alarms (stall gap alarm + daily heartbeat)
+Documentation=file://@EAW_ROOT@/site/deploy/vps/README.md
+After=eaw-alerts.service
+# Deliberately NOT Requires=/BindsTo= the worker: the alarms must still run when
+# the worker is down, because that is exactly when they have something to say.
+
+[Service]
+Type=oneshot
+User=@EAW_USER@
+Group=@EAW_USER@
+WorkingDirectory=@EAW_ROOT@/site
+
+EnvironmentFile=@EAW_ROOT@/secrets/odds.env
+EnvironmentFile=-@EAW_ROOT@/secrets/telegram.env
+EnvironmentFile=-@EAW_ROOT@/secrets/push.env
+
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=ODDS_ENV_FILE=@EAW_ROOT@/secrets/odds.env
+Environment=EAW_SECRETS_FILE=@EAW_ROOT@/secrets/telegram.env
+Environment=ALERTS_RUN_DIR=@EAW_ROOT@/site/.run
+
+ExecStart=/usr/bin/bash @EAW_ROOT@/site/deploy/vps/alarms-tick.sh
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=eaw-alarms
+TimeoutStartSec=180
