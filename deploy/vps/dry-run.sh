@@ -26,6 +26,8 @@ CMD="${1:-status}"
 MINUTES="${2:-60}"
 INTERVAL="${3:-900}"
 eaw_require_config
+# The dry-run directory is a write on the VPS. Fenced in a rehearsal (exit 90).
+eaw_guard_write "$REMOTE_DRY" "write the remote dry-run state"
 
 remote_pid() { eaw_root "cat '$REMOTE_DRY/dry-run.pid' 2>/dev/null || true" 2>/dev/null | tr -d '\r' | tail -1; }
 pid_alive() { [ -n "${1:-}" ] && eaw_root "kill -0 '$1' 2>/dev/null && echo alive || echo dead" 2>/dev/null | tr -d '\r' | tail -1 | grep -q alive; }

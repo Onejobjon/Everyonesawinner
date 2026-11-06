@@ -36,6 +36,10 @@ STRICT=0
 VERIFY_SEC="${ROLLBACK_VERIFY_SEC:-300}"
 UNCERTAIN_MARKER="$EAW_REPO_ROOT/.run/vps-rollback-uncertain"
 RECORD="$EAW_REPO_ROOT/.run/vps-cutover.json"
+# Writes — fenced in a rehearsal (see eaw_guard_write), no-op in production.
+eaw_guard_write "$EAW_REPO_ROOT/.run" "write rollback records"
+eaw_guard_write "$UNCERTAIN_MARKER"   "write the uncertain marker"
+eaw_guard_write "$OFF_FILE"           "remove the off switch"
 mkdir -p "$EAW_REPO_ROOT/.run"
 vps_ok=1
 

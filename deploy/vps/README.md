@@ -157,8 +157,10 @@ and by `test/vps-kit.test.ts` in `bun test`.
 | **State sync never overwrites a newer file** | mtime comparison, then refuse + report; timestamps preserved on transfer (`install -p`) so the rule keeps working | the rehearsal makes the remote copy 1 hour newer and asserts the content hash is unchanged |
 | **State sync never deletes the only copy** | nothing is ever removed; a missing local file is skipped, never pushed as empty; a backup is taken before any replacement | the rehearsal removes a local file and asserts the remote copy keeps its content |
 | **A second install changes nothing** | useradd only if absent; units compared before writing; enable checked first; secrets compared by hash | the rehearsal runs install twice and asserts one `useradd`, one `enable`, three units, two secrets, `RESULT: nothing to change` |
-| **Secrets land 0600 and are never echoed** | piped over ssh stdin into `/tmp` with `umask 077`, `chmod 0600` before the move, `chown eaw`, never printed; the units use `EnvironmentFile`, not `Environment=` | the rehearsal plants canary tokens and asserts they appear in no log; `stat -c %a` must be 600 |
+| **Secrets land 0600 and are never echoed** | piped over ssh stdin into `$REMOTE_TMP` with `umask 077`, `chmod 0600` before the move, `chown eaw`, never printed; the units use `EnvironmentFile`, not `Environment=` | the rehearsal plants canary tokens and asserts they appear in no log; `stat -c %a` must be 600 |
 | **Rollback works with the VPS offline** | it removes the off switch, tries three times, and restores the platform worker anyway; it exits 2 and leaves `.run/vps-rollback-uncertain` | the rehearsal sets the ssh stub offline and asserts the platform worker is back, the marker exists, exit code 2 |
+| **A rehearsal cannot write outside its own root** | `eaw_init` fences every writable path (`UNIT_DIR`, `LOCAL_RUN_DIR`, the off switch, the records, every `REMOTE_*` path, the staging dir) and each write site calls `eaw_guard_write`; `install-remote.sh` fences itself. A path that resolves outside the root — or into `/etc/systemd/system`, or through a symlink that points there — aborts with exit **90** and writes nothing | scenario 12 points `UNIT_DIR` at the real `/etc/systemd/system`, then at a symlink inside the sandbox that points there, then at `/var/lib/eaw`, and asserts exit 90 each time and that nothing appeared; `test/vps-kit.test.ts` proves the same three cases plus the "no-op in production" control |
+| **One run cannot contaminate the next** | every run gets its own `mktemp` root, its own `TMPDIR`, its own pidfiles, units and config; a trap cleans up on EXIT/INT/TERM; after each scenario the harness asserts exactly the processes that scenario should leave | three consecutive runs, each in a fresh root, produce identical summaries |
 
 **The one judgement call, stated plainly:** if the VPS is unreachable, the script
 cannot tell "off" from "ssh blocked". Leaving the owner with no worker is the
@@ -195,11 +197,31 @@ running in a `while true` loop can make bash re-read from a stale byte offset.
 ## Rehearsing it yourself
 
 ```bash
-deploy/vps/rehearsal/rehearse.sh /tmp/eaw-rehearsal
+deploy/vps/rehearsal/rehearse.sh              # fresh mktemp root, prints the transcript
+deploy/vps/rehearsal/rehearse.sh /tmp/eaw-rs  # or a named, empty directory
 ```
 
-Builds a sandbox (`make-sandbox.sh`), runs all eleven scenarios and prints a
-PASS/FAIL transcript. It never touches the real worker (every pid check is
-filtered by the process's working directory, so the live worker on this machine
-cannot be killed by mistake), never calls the odds API, and never writes outside
-the sandbox.
+Builds a sandbox (`make-sandbox.sh`), runs thirteen scenarios and prints a
+PASS/FAIL transcript with a `summary: PASS=n FAIL=n` line. It never touches the
+real worker (every pid check is filtered by the process's working directory, so
+the live worker on this machine cannot be killed by mistake), never calls the odds
+API, and cannot write outside its own root.
+
+**Why the root is per-run.** The first version took a fixed path and started its
+fake worker with a relative command line. Two things followed from that: the
+cleanup `pkill -f "<root>/repo/scripts/alert-"` never matched (the cmdline is
+`bash scripts/alert-loop.sh`), and a worker left behind by an interrupted run had
+its directory deleted by the next run, so `/proc/<pid>/cwd` read back as
+`… (deleted)` — which the kit's own pid filter did not recognise as ours, while the
+harness's counter did. Scenario 8 then saw four platform pids instead of two and
+scenario 11's assertions cascaded. The fix is structural: a fresh root per run, a
+trap that cleans up on failure as well as success, cwd normalisation in
+`eaw_platform_pids`, and a per-scenario pid count assertion so drift cannot hide.
+
+**What the rehearsal still cannot prove**, because this machine has no systemd and
+no VPS: that `systemctl` accepts the units, that `Restart=always` really restarts
+the loop, that journald captures the output, that `useradd`/`chown` work on the
+real distro, that `EnvironmentFile` is read as root and never appears in
+`systemctl show`, and that ssh key-only auth works against the owner's server. All
+of that is checked for the first time on the real box.
+

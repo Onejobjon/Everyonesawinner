@@ -27,6 +27,12 @@ VERIFY_SEC="${CUTOVER_VERIFY_SEC:-600}"
 START_EPOCH="$(date +%s)"
 START_ISO="$(date -u +%FT%TZ)"
 RECORD="$EAW_REPO_ROOT/.run/vps-cutover.json"
+# Both of these are WRITES. In a rehearsal they must land inside the sandbox
+# (eaw_guard_write aborts with exit 90 otherwise); on the real machine the fence
+# is a no-op.
+eaw_guard_write "$EAW_REPO_ROOT/.run" "write cutover records"
+eaw_guard_write "$RECORD"             "write the cutover record"
+eaw_guard_write "$OFF_FILE"           "write the off switch"
 mkdir -p "$EAW_REPO_ROOT/.run"
 
 eaw_require_config

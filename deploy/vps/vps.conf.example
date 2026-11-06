@@ -29,3 +29,13 @@ REMOTE_ROOT="/opt/eaw"
 
 # The unprivileged account the worker runs as (created by install.sh).
 EAW_USER="eaw"
+
+# Scratch space on the VPS for staged uploads (secrets, state files). The default
+# is /tmp; deploy/vps/rehearsal/ points it inside its sandbox so a rehearsal never
+# stages anything on this machine's real /tmp.
+REMOTE_TMP="/tmp"
+
+# Where the systemd units are written. Defaults to /etc/systemd/system; the
+# rehearsal overrides it with a throwaway directory, and lib.sh's sandbox fence
+# refuses to write there at all when EAW_SANDBOX is set.
+# UNIT_DIR="/etc/systemd/system"

@@ -20,10 +20,17 @@
 #   EAW_USER            unprivileged service account           (eaw)
 #   LOCAL_SECRETS_DIR   this machine's secret files            (/home/team/shared/.secrets)
 #   LOCAL_RUN_DIR       this machine's worker state            (<repo>/.run)
+#   REMOTE_TMP          scratch dir on the VPS for staged uploads (/tmp)
 #   SERVICE / ALARMS_SERVICE / ALARMS_TIMER                    (eaw-alerts.service, …)
 #
 # TESTING HOOKS — set only by deploy/vps/rehearsal/, never in production:
 #   SSH_BIN, RSYNC_BIN, SYSTEMCTL, PGREP, STAT_BIN, UNIT_DIR, EAW_SANDBOX
+#
+# THE SANDBOX FENCE — EAW_SANDBOX=<throwaway root>. When it is set, eaw_init
+# checks every path this kit can write to, and each write site calls
+# eaw_guard_write before touching a file. A path that resolves outside the root
+# (or into /etc/systemd/system) aborts the run with exit 90 and writes nothing.
+# Unset — every real run — the fence is a no-op.
 #
 # Never echo a secret value from anything in this kit. Nothing here reads a
 # secret except install.sh (which pipes bytes from one file into ssh's stdin)
@@ -68,7 +75,12 @@ eaw_init() {
   REMOTE_RUN="${REMOTE_RUN:-$REMOTE_SITE/.run}"
   REMOTE_DRY="${REMOTE_DRY:-$REMOTE_ROOT/dry-run}"
   REMOTE_BUN="${REMOTE_BUN:-/usr/local/bin/bun}"
-  export REMOTE_SITE REMOTE_SECRETS REMOTE_RUN REMOTE_DRY REMOTE_BUN
+  # Scratch space ON THE VPS for staged uploads. A config value so the rehearsal
+  # keeps its staging files inside the sandbox instead of /tmp on this machine —
+  # the 2026-11-06 rehearsal left /tmp/eaw-secret.odds.env.<pid> behind, which is
+  # exactly the kind of outside-the-root write this kit must not do.
+  REMOTE_TMP="$(eaw_conf REMOTE_TMP "/tmp")"
+  export REMOTE_SITE REMOTE_SECRETS REMOTE_RUN REMOTE_DRY REMOTE_BUN REMOTE_TMP
 
   SSH_BIN="${SSH_BIN:-ssh}"
   RSYNC_BIN="${RSYNC_BIN:-rsync}"
@@ -80,6 +92,94 @@ eaw_init() {
   # The machine-level off switch the platform worker honours (scripts/pidfile.sh).
   OFF_FILE="${OFF_FILE:-$EAW_REPO_ROOT/.run/alert-worker.disabled}"
   export OFF_FILE
+
+  # ── THE SANDBOX FENCE ────────────────────────────────────────────────────
+  # deploy/vps/rehearsal/ exports EAW_SANDBOX=<throwaway root>. When that is set,
+  # EVERY path this kit can write to must resolve inside that root, and the run
+  # aborts (exit 90) before the first byte is written if one does not.
+  #
+  # This is not belt-and-braces for its own sake. The first rehearsal (2026-11-06
+  # 15:08) wrote three eaw-* units into the REAL /etc/systemd/system, because
+  # UNIT_DIR was only configurable, not fenced. The machine had no systemd so they
+  # were inert, and the lead deleted them — but a harness that can write outside
+  # its root is a defect, not an accident. Each write site also calls
+  # eaw_guard_write itself; this early pass catches a bad vps.conf before any
+  # script gets far enough to try.
+  if [ -n "${EAW_SANDBOX:-}" ]; then
+    eaw_guard_write "$UNIT_DIR"             "write systemd units"
+    eaw_guard_write "$LOCAL_RUN_DIR"        "write the platform worker state"
+    eaw_guard_write "$OFF_FILE"             "write the off switch"
+    eaw_guard_write "$EAW_REPO_ROOT/.run"   "write cutover/rollback records"
+    eaw_guard_write "$REMOTE_ROOT"          "write the remote install root"
+    eaw_guard_write "$REMOTE_SITE"          "write the remote repo"
+    eaw_guard_write "$REMOTE_SECRETS"       "write the remote secrets"
+    eaw_guard_write "$REMOTE_RUN"           "write the remote worker state"
+    eaw_guard_write "$REMOTE_DRY"           "write the remote dry-run state"
+    eaw_guard_write "$REMOTE_TMP"           "stage uploads on the remote"
+    eaw_guard_write "$EAW_LEGACY_SECRETS"   "link the legacy secret paths"
+  fi
+}
+
+# ── the sandbox fence ──────────────────────────────────────────────────────
+
+# eaw_resolve_path <path> — the path with every symlink and every "." / ".."
+#   resolved, including the parts that do not exist yet (the deepest existing
+#   ancestor is resolved with `pwd -P`, the rest is appended). Prints the result.
+eaw_resolve_path() {
+  local p="$1" tail="" d
+  case "$p" in /*) ;; *) p="$PWD/$p" ;; esac
+  while [ ! -d "$p" ]; do
+    case "$p" in /) break ;; esac
+    tail="/$(basename "$p")$tail"
+    p="$(dirname "$p")"
+  done
+  d="$(cd "$p" 2>/dev/null && pwd -P)" || return 1
+  printf '%s%s' "$d" "$tail"
+}
+
+# eaw_guard_write <path> [what] — REFUSE to write outside the sandbox root.
+#   Aborts with exit 90 (EAW_GUARD_EXIT) and writes nothing. A no-op when
+#   EAW_SANDBOX is unset, which is every real run: on a real VPS the unit
+#   directory IS /etc/systemd/system and that is correct.
+eaw_guard_write() {
+  local p="${1:-}" what="${2:-write}" root real
+  root="${EAW_SANDBOX:-}"
+  [ -n "$root" ] || return 0
+  if [ -z "$p" ]; then
+    eaw_guard_fail "$what" "(empty path)" "(nothing)" "$root"
+  fi
+  case "$p" in
+    /*) ;;
+    *) eaw_guard_fail "$what" "$p (relative)" "$p" "$root" ;;
+  esac
+  # The one path this kit exists to keep off a rehearsal machine. Named
+  # explicitly so the message says what nearly happened, not just "outside".
+  case "$p" in
+    /etc/systemd/system|/etc/systemd/system/*)
+      eaw_guard_fail "$what" "$p" "$p" "$root" ;;
+  esac
+  root="$(cd "$root" 2>/dev/null && pwd -P)" || eaw_guard_fail "$what" "$p" "$root (missing)" "$root"
+  if [ -L "$p" ]; then
+    # A symlink is followed: a link inside the root that points at /etc is an
+    # escape, and this is the check that catches it.
+    real="$(readlink -f "$p" 2>/dev/null || true)"
+    [ -n "$real" ] || real="$p"
+  else
+    real="$(eaw_resolve_path "$p")" || eaw_guard_fail "$what" "$p" "$p (unresolvable)" "$root"
+  fi
+  case "$real" in
+    "$root"|"$root"/*) return 0 ;;
+  esac
+  eaw_guard_fail "$what" "$p" "$real" "$root"
+}
+
+# eaw_guard_fail <what> <path> <resolved> <root> — the abort itself.
+eaw_guard_fail() {
+  printf '[eaw] SANDBOX ESCAPE BLOCKED: %s would write %s\n' "$1" "$2" >&2
+  printf '[eaw]   resolves to: %s\n' "$3" >&2
+  printf '[eaw]   sandbox root: %s\n' "$4" >&2
+  printf '[eaw] NOTHING WAS WRITTEN. A rehearsal may only touch files inside its own root.\n' >&2
+  exit "${EAW_GUARD_EXIT:-90}"
 }
 
 # eaw_conf <NAME> <default> — env var if set, else vps.conf, else default.
@@ -185,6 +285,11 @@ eaw_platform_pids() {
       *) continue ;;
     esac
     cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+    # The kernel appends " (deleted)" when the directory has been removed under a
+    # running process. A worker whose tree was deleted is STILL our worker and
+    # must still be stopped — reading it as "not ours" is how a rehearsal left
+    # fake workers alive across runs.
+    cwd="${cwd% (deleted)}"
     case "$cwd" in
       "$EAW_REPO_ROOT"|"$EAW_REPO_ROOT"/*) printf '%s\t%s\n' "$pid" "$cmd" ;;
     esac
@@ -205,6 +310,32 @@ eaw_remote_sha256() {
 
 eaw_local_sha256() {
   sha256sum "$1" 2>/dev/null | cut -d' ' -f1
+}
+
+# ── sync-state.sh's two rules, as pure functions ───────────────────────────
+# Kept here (rather than inline in sync-state.sh) so `bun test` can cover them
+# offline: test/vps-kit.test.ts calls these directly instead of pretending to be
+# an ssh server. sync-state.sh calls exactly these, so the tested code IS the
+# code that runs.
+
+# eaw_state_refuses_newer <local-mtime> <remote-mtime> [skew]
+#   0 = REFUSE: the remote copy is newer, so it must not be overwritten.
+#       Remote newer means the VPS has already scanned; the VPS is the truth.
+#   1 = safe to copy (local is newer, or the same age within <skew>).
+eaw_state_refuses_newer() {
+  local lmt="${1:-0}" rmt="${2:-0}" skew="${3:-0}"
+  case "$lmt" in ''|*[!0-9]*) lmt=0 ;; esac
+  case "$rmt" in ''|*[!0-9]*) rmt=0 ;; esac
+  case "$skew" in ''|*[!0-9-]*) skew=0 ;; esac
+  [ "$rmt" -gt "$((lmt + skew))" ]
+}
+
+# eaw_state_same <local-sha> <remote-sha>
+#   0 = identical bytes already on the VPS (nothing to do).
+#   An empty either side is never "the same" — a missing remote file is a copy.
+eaw_state_same() {
+  local l="${1:-}" r="${2:-}"
+  [ -n "$l" ] && [ -n "$r" ] && [ "$l" = "$r" ]
 }
 
 # eaw_require_config — the two things the owner has to supply.

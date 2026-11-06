@@ -34,7 +34,10 @@ if [ -f ".run/alert-worker.disabled" ]; then
 fi
 
 # Load the owner's Telegram credentials (0600 file, never committed).
-SECRETS="/home/team/shared/.secrets/telegram.env"
+# EAW_TELEGRAM_ENV exists so deploy/vps/rehearsal/ can point this at its own
+# throwaway file: a rehearsal must never read the live secrets, and the sandbox
+# would otherwise pull the real token into a fake worker's environment.
+SECRETS="${EAW_TELEGRAM_ENV:-/home/team/shared/.secrets/telegram.env}"
 if [ -f "$SECRETS" ]; then
   set -a
   # shellcheck disable=SC1090
@@ -43,9 +46,14 @@ if [ -f "$SECRETS" ]; then
 fi
 
 # Already supervised? Nothing to do.
+# The pidfile holds "pid boot_id iso-time" (scripts/pidfile.sh write_pidfile).
+# Reading the WHOLE LINE into kill -0 — which is what this did until 2026-11-06 —
+# can never succeed, so every boot hook (bun install, bun run dev, rollback)
+# launched a supervisor that alert-keepalive.sh then had to bail out of. Take the
+# first field, which is the PID in both the old one-field and the new format.
 PIDFILE=".run/alert-keepalive.pid"
 if [ -f "$PIDFILE" ]; then
-  other="$(cat "$PIDFILE" 2>/dev/null || true)"
+  other="$(awk '{print $1; exit}' "$PIDFILE" 2>/dev/null || true)"
   if [ -n "$other" ] && kill -0 "$other" 2>/dev/null; then
     echo "[ensure-alert-worker] supervisor already running (pid $other) — nothing to do"
     exit 0

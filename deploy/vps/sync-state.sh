@@ -45,6 +45,11 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SKEW="${MTIME_SKEW_SEC:-0}"
 
 eaw_require_config
+# Every path below is a write: the remote state dir, the backup dir and the
+# staging dir on the VPS. Fenced in a rehearsal (exit 90), no-op in production.
+eaw_guard_write "$REMOTE_RUN"    "write the remote worker state"
+eaw_guard_write "$BACKUP_DIR"    "write remote backups"
+eaw_guard_write "$REMOTE_TMP"    "stage uploads on the VPS"
 eaw_head "sync-state → $VPS_HOST:$REMOTE_RUN"
 eaw_log "local state: $LOCAL_RUN_DIR"
 [ "$DRY" = "1" ] && eaw_log "DRY RUN — nothing will be written"
@@ -78,8 +83,10 @@ for f in $FILES; do
   rmt="${rmt:-0}"
   lsize="$(stat -c %s "$lf" 2>/dev/null || echo 0)"
 
-  # RULE 1 — never overwrite a newer remote file.
-  if [ "$rmt" -gt "$((lmt + SKEW))" ]; then
+  # RULE 1 — never overwrite a newer remote file. The comparison is the pure
+  # function eaw_state_refuses_newer() in lib.sh, which test/vps-kit.test.ts
+  # exercises directly — so the rule that runs here is the rule under test.
+  if eaw_state_refuses_newer "$lmt" "$rmt" "$SKEW"; then
     eaw_warn "REFUSED  $f — the VPS copy is NEWER (remote $(date -u -d "@$rmt" +%FT%TZ 2>/dev/null || echo "$rmt") > local $(date -u -d "@$lmt" +%FT%TZ 2>/dev/null || echo "$lmt"))"
     eaw_warn "         the VPS has scanned more recently than this machine; nothing was written"
     refused=$((refused + 1))
@@ -88,7 +95,7 @@ for f in $FILES; do
 
   lsha="$(eaw_local_sha256 "$lf")"
   rsha="$(eaw_remote_sha256 "$REMOTE_RUN/$f")"
-  if [ -n "$lsha" ] && [ "$lsha" = "$rsha" ]; then
+  if eaw_state_same "$lsha" "$rsha"; then
     eaw_log "UNCHANGED $f — same content already on the VPS ($lsize bytes)"
     unchanged=$((unchanged + 1))
     continue
@@ -112,8 +119,8 @@ for f in $FILES; do
     eaw_log "backup   $f → $BACKUP_DIR/$f.$STAMP.bak"
   fi
 
-  # Stage in /tmp, then install with -p so the mtime travels with the file.
-  stage="/tmp/eaw-state.$f.${BASHPID}"
+  # Stage in $REMOTE_TMP, then install with -p so the mtime travels with the file.
+  stage="$REMOTE_TMP/eaw-state.$f.${BASHPID}"
   eaw_rsync -t "$lf" "$VPS_USER@$VPS_HOST:$stage" >/dev/null 2>&1 \
     || eaw_die "rsync of $f failed"
   eaw_root "chmod 0600 '$stage' && install -p -m 0600 '$stage' '$REMOTE_RUN/$f' && chown $EAW_USER:$EAW_USER '$REMOTE_RUN/$f' && rm -f '$stage'" \

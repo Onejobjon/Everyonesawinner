@@ -71,6 +71,11 @@ eaw_rsync -az --delete \
 eaw_log "repo synced to $REMOTE_SITE"
 
 eaw_head "4/5 secrets (0600, owned by $EAW_USER, never echoed)"
+# Staging happens on the VPS in $REMOTE_TMP. A rehearsal points that inside its
+# own root: the first rehearsal staged into this machine's real /tmp and left
+# /tmp/eaw-secret.odds.env.<pid> behind, which is a write outside the sandbox.
+eaw_guard_write "$REMOTE_TMP" "stage uploads on the VPS"
+eaw_guard_write "$REMOTE_SECRETS/odds.env" "write the remote secrets"
 # The file is piped into ssh's stdin and written by a remote shell that never
 # prints it. Compare hashes first so a second run reports "unchanged" instead of
 # rewriting the file (and so a rotation is visible).
@@ -88,7 +93,7 @@ push_secret() {
   fi
   # Stage in /tmp (writable by any login user), then move into place as root.
   # chmod runs BEFORE the move, so the file is never briefly readable by others.
-  local stage="/tmp/eaw-secret.$name.${BASHPID}"
+  local stage="$REMOTE_TMP/eaw-secret.$name.${BASHPID}"
   eaw_ssh_stdin "umask 077; cat > '$stage'" < "$src" || eaw_die "could not upload $name"
   eaw_root "chmod 0600 '$stage' && chown $EAW_USER:$EAW_USER '$stage' && mv -f '$stage' '$dst'" \
     || eaw_die "could not install $dst"
@@ -108,9 +113,19 @@ else
 fi
 
 eaw_head "5/5 install on the VPS"
+# The unit files are the one thing this kit writes outside the repo, and the one
+# thing that must never be written by a rehearsal: the first run left three
+# eaw-* units in this machine's real /etc/systemd/system. Fence each path here,
+# by name, before the remote half is even started.
+for u in "$SERVICE" "$ALARMS_SERVICE" "$ALARMS_TIMER"; do
+  eaw_guard_write "$UNIT_DIR/$u" "install unit $u"
+done
+eaw_guard_write "$UNIT_DIR" "write systemd units"
+
 # The remote script needs its paths; pass them explicitly so the rehearsal can
-# point the same script at a throwaway tree.
-REMOTE_ENV="EAW_ROOT=$REMOTE_ROOT EAW_USER=$EAW_USER EAW_LEGACY_SECRETS=$EAW_LEGACY_SECRETS UNIT_DIR=${UNIT_DIR:-/etc/systemd/system} EAW_BUN_SOURCE=${EAW_BUN_SOURCE:-official} REMOTE_BUN=$REMOTE_BUN EAW_DISTRO_OK=${EAW_DISTRO_OK:-0}"
+# point the same script at a throwaway tree. EAW_SANDBOX_ROOT is empty on a real
+# run and turns on install-remote.sh's own fence when it is not.
+REMOTE_ENV="EAW_ROOT=$REMOTE_ROOT EAW_USER=$EAW_USER EAW_LEGACY_SECRETS=$EAW_LEGACY_SECRETS UNIT_DIR=${UNIT_DIR:-/etc/systemd/system} EAW_BUN_SOURCE=${EAW_BUN_SOURCE:-official} REMOTE_BUN=$REMOTE_BUN EAW_DISTRO_OK=${EAW_DISTRO_OK:-0} REMOTE_TMP=$REMOTE_TMP EAW_SANDBOX_ROOT=${EAW_SANDBOX:-}"
 
 run_remote_install() {
   local out rc
@@ -129,8 +144,8 @@ if [ "$rc" = "10" ]; then
   eaw_warn "bun could not be installed on the VPS — pushing this machine's binary to $REMOTE_BUN"
   local_bun="$(command -v bun || true)"
   [ -n "$local_bun" ] || eaw_die "no bun on this machine to push, and none on the VPS"
-  eaw_ssh_stdin "cat > '/tmp/eaw-bun.${BASHPID}'" < "$local_bun" || eaw_die "could not upload bun"
-  eaw_root "chmod 0755 '/tmp/eaw-bun.${BASHPID}' && mv -f '/tmp/eaw-bun.${BASHPID}' '$REMOTE_BUN'" \
+  eaw_ssh_stdin "cat > '$REMOTE_TMP/eaw-bun.${BASHPID}'" < "$local_bun" || eaw_die "could not upload bun"
+  eaw_root "chmod 0755 '$REMOTE_TMP/eaw-bun.${BASHPID}' && mv -f '$REMOTE_TMP/eaw-bun.${BASHPID}' '$REMOTE_BUN'" \
     || eaw_die "could not install $REMOTE_BUN"
   eaw_log "bun pushed ($("$local_bun" --version 2>/dev/null || echo '?')) — re-running the remote install"
   run_remote_install || eaw_die "remote install failed after the bun fallback"

@@ -13,9 +13,15 @@
 #   · the worker → fake alert-loop.sh / alert-keepalive.sh that take pidfiles and
 #                  sleep, so no odds API call is ever made
 # What is REAL: the kit's own scripts, the real scripts/pidfile.sh off-switch
-# guard, the real systemd unit templates, real file modes, real mtimes, real
+# guard and single-instance rule, the real scripts/ensure-alert-worker.sh boot
+# hook, the real systemd unit templates, real file modes, real mtimes, real
 # process identity (a live pid with the right cmdline and cwd), real rsync, real
 # kill/kill -0.
+#
+# ISOLATION (2026-11-06): everything the rehearsal writes lives under $S — state,
+# pidfiles, units, config, upload staging ($S/remote/tmp via REMOTE_TMP) and
+# scratch files (TMPDIR). deploy/vps/lib.sh fences every write with
+# eaw_guard_write, which aborts the run (exit 90) if a path resolves outside $S.
 #
 # Prints the sandbox path on success. Exits non-zero if it cannot build.
 set -uo pipefail
@@ -23,13 +29,23 @@ S="${1:?usage: make-sandbox.sh <dir>}"
 REAL_KIT="$(cd "$(dirname "$0")/.." && pwd)"
 REAL_REPO="$(cd "$REAL_KIT/../.." && pwd)"
 
-mkdir -p "$S"
-S="$(cd "$S" && pwd)"
-[ -e "$S/.sandbox" ] || { [ -z "$(ls -A "$S" 2>/dev/null)" ] || { echo "make-sandbox: $S is not empty and is not a sandbox" >&2; exit 1; }; }
-rm -rf "$S"/*
+mkdir -p "$S" || { echo "make-sandbox: cannot create $S" >&2; exit 1; }
+S="$(cd "$S" && pwd -P)"
+
+# A sandbox may never be the root of the filesystem, or a directory that already
+# holds somebody's work. It wipes what it is given.
+case "$S" in
+  /|/etc|/etc/*|/usr|/usr/*|/home|/home/*|"$REAL_REPO"|"$REAL_REPO"/*)
+    echo "make-sandbox: refusing to build a sandbox at $S" >&2; exit 1 ;;
+esac
+if [ ! -e "$S/.sandbox" ]; then
+  [ -z "$(ls -A "$S" 2>/dev/null)" ] || { echo "make-sandbox: $S is not empty and is not a sandbox" >&2; exit 1; }
+fi
+rm -rf "${S:?}"/* "${S:?}"/.[!.]* 2>/dev/null || true
 : > "$S/.sandbox"
 
 mkdir -p "$S/bin" \
+         "$S/tmp" \
          "$S/remote/opt/eaw/site/.run" "$S/remote/opt/eaw/secrets" \
          "$S/remote/etc/systemd/system" "$S/remote/tmp" "$S/remote/home/eaw" \
          "$S/remote/usr/local/bin" \
@@ -43,7 +59,10 @@ cp -R "$REAL_KIT/." "$S/repo/deploy/vps/"
 rm -rf "$S/repo/deploy/vps/rehearsal"
 
 # ── fake worker scripts ────────────────────────────────────────────────────
-# The REAL pidfile.sh: the off-switch guard is the thing under test.
+# The REAL pidfile.sh (off switch + PID identity) and the REAL boot hook. Only
+# the two loops are fakes, and they obey the same single-instance rule as the
+# real ones — a sandbox that spawned a second supervisor where production would
+# not is a sandbox that lies.
 cp "$REAL_REPO/scripts/pidfile.sh" "$S/repo/scripts/pidfile.sh"
 cp "$REAL_REPO/scripts/ensure-alert-worker.sh" "$S/repo/scripts/ensure-alert-worker.sh"
 
@@ -55,8 +74,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/.." || exit 1
 . "$HERE/pidfile.sh"
 mkdir -p .run
-printf '%s 0000 %s\n' "$BASHPID" "$(date -u +%FT%TZ)" > .run/alert-loop.pid
-trap 'rm -f .run/alert-loop.pid' EXIT
+LPID=".run/alert-loop.pid"
+if [ -f "$LPID" ] && pid_is_ours "$(read_pidfile "$LPID")" "alert-loop"; then
+  echo "[sandbox alert-loop] already running (pid $(read_pidfile "$LPID")) — exiting"
+  exit 0
+fi
+write_pidfile "$LPID"
+trap 'rm -f "$LPID"' EXIT
 # A "scan" every 2 seconds, so the scan-freshness checks have something real to
 # read (the real loop writes this file after every completed scan).
 while true; do
@@ -67,14 +91,19 @@ LOOP
 
 cat > "$S/repo/scripts/alert-keepalive.sh" <<'KEEP'
 #!/usr/bin/env bash
-# SANDBOX fake supervisor: takes a pidfile, starts the fake loop, sleeps.
+# SANDBOX fake supervisor: takes a pidfile, starts the fake loop once, sleeps.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/.." || exit 1
 . "$HERE/pidfile.sh"
 mkdir -p .run
-printf '%s 0000 %s\n' "$BASHPID" "$(date -u +%FT%TZ)" > .run/alert-keepalive.pid
-trap 'rm -f .run/alert-keepalive.pid' EXIT
+KLOCK=".run/alert-keepalive.pid"
+if [ -f "$KLOCK" ] && pid_is_ours "$(read_pidfile "$KLOCK")" "alert-keepalive"; then
+  echo "[sandbox alert-keepalive] already running (pid $(read_pidfile "$KLOCK")) — exiting"
+  exit 0
+fi
+write_pidfile "$KLOCK"
+trap 'rm -f "$KLOCK"' EXIT
 setsid nohup bash scripts/alert-loop.sh >> .run/alerts.log 2>&1 < /dev/null &
 while true; do sleep 2; done
 KEEP
@@ -114,6 +143,7 @@ LOCAL_SECRETS_DIR="$S/secrets"
 LOCAL_RUN_DIR="$S/repo/.run"
 UNIT_DIR="$S/remote/etc/systemd/system"
 EAW_LEGACY_SECRETS="$S/legacy"
+REMOTE_TMP="$S/remote/tmp"
 CONF
 chmod 600 "$S/repo/deploy/vps/vps.conf"
 ssh-keygen -q -t ed25519 -N '' -f "$S/fake_key" >/dev/null 2>&1 || printf 'not-a-real-key\n' > "$S/fake_key"
@@ -195,16 +225,16 @@ case "$act" in
   is-enabled) [ -f "$D/enabled/$unit" ] && exit 0 || exit 1 ;;
   is-active) [ -f "$D/active/$unit" ] && { echo active; exit 0; } || { echo inactive; exit 3; } ;;
   start)
-    if [ "$unit" = "eaw-alerts.service" ] && [ -n "${EAW_STUB_FAIL_START:-}" ]; then
-      echo "stub: job for $unit failed" >&2; exit 1
-    fi
     # THE DOUBLE-WORKER ASSERTION: at the instant the VPS worker is started,
     # no platform worker may be alive. Recorded in calls.log so a test can grep
     # for it — this is what "cutover cannot leave two workers running" means.
+    # Checked BEFORE the failure injection below, so scenario 11 (a start that
+    # fails) still proves the gate held.
     if [ "$unit" = "eaw-alerts.service" ]; then
       alive=""
       for pid in $(pgrep -f "alert-loop|alert-keepalive" 2>/dev/null); do
         cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+        cwd="${cwd% (deleted)}"
         case "$cwd" in "$S/repo"|"$S/repo"/*) alive="$alive $pid" ;; esac
       done
       if [ -n "$alive" ]; then
@@ -212,6 +242,9 @@ case "$act" in
       else
         echo "PLATFORM-CLEAN" >> "$D/calls.log"
       fi
+    fi
+    if [ "$unit" = "eaw-alerts.service" ] && [ -n "${EAW_STUB_FAIL_START:-}" ]; then
+      echo "stub: job for $unit failed" >&2; exit 1
     fi
     touch "$D/active/$unit"
     if [ "$unit" = "eaw-alerts.service" ] && [ -z "${EAW_STUB_NO_SCAN:-}" ]; then

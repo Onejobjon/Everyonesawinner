@@ -29,6 +29,50 @@ changed=0
 note() { printf '[install-remote] %s\n' "$*"; }
 fail() { printf '[install-remote] FAIL: %s\n' "$*" >&2; exit 1; }
 
+# ── the sandbox fence (mirror of deploy/vps/lib.sh's eaw_guard_write) ──────
+# install.sh passes EAW_SANDBOX_ROOT when it is rehearsing. On a real VPS the
+# variable is empty and every check below is a no-op. This half is the half that
+# writes /etc/systemd/system, so it gets its own fence rather than trusting the
+# caller: the 2026-11-06 rehearsal put three eaw-* units in the real
+# /etc/systemd/system, and this is the line that would have stopped it.
+resolve_path() {
+  local p="$1" tail="" d
+  case "$p" in /*) ;; *) p="$PWD/$p" ;; esac
+  while [ ! -d "$p" ]; do
+    case "$p" in /) break ;; esac
+    tail="/$(basename "$p")$tail"
+    p="$(dirname "$p")"
+  done
+  d="$(cd "$p" 2>/dev/null && pwd -P)" || return 1
+  printf '%s%s' "$d" "$tail"
+}
+fence() {
+  local p="$1" what="$2" root real
+  root="${EAW_SANDBOX_ROOT:-}"
+  [ -n "$root" ] || return 0
+  case "$p" in
+    /etc/systemd/system|/etc/systemd/system/*)
+      printf '[install-remote] SANDBOX ESCAPE BLOCKED: %s would write %s (the real systemd unit directory)\n' "$what" "$p" >&2
+      printf '[install-remote] NOTHING WAS WRITTEN.\n' >&2
+      exit 90 ;;
+  esac
+  root="$(cd "$root" 2>/dev/null && pwd -P)" || { printf '[install-remote] SANDBOX ESCAPE BLOCKED: sandbox root %s is missing\n' "$root" >&2; exit 90; }
+  if [ -L "$p" ]; then real="$(readlink -f "$p" 2>/dev/null || printf '%s' "$p")"
+  else real="$(resolve_path "$p")" || real="$p"; fi
+  case "$real" in
+    "$root"|"$root"/*) return 0 ;;
+  esac
+  printf '[install-remote] SANDBOX ESCAPE BLOCKED: %s would write %s (resolves to %s), outside the sandbox root %s\n' \
+    "$what" "$p" "$real" "$root" >&2
+  printf '[install-remote] NOTHING WAS WRITTEN.\n' >&2
+  exit 90
+}
+fence "$UNIT_DIR" "install systemd units"
+fence "$EAW_ROOT" "install the remote root"
+fence "$SITE" "install the repo"
+fence "$SECRETS" "install the secrets"
+fence "$EAW_LEGACY_SECRETS" "link the legacy secret paths"
+
 # ── 0. must be root ────────────────────────────────────────────────────────
 # This is the boundary the rehearsal simulates: the script refuses to run
 # unprivileged rather than half-installing a service.
