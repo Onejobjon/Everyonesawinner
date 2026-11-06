@@ -95,9 +95,22 @@ check_gap_alarm() {
   bun scripts/alert-gap-alarm.ts >> .run/alerts.log 2>&1 || true
 }
 
+# DAILY HEARTBEAT — one "still alive" message a day at 09:00 Europe/London, and
+# nothing else. This is the only check whose SIGNAL is its absence: the stall
+# alarm above runs on this machine and cannot speak while the machine is off
+# (that is the whole of the 2026-11-04 → 2026-11-06 outage), so a missing
+# heartbeat is what a reader can notice without any process here being alive.
+# Checked on this 60s tick because the supervisor is the one thing that always
+# comes back after a machine replacement; the once-a-day guard is on disk
+# (.run/heartbeat.json), so a loop restart cannot send it twice.
+check_heartbeat() {
+  bun scripts/alert-heartbeat.ts >> .run/alerts.log 2>&1 || true
+}
+
 while true; do
   ensure_status_host
   ensure_scan_loop
   check_gap_alarm
+  check_heartbeat
   sleep 60
 done

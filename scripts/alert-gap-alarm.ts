@@ -132,8 +132,36 @@ function writeState(announcedFor: string | null, note: string): void {
   }
 }
 
+/**
+ * WHEN THIS ALARM LAST RAN — a plain fact on disk, written on every real run.
+ *
+ * WHY IT IS A SEPARATE FILE: .run/gap-alarm.json is only rewritten when a stall
+ * is announced or cleared, so while scans are healthy it can sit untouched for
+ * days. After the 2026-11-06 outage the question "was the watchdog alive before
+ * the gap?" was unanswerable from that file — an old timestamp there means
+ * "nothing to announce", not "the alarm stopped running". This file means
+ * exactly one thing: this check executed at this moment.
+ *
+ * Written before the decision, and never on --dry-run: a dry run must not
+ * manufacture evidence that the watchdog ran for real.
+ */
+const LAST_RUN_FILE = join(RUN_DIR, "gap-alarm-last-run.json");
+
+function writeLastRun(): void {
+  if (DRY_RUN) return;
+  try {
+    mkdirSync(RUN_DIR, { recursive: true });
+    writeFileSync(LAST_RUN_FILE, JSON.stringify({ ts: new Date().toISOString() }), "utf8");
+  } catch (e) {
+    console.error(`[gap-alarm] could not write last-run marker: ${String(e)}`);
+  }
+}
+
 async function main(): Promise<void> {
   loadSecrets();
+  // Evidence that the watchdog ran at all — see writeLastRun(). Before the
+  // decision, so a crash later in this run still records that the check started.
+  writeLastRun();
 
   const now = new Date();
   const state = readJson(STATE_FILE) ?? {};

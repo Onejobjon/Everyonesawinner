@@ -68,6 +68,15 @@ fi
 
 echo "[alert-loop $(date -u +%FT%TZ)] starting (interval ${INTERVAL}s, telegram=$([ -n "${TELEGRAM_BOT_TOKEN:-}" ] && echo configured || echo MISSING), odds_key=$( [ -n "${ODDS_API_KEY:-}" ] && echo env || echo fallback-from-src ))"
 
+# RESTART REPORT — the owner is told, with the length of the gap, the moment this
+# loop comes back after the machine was off (owner report 2026-11-06: two days of
+# silence with no message at all). One message per gap, and NOTHING at all when
+# the last completed scan is under 45 minutes old, so a routine restart stays
+# quiet. Run after the first successful tick — not before it — so "found since
+# the restart" is a real number instead of a zero.
+RESTART_AT="$(date -u +%FT%TZ)"
+export RESTART_AT
+
 while true; do
   start=$(date +%s)
   bun src/server/alerts.ts --once
@@ -78,6 +87,7 @@ while true; do
     sleep "$RETRY_FAST"
   else
     echo "[alert-loop $(date -u +%FT%TZ)] scan ok in ${took}s — next in ${INTERVAL}s"
+    EAW_RESTART_AT="$RESTART_AT" bun scripts/alert-restart-report.ts >> .run/alerts.log 2>&1 || true
     sleep "$INTERVAL"
   fi
 done

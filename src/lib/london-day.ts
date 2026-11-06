@@ -59,6 +59,22 @@ export function londonTimeLabel(input: Date | string | number): string | null {
 }
 
 /**
+ * The Europe/London HOUR of a moment, 0–23, or null when unparseable.
+ *
+ * Used by the daily heartbeat (src/server/heartbeat.ts): the machine's clock is
+ * UTC, so "09:00" has to be resolved through the IANA zone, not by arithmetic.
+ * On 2026-11-07 the UK is on GMT (09:00 UTC); in July it is BST (08:00 UTC) —
+ * the same call gets both right, and Intl is the only thing that knows when the
+ * change happens.
+ */
+export function londonHour(input: Date | string | number): number | null {
+  const label = londonTimeLabel(input);
+  if (!label) return null;
+  const hour = Number(label.slice(0, 2));
+  return Number.isFinite(hour) ? hour : null;
+}
+
+/**
  * Add (or subtract) whole days to a day key. Calendar arithmetic on the date
  * itself, so a DST change cannot turn "+1 day" into 23 or 25 hours and land on
  * the wrong date.
