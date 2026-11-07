@@ -5,6 +5,13 @@
 # crash cannot leave the worker half-dead, and a bad scan can never wedge the
 # schedule.
 #
+# ONE SCAN AT A TIME: each tick goes through src/server/scan-lock.ts, which takes
+# an atomic lock in .run/ that the page-open path takes too. If a scan is already
+# in flight this tick does NOT fetch (no odds credits) and does not alert — it
+# logs one line, `skipped: scan already in flight`, and exits 0 so the schedule
+# carries on. A lock left by a killed scan is abandoned after 20 minutes, or
+# immediately when its pid is gone.
+#
 # CADENCE (owner directive 2026-11-03: "scan every 30mins and on open"):
 #   30 minutes = 1800s, and it is a DEFAULT IN THIS COMMITTED FILE, not an env var
 #   set in somebody's shell — so a replaced machine re-reads it and comes back at

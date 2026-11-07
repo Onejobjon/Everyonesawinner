@@ -306,8 +306,10 @@ const server = Bun.serve({
     // for a new one — through the SAME pipeline the scheduled loop uses
     // (runAlertCheck: transform, greens history, Telegram, push to the published
     // host). Three rules, all in src/server/scan-on-open.ts:
-    //   • single flight — an in-process promise plus a lock file, so ten opens in a
-    //     minute cost one scan, not ten;
+    //   • single flight — one shared atomic lock (.run/scan.lock, src/server/
+    //     scan-lock.ts) that the scheduled loop and the in-process worker take as
+    //     well, so ten opens in a minute cost one scan AND a page open can never
+    //     run beside a scheduled tick;
     //   • the page is never made to wait — the scan is started and NOT awaited, and
     //     the answer below is the snapshot we already hold plus `refreshing: true`;
     //   • a failed scan changes nothing the user can see, and says so.

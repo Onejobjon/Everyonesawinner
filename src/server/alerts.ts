@@ -47,6 +47,7 @@ import {
 import { checkBackLayPair, isSameBookmakerKey } from "../lib/odds-sanity";
 import { readGreenHistory, recordGreens } from "./green-history";
 import { pushSnapshot } from "./scan-bridge";
+import { tryStartScan } from "./scan-lock";
 import { SCAN_INTERVAL_MIN } from "../lib/cadence";
 import { SCAN_WINDOW_HOURS, isInScanWindow, windowPhrase } from "../lib/scan-window";
 import {
@@ -1285,7 +1286,7 @@ export function lastScanAt(): string | null {
   }
 }
 
-export async function runAlertCheck(): Promise<{
+export interface AlertCheckResult {
   checked: number;
   alerted: number;
   skippedSuspects: number;
@@ -1293,7 +1294,59 @@ export async function runAlertCheck(): Promise<{
   skippedStarted: number;
   skippedTooSoon: number;
   skippedSameSource: number;
-}> {
+  /** True when another scan was already running: nothing fetched, nothing sent. */
+  skipped?: boolean;
+  /** The exact skip line (contains "skipped: scan already in flight"). */
+  skipReason?: string;
+}
+
+/** The all-zero result of a scan that stood aside for one already in flight. */
+const SKIPPED_RESULT = {
+  checked: 0,
+  alerted: 0,
+  skippedSuspects: 0,
+  skippedInsane: 0,
+  skippedStarted: 0,
+  skippedTooSoon: 0,
+  skippedSameSource: 0,
+} as const;
+
+/**
+ * ONE SCAN AT A TIME (defect fix, 2026-11-06).
+ *
+ * Every way a scan can be started ends up here — the scheduled loop
+ * (`bun src/server/alerts.ts --once`), the in-process worker
+ * (startAlertWorker) and the page-open path (src/server/scan-on-open.ts, which
+ * calls runAlertCheckBody with the same lock held). `tryStartScan` takes the one
+ * atomic `.run/scan.lock`; a caller that loses the race does not fetch (no odds
+ * credits spent) and does not deliver (no double alert), and logs one line:
+ *
+ *   [alerts …] skipped: scan already in flight (owner=on-open pid=…)
+ *
+ * A skipped scan is NOT a failure: it returns all zeros with `skipped: true`, and
+ * the CLI exits 0 so the loop does not retry a scan somebody else just ran.
+ */
+export async function runAlertCheck(): Promise<AlertCheckResult> {
+  const flight = tryStartScan({ owner: "scheduled", scan: runAlertCheckBody, log });
+  const outcome = await flight.done;
+  if (outcome.status === "skipped") {
+    return { ...SKIPPED_RESULT, skipped: true, skipReason: outcome.reason };
+  }
+  // A genuine failure still throws, so `--once` exits 1 and the loop retries in
+  // 15 s instead of sleeping 30 minutes on a broken scan.
+  if (outcome.status === "failed") throw new Error(outcome.error);
+  return outcome.value;
+}
+
+/**
+ * The scan itself: fetch, transform, alert, record, push.
+ *
+ * INTERNAL — it must only be called by a caller that already holds the scan lock
+ * (runAlertCheck takes it; scan-on-open takes it via tryStartScan). Calling it
+ * directly would run a second concurrent scan, which is exactly the defect this
+ * file's guard exists to prevent.
+ */
+export async function runAlertCheckBody(): Promise<AlertCheckResult> {
   if (DRY_RUN) {
     log(`DRY RUN: alerting suppressed (EAW_ALERT_DRY_RUN=1) — state dir ${RUN_DIR}`);
   } else {
@@ -1466,6 +1519,13 @@ if ((import.meta as { main?: boolean }).main && Bun.argv.includes("--once")) {
   logOddsKeyState("alert worker");
   runAlertCheck()
     .then((r) => {
+      // A skipped scan is a clean exit: another scan (a page open, or the
+      // in-process worker) is already doing this work, so the loop must not
+      // treat it as a crash and must not pay for a second sweep.
+      if (r.skipped) {
+        console.log(`ALERT_ONCE ${r.skipReason ?? "skipped: scan already in flight"}`);
+        process.exit(0);
+      }
       console.log(`ALERT_ONCE result=${JSON.stringify(r)}`);
       process.exit(0);
     })

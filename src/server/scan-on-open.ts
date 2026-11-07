@@ -12,12 +12,13 @@
  *  1. SINGLE FLIGHT. Ten page opens in a minute must not start ten scans — every
  *     scan costs real provider credits (measured: 3 per scan, see
  *     .run/credits.jsonl), so a burst of traffic must cost ONE scan, not ten.
- *     Two locks do this:
- *       • an in-process promise — the common case, since one server process
- *         answers every request on a host;
- *       • a lock file in `.run/` — because the same machine can run more than one
- *         server process (the status host on ALERT_PORT and a full one on 3000),
- *         and they do not share memory.
+ *     This used to be two locks: an in-process promise here plus a private
+ *     `scan-on-open.lock`. That was NOT enough, because the scheduled loop
+ *     (`alerts.ts --once`) and the in-process worker did not take either of them,
+ *     so a scheduled tick could run beside a page-open scan — two sweeps, two
+ *     credit spends, two sets of alerts. Since 2026-11-06 every entry point takes
+ *     the ONE shared atomic lock in src/server/scan-lock.ts (`tryStartScan`), and
+ *     the in-process promise below is only a fast path for reporting "refreshing".
  *     Everyone who arrives while a scan is running is told "refreshing: true" and
  *     keeps the snapshot they already have. Nobody waits for it.
  *
@@ -34,10 +35,17 @@
  * and sanity rules, greens history, Telegram, and the push to the published host
  * (src/server/scan-bridge.ts). There is deliberately no second, "light" scan.
  */
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { runAlertCheck } from "./alerts";
+import { existsSync } from "node:fs";
+import { runAlertCheckBody } from "./alerts";
 import { runDir } from "./instant-wins";
+import {
+  SCAN_LOCK_TTL_MIN,
+  readScanLock,
+  scanLockFile,
+  scanLockIsStale,
+  tryStartScan,
+  type ScanLockInfo,
+} from "./scan-lock";
 
 /**
  * How old the newest scan may be before an open triggers a new one. Five
@@ -54,10 +62,16 @@ export const REFRESH_AFTER_MIN = 5;
  */
 export const REFRESH_COOLDOWN_MIN = 5;
 
-/** A lock older than this is treated as abandoned (a scan takes well under it). */
-export const LOCK_TTL_MIN = 15;
-
-const LOCK_NAME = "scan-on-open.lock";
+/**
+ * The lock lives in src/server/scan-lock.ts now, shared with the scheduled loop
+ * and the in-process worker — that sharing IS the fix for the 2026-11-06
+ * overlapping-scan defect. Re-exported here because this module's tests and the
+ * owner's diagnostics reach for these names.
+ */
+export const LOCK_TTL_MIN = SCAN_LOCK_TTL_MIN;
+export { scanLockIsStale as lockIsStale };
+export { scanLockFile as lockFile };
+export type { ScanLockInfo };
 
 export interface ScanOnOpenState {
   /** A scan started by a page open is running right now. */
@@ -164,89 +178,9 @@ export function decideScanOnOpen(input: ScanDecisionInput): ScanDecision {
 }
 
 // ── The lock ───────────────────────────────────────────────────────────────
-
-export function lockFile(dir: string = runDir()): string {
-  return join(dir, LOCK_NAME);
-}
-
-interface LockInfo {
-  pid: number;
-  startedAt: string;
-}
-
-function readLock(file: string): LockInfo | null {
-  try {
-    const parsed = JSON.parse(readFileSync(file, "utf8")) as { pid?: unknown; startedAt?: unknown };
-    const pid = typeof parsed.pid === "number" ? parsed.pid : NaN;
-    const startedAt = typeof parsed.startedAt === "string" ? parsed.startedAt : "";
-    if (!Number.isFinite(pid) || !startedAt) return null;
-    return { pid, startedAt };
-  } catch {
-    return null;
-  }
-}
-
-/** Is the process that wrote the lock still alive? */
-function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Is the lock abandoned? A dead PID, an unreadable file, or one older than
- * LOCK_TTL_MIN all mean "nobody is scanning" — a crashed scan must never lock the
- * feature off for good (the 4.5-day pidfile outage taught us that one).
- */
-export function lockIsStale(info: LockInfo | null, now: Date, ttlMin: number = LOCK_TTL_MIN): boolean {
-  if (!info) return true;
-  if (!pidAlive(info.pid)) return true;
-  const age = minutesBetween(info.startedAt, now);
-  if (age == null) return true;
-  return age > ttlMin;
-}
-
-function tryLock(dir: string, now: Date): boolean {
-  const file = lockFile(dir);
-  try {
-    mkdirSync(dir, { recursive: true });
-  } catch {
-    /* the write below will fail if it really cannot be created */
-  }
-  const existing = existsSync(file) ? readLock(file) : null;
-  if (existsSync(file) && !lockIsStale(existing, now)) return false;
-  if (existsSync(file)) {
-    try {
-      unlinkSync(file);
-    } catch {
-      /* someone else cleared it first */
-    }
-  }
-  try {
-    writeFileSync(file, JSON.stringify({ pid: process.pid, startedAt: now.toISOString() }), {
-      encoding: "utf8",
-      flag: "wx", // atomic create — two processes cannot both win this
-    });
-    return true;
-  } catch {
-    return false; // lost the race
-  }
-}
-
-function unlock(dir: string): void {
-  try {
-    const file = lockFile(dir);
-    const info = readLock(file);
-    // Only remove OUR lock: if it timed out and another process took over, that
-    // process's lock must survive this one finishing.
-    if (info && info.pid === process.pid) unlinkSync(file);
-  } catch {
-    /* nothing to release */
-  }
-}
+// The primitives (atomic create, stale detection, TTL, release-only-if-ours)
+// live in src/server/scan-lock.ts so the scheduled loop uses the SAME lock. They
+// are re-exported at the top of this file under their old names.
 
 // ── The entry point ────────────────────────────────────────────────────────
 
@@ -300,7 +234,7 @@ export function ensureScanOnOpen(options: EnsureScanOptions): EnsureScanResult {
     now,
     newestScanAt: options.newestScanAt,
     lastAttemptAt: state.lastAttemptAt,
-    refreshing: false, // handled above for this process; the file lock covers others
+    refreshing: false, // handled above for this process; the shared lock covers everyone else
     canScan,
     refreshAfterMin: options.refreshAfterMin,
     cooldownMin: options.cooldownMin,
@@ -308,20 +242,32 @@ export function ensureScanOnOpen(options: EnsureScanOptions): EnsureScanResult {
 
   if (decision.action !== "start") {
     // Another PROCESS may be scanning — report that honestly rather than "idle".
-    if (decision.action === "skip" && existsSync(lockFile(dir))) {
-      const info = readLock(lockFile(dir));
-      if (!lockIsStale(info, now)) {
+    if (decision.action === "skip" && existsSync(scanLockFile(dir))) {
+      const info = readScanLock(scanLockFile(dir));
+      if (!scanLockIsStale(info, now)) {
         return { started: false, refreshing: true, reason: "another process is scanning" };
       }
     }
     return { started: false, refreshing: false, reason: decision.reason };
   }
 
-  if (!tryLock(dir, now)) {
-    return { started: false, refreshing: true, reason: "another process is scanning" };
+  const scan = options.scan ?? (() => runAlertCheckBody());
+
+  // THE GUARD. Same lock file as the scheduled loop and the in-process worker, so
+  // a page open can never run beside a scheduled tick. Losing the race is normal:
+  // we report "refreshing" and keep the snapshot we already have.
+  const flight = tryStartScan({
+    owner: "on-open",
+    dir,
+    now,
+    scan,
+    log: (msg) => console.log(`[alerts ${new Date().toISOString()}] ${msg}`),
+  });
+
+  if (!flight.started) {
+    return { started: false, refreshing: true, reason: flight.reason };
   }
 
-  const scan = options.scan ?? (() => runAlertCheck());
   state = {
     ...state,
     refreshing: true,
@@ -329,26 +275,19 @@ export function ensureScanOnOpen(options: EnsureScanOptions): EnsureScanResult {
     lastAttemptAt: now.toISOString(),
   };
 
-  inflight = Promise.resolve()
-    .then(scan)
-    .then(
-      () => {
-        state = { ...state, refreshing: false, lastFinishedAt: new Date().toISOString(), lastError: null };
-      },
-      (e: unknown) => {
+  inflight = flight.done
+    .then((outcome) => {
+      if (outcome.status === "failed") {
         // A failed scan is a STATE. The snapshot the user has stays exactly as it
         // is — the feed says the prices may have moved, and the next attempt waits
         // for the cooldown so a broken scan cannot be paid for on every open.
-        state = {
-          ...state,
-          refreshing: false,
-          lastError: e instanceof Error ? e.message : String(e),
-        };
-      },
-    )
-    .finally(() => {
+        state = { ...state, refreshing: false, lastError: outcome.error };
+      } else {
+        state = { ...state, refreshing: false, lastFinishedAt: new Date().toISOString(), lastError: null };
+      }
+    })
+    .then(() => {
       inflight = null;
-      unlock(dir);
     });
 
   return { started: true, refreshing: true, reason: decision.reason };
