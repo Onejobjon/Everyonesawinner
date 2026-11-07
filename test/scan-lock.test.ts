@@ -187,10 +187,26 @@ describe("two concurrent scans cost one fetch and one set of alerts", () => {
     const child = join(import.meta.dir, "fixtures", "scan-guard-child.ts");
     const env = { ...process.env, SCAN_TEST_DIR: dir, SCAN_TEST_COUNTER: counter };
 
-    // Started together, so the loser arrives while the winner holds the lock.
-    const procs = ["scheduled", "on-open"].map((owner) =>
+    // WHY A HANDSHAKE AND NOT "start them together".
+    //
+    // Both processes used to be spawned at once and the test asserted that
+    // `scheduled` won. Which process reaches `acquireScanLock` first is decided
+    // by process start-up time, not by anything the test controls: measured on
+    // this machine the loser won the boot race in 4 of 12 runs, so the assertion
+    // was a coin flip (the flake, 2026-11-07). The lock itself was never at
+    // fault — exactly one process scanned in every run.
+    //
+    // Now the holder takes the lock first and signals from INSIDE its scan; the
+    // loser does not even attempt the lock until it sees that signal, and the
+    // holder does not release until the loser has recorded its outcome. The
+    // loser's attempt therefore falls strictly inside the holder's lock window,
+    // whatever the scheduler does. See test/fixtures/scan-guard-child.ts.
+    const procs = [
+      { owner: "scheduled", role: "holder" },
+      { owner: "on-open", role: "loser" },
+    ].map(({ owner, role }) =>
       Bun.spawn(["bun", child], {
-        env: { ...env, SCAN_TEST_OWNER: owner },
+        env: { ...env, SCAN_TEST_OWNER: owner, SCAN_TEST_ROLE: role },
         stdout: "pipe",
         stderr: "pipe",
       }),
@@ -199,13 +215,21 @@ describe("two concurrent scans cost one fetch and one set of alerts", () => {
     await Promise.all(procs.map((p) => p.exited));
 
     const results = out.join("\n");
+    // The holder won because the handshake made it the only one who could, so
+    // these three are deterministic rather than a race.
     expect(results).toContain("RESULT scheduled STARTED");
     expect(results).toContain("RESULT on-open SKIPPED");
     expect(results).toContain(`skipped: ${SCAN_IN_FLIGHT}`);
+    expect(results).not.toContain("RESULT on-open STARTED");
+    expect(results).not.toContain("handshake: "); // no deadline was hit
 
-    // The counter is the credit spend: exactly one scan reached it.
+    // The counter is the credit spend: exactly one scan reached it, and it was
+    // the holder's process — not "some process, we don't know which".
     const fetches = readFileSync(counter, "utf8").trim().split("\n").filter(Boolean);
     expect(fetches).toHaveLength(1);
+    expect(fetches[0]).toBe(String(procs[0].pid));
+    // The lock is gone again once the holder finishes.
+    expect(existsSync(scanLockFile(dir))).toBe(false);
   }, 20_000);
 });
 
