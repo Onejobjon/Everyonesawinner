@@ -301,13 +301,15 @@ describe("no database configured", () => {
     expect(status.stores).toContain("stripe-events");
   });
 
-  test("it says so on GET /api/checkout's readiness answer, without blocking Stripe readiness", () => {
+  test("it says so on GET /api/checkout's readiness answer, and it BLOCKS taking money", () => {
     const readiness = billingReadiness({} as NodeJS.ProcessEnv);
     expect(readiness.storage.backend).toBe("file");
     expect(readiness.storage.durable).toBe(false);
-    // Deliberately NOT folded into `blockers`: that list answers "can Stripe
-    // charge a card", which is a different question. Both answers are shown.
-    expect(readiness.blockers.some((b) => b.includes("DATABASE_URL"))).toBe(false);
+    // Folded into `blockers` since 2026-11-07: a publish deletes every account on
+    // the hosting disk, so taking money for one is a reason not to sell rather
+    // than a footnote beside the answer. Both the status and the blocker are shown.
+    expect(readiness.blockers.some((b) => b.includes("DATABASE_URL"))).toBe(true);
+    expect(readiness.canTakeSubscriptionPayments).toBe(false);
   });
 
   test("configuring a database flips the answer, and nothing else", () => {
@@ -318,6 +320,8 @@ describe("no database configured", () => {
 
     const readiness = billingReadiness({ DATABASE_URL: "postgres://user:pw@host:5432/db" } as NodeJS.ProcessEnv);
     expect(readiness.storage.durable).toBe(true);
+    // With a database configured, storage stops being one of the money blockers.
+    expect(readiness.blockers.some((b) => b.includes("DATABASE_URL"))).toBe(false);
   });
 
   test("a blank or whitespace DATABASE_URL is not a database", () => {

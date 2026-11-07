@@ -4,10 +4,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  STORAGE_NOT_DURABLE_CODE,
   billingReadiness,
   createCheckoutSession,
   resetCheckoutCaches,
 } from "../src/server/checkout";
+import { putComp } from "../src/server/comps";
 import { CHECKOUT_FLAG, isCheckoutEnabled } from "../src/server/billing-switch";
 import { processedEventIds } from "../src/server/processed-events";
 import { receiveStripeEvent } from "../src/server/stripe-webhook";
@@ -33,6 +35,9 @@ import { recentOwnerAlerts } from "../src/server/notify-owner";
  *  C. flag ON, the lifecycle: signed events grant / renew / grace / cancel /
  *       refund; unsigned, wrong-secret and replayed payloads are rejected; a
  *       duplicate delivery is applied once.
+ *  D. flag ON but NO DATABASE: checkout is refused outright (a publish deletes
+ *       every account kept on the hosting disk, so a paying customer would lose
+ *       their login), while signup, sign-in, comps and free access keep working.
  *
  * NO NETWORK AND NO REAL KEYS: `fetch` is stubbed and every request is inspected,
  * so "never creates a one-time price by accident" is checked as a fact about the
@@ -115,6 +120,28 @@ async function account(email: string) {
 function enableBilling() {
   process.env[CHECKOUT_FLAG] = "on";
   process.env.STRIPE_SECRET_KEY = SK;
+}
+
+/** A database URL that is never connected to — the gate only reads the env. */
+const DURABLE_URL = "postgres://user:pw@db.example:5432/eaw";
+
+/**
+ * The environment a checkout call runs in when the owner HAS done everything.
+ *
+ * Since 2026-11-07 a configured database is part of "can take money" (a publish
+ * deletes every account kept on the hosting disk), so the tests that are about
+ * the OTHER refusals — the wrong price, the wrong amount, the wrong key — must
+ * pass a durable environment or they would all stop at the storage gate and stop
+ * proving anything about Stripe.
+ *
+ * Passed as `deps.env` rather than written to `process.env`, because a real
+ * DATABASE_URL would send the account stores to Postgres and every signup in this
+ * file would try to open a connection.
+ */
+function durableEnv(over: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
+  // `...process.env` carries the key, the prices and the switch that the test set
+  // up, so a test that deliberately breaks one of them still breaks it.
+  return { ...process.env, DATABASE_URL: DURABLE_URL, ...over };
 }
 
 interface Call {
@@ -213,7 +240,7 @@ describe("A. billing is off unless the owner switches it on", () => {
 
     const result = await createCheckoutSession(
       { email, plan: "pro", origin: SITE },
-      { fetchImpl: stub.impl },
+      { fetchImpl: stub.impl, env: durableEnv() },
     );
 
     expect(result.ok).toBe(false);
@@ -234,7 +261,7 @@ describe("A. billing is off unless the owner switches it on", () => {
 
     const result = await createCheckoutSession(
       { email, plan: "pro", origin: SITE },
-      { fetchImpl: stub.impl },
+      { fetchImpl: stub.impl, env: durableEnv() },
     );
 
     expect(result.ok).toBe(false);
@@ -309,7 +336,7 @@ describe("B. with billing on, checkout still refuses what it must", () => {
       session: { body: goodSession },
     });
 
-    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl });
+    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl, env: durableEnv() });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -326,7 +353,7 @@ describe("B. with billing on, checkout still refuses what it must", () => {
       price: { body: { ...goodProPrice, unit_amount: 999 } },
       session: { body: goodSession },
     });
-    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl });
+    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl, env: durableEnv() });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe("price_amount_mismatch");
@@ -348,7 +375,7 @@ describe("B. with billing on, checkout still refuses what it must", () => {
       },
       session: { body: goodSession },
     });
-    const result = await createCheckoutSession({ email, plan: "annual", origin: SITE }, { fetchImpl: stub.impl });
+    const result = await createCheckoutSession({ email, plan: "annual", origin: SITE }, { fetchImpl: stub.impl, env: durableEnv() });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe("price_interval_mismatch");
@@ -359,24 +386,24 @@ describe("B. with billing on, checkout still refuses what it must", () => {
     const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });
     const base = { email: "someone@example.com", origin: SITE };
 
-    const unknown = await createCheckoutSession({ ...base, plan: "platinum" }, { fetchImpl: stub.impl });
+    const unknown = await createCheckoutSession({ ...base, plan: "platinum" }, { fetchImpl: stub.impl, env: durableEnv() });
     expect(unknown.ok).toBe(false);
     if (!unknown.ok) expect(unknown.code).toBe("unknown_plan");
 
-    const noPlan = await createCheckoutSession({ ...base, plan: undefined }, { fetchImpl: stub.impl });
+    const noPlan = await createCheckoutSession({ ...base, plan: undefined }, { fetchImpl: stub.impl, env: durableEnv() });
     expect(noPlan.ok).toBe(false);
     if (!noPlan.ok) expect(noPlan.code).toBe("unknown_plan");
 
     const badEmail = await createCheckoutSession(
       { ...base, email: "not-an-email", plan: "pro" },
-      { fetchImpl: stub.impl },
+      { fetchImpl: stub.impl, env: durableEnv() },
     );
     expect(badEmail.ok).toBe(false);
     if (!badEmail.ok) expect(badEmail.code).toBe("invalid_email");
 
     const badOrigin = await createCheckoutSession(
       { ...base, plan: "pro", origin: "javascript:alert(1)" },
-      { fetchImpl: stub.impl },
+      { fetchImpl: stub.impl, env: durableEnv() },
     );
     expect(badOrigin.ok).toBe(false);
     if (!badOrigin.ok) expect(badOrigin.code).toBe("bad_origin");
@@ -389,7 +416,7 @@ describe("B. with billing on, checkout still refuses what it must", () => {
     try {
       const email = await account("noprice@example.com");
       const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });
-      const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl });
+      const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl, env: durableEnv() });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.code).toBe("price_not_configured");
@@ -404,7 +431,7 @@ describe("B. with billing on, checkout still refuses what it must", () => {
     process.env.STRIPE_SECRET_KEY = "pk_live_looks_like_a_key";
     const email = await account("pk@example.com");
     const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });
-    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl });
+    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl, env: durableEnv() });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe("stripe_not_configured");
@@ -427,7 +454,7 @@ describe("B. with billing on, checkout still refuses what it must", () => {
       },
     });
 
-    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl });
+    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl, env: durableEnv() });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -446,7 +473,7 @@ describe("B. with billing on, checkout still refuses what it must", () => {
     const email = await account("happy@example.com");
     const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });
 
-    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl });
+    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl, env: durableEnv() });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -722,12 +749,23 @@ describe("C. the lifecycle: signed events only, applied once", () => {
     expect(await findByEmail("ghost@example.com")).toBeNull();
   });
 
-  test("the readiness report turns green only when every piece is configured", () => {
-    const readiness = billingReadiness();
+  test("the readiness report turns green only when every piece is configured — database included", () => {
+    // Everything the owner can set EXCEPT the database: still not ready to sell.
+    const withoutDb = billingReadiness();
+    expect(withoutDb.enabled).toBe(true);
+    expect(withoutDb.secretKeyConfigured).toBe(true);
+    expect(withoutDb.webhookSecretConfigured).toBe(true);
+    expect(withoutDb.plans.every((p) => p.priceConfigured)).toBe(true);
+    expect(withoutDb.storage.durable).toBe(false);
+    expect(withoutDb.canTakeSubscriptionPayments).toBe(false);
+    expect(withoutDb.blockers.some((b) => b.includes("DATABASE_URL"))).toBe(true);
+
+    const readiness = billingReadiness(durableEnv());
     expect(readiness.enabled).toBe(true);
     expect(readiness.secretKeyConfigured).toBe(true);
     expect(readiness.webhookSecretConfigured).toBe(true);
     expect(readiness.plans.every((p) => p.priceConfigured)).toBe(true);
+    expect(readiness.storage.durable).toBe(true);
     expect(readiness.canTakeSubscriptionPayments).toBe(true);
     expect(readiness.blockers).toEqual([]);
   });
@@ -741,5 +779,110 @@ describe("C. the lifecycle: signed events only, applied once", () => {
     // Sanity: neither cancellation nor grace can rescue an undated plan.
     expect(isEntitled({ plan: "pro", status: "canceled", currentPeriodEnd: null, graceEndsAt: null })).toBe(false);
     expect(isEntitled({ plan: "pro", status: "past_due", currentPeriodEnd: null, graceEndsAt: isoIn(3) })).toBe(true);
+  });
+});
+
+// ── D. NO DATABASE, NO MONEY ────────────────────────────────────────────────
+
+/**
+ * A publish deletes every account kept on the hosting disk — proven, not
+ * inferred: a test account created on the live site could not be found after the
+ * next publish. So a database is a HARD blocker on taking a payment, in the same
+ * gate as the switch and the keys, and it blocks NOTHING else: browsing, signup,
+ * sign-in, comps and free access all keep working on the file driver.
+ */
+describe("D. taking money needs somewhere durable to keep the customer", () => {
+  beforeEach(() => enableBilling());
+
+  test("with no database, checkout is REFUSED and Stripe is never called", async () => {
+    delete process.env.DATABASE_URL;
+    const email = await account("nodb@example.com");
+    const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });
+
+    // No env override: this is the real process environment, with no DATABASE_URL.
+    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(503);
+    expect(result.code).toBe(STORAGE_NOT_DURABLE_CODE);
+    // It has to say WHY, not just "unavailable": the customer's login is at stake.
+    expect(result.message).toContain("DATABASE_URL");
+    expect(result.message).toContain("lose their login");
+    // THE POINT: zero HTTP calls. No price lookup, no session, no money.
+    expect(stub.calls).toEqual([]);
+    // And nobody was granted anything by the attempt.
+    expect((await findByEmail(email))?.entitled).toBe(false);
+  });
+
+  test("a blank DATABASE_URL is not a database either", async () => {
+    const email = await account("blankdb@example.com");
+    const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });
+    const result = await createCheckoutSession(
+      { email, plan: "pro", origin: SITE },
+      { fetchImpl: stub.impl, env: durableEnv({ DATABASE_URL: "   " }) },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(STORAGE_NOT_DURABLE_CODE);
+    expect(stub.calls).toEqual([]);
+  });
+
+  test("with a database configured, this check stops blocking and checkout proceeds", async () => {
+    const email = await account("withdb@example.com");
+    const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });
+
+    const result = await createCheckoutSession(
+      { email, plan: "pro", origin: SITE },
+      { fetchImpl: stub.impl, env: durableEnv() },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.mode).toBe("subscription");
+    // Two calls: the price check and the session. The storage gate is behind us.
+    expect(stub.calls.length).toBe(2);
+  });
+
+  test("the blocker is on GET /api/checkout, in the same list as the other refusals", () => {
+    delete process.env.DATABASE_URL;
+    const readiness = billingReadiness();
+    expect(readiness.storage.durable).toBe(false);
+    expect(readiness.canTakeSubscriptionPayments).toBe(false);
+    const blocker = readiness.blockers.find((b) => b.includes("DATABASE_URL"));
+    expect(blocker).toBeDefined();
+    expect(blocker).toContain("lose their login");
+
+    // With one configured, that blocker disappears (the other pieces are set).
+    const ready = billingReadiness(durableEnv());
+    expect(ready.storage.durable).toBe(true);
+    expect(ready.blockers.some((b) => b.includes("DATABASE_URL"))).toBe(false);
+  });
+
+  test("everything that is NOT taking money still works on the file driver", async () => {
+    delete process.env.DATABASE_URL;
+    // Signup, sign-in lookup and a comp grant — the free-access path — all keep
+    // working, because this gate is about money, not about access.
+    const email = await account("filesstillfine@example.com");
+    const user = await findByEmail(email);
+    expect(user?.email).toBe(email);
+    expect(user?.entitled).toBe(false);
+
+    await putComp({
+      email,
+      plan: "pro",
+      endsAt: isoIn(30),
+      note: "test comp",
+      grantedBy: "owner@example.com",
+      grantedAt: new Date().toISOString(),
+    });
+    // The grant reaches the account record, which is what entitlement reads.
+    expect((await findByEmail(email))?.entitled).toBe(true);
+    // …and the money path is still refused for that same comped account.
+    const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });
+    const result = await createCheckoutSession({ email, plan: "pro", origin: SITE }, { fetchImpl: stub.impl });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(STORAGE_NOT_DURABLE_CODE);
   });
 });

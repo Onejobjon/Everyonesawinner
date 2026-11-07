@@ -8,19 +8,30 @@
  *
  * THE REFUSAL LADDER (checked in this order; nothing is created at any step):
  *   1. CHECKOUT_ENABLED is off            → 503 checkout_disabled
- *   2. the plan is not one we sell        → 400 unknown_plan
- *   3. the email is not an email          → 400 invalid_email
- *   4. the return origin is not a URL     → 400 bad_origin
- *   5. no Stripe price id for that plan   → 503 price_not_configured
- *   6. no secret key / a publishable one  → 503 stripe_not_configured
- *   7. the Stripe price is not recurring  → 400 price_not_recurring
- *   8. the Stripe price is inactive       → 400 price_inactive
- *   9. the Stripe price is not in GBP     → 400 price_currency_mismatch
- *  10. the amount disagrees with /subscribe → 400 price_amount_mismatch
- *  11. the interval disagrees with /subscribe → 400 price_interval_mismatch
- *  12. Stripe cannot take subscription payments (the EXPRESS account today)
+ *   2. no durable database (DATABASE_URL unset)
+ *                                        → 503 storage_not_durable
+ *   3. the plan is not one we sell        → 400 unknown_plan
+ *   4. the email is not an email          → 400 invalid_email
+ *   5. the return origin is not a URL     → 400 bad_origin
+ *   6. no Stripe price id for that plan   → 503 price_not_configured
+ *   7. no secret key / a publishable one  → 503 stripe_not_configured
+ *   8. the Stripe price is not recurring  → 400 price_not_recurring
+ *   9. the Stripe price is inactive       → 400 price_inactive
+ *  10. the Stripe price is not in GBP     → 400 price_currency_mismatch
+ *  11. the amount disagrees with /subscribe → 400 price_amount_mismatch
+ *  12. the interval disagrees with /subscribe → 400 price_interval_mismatch
+ *  13. Stripe cannot take subscription payments (the EXPRESS account today)
  *                                        → 503 account_cannot_subscribe
- *  13. any other Stripe error            → 502 stripe_error
+ *  14. any other Stripe error            → 502 stripe_error
+ *
+ * STEP 2 IS A MONEY BLOCKER, NOT A WARNING (2026-11-07). Customer accounts and
+ * the Stripe event ledger are files on the hosting disk, and a publish replaces
+ * that disk — proven, not inferred: an account created on the live site could not
+ * be found after the next publish. Charging a customer whose login the next deploy
+ * deletes is worse than refusing to charge them, so `DATABASE_URL` is part of the
+ * same gate as the switch and the keys. Everything that is NOT taking money —
+ * browsing, signup, sign-in, comps, free access — keeps working on the file
+ * driver exactly as before.
  *
  * THERE IS NO FALLBACK. Not to `mode: "payment"`, not to another price, not to a
  * default tier. The express account's live prices are one-time prices; falling
@@ -103,6 +114,24 @@ export interface CheckoutDeps {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Refused because there is nowhere durable to keep the account being paid for. */
+export const STORAGE_NOT_DURABLE_CODE = "storage_not_durable";
+
+/**
+ * The one sentence for "no database, so no money".
+ *
+ * It is the same text in the refusal and in `blockers` on purpose: an owner who
+ * reads either one must get the same instruction, and the reason has to name the
+ * consequence (a lost login), not just the missing variable.
+ */
+export function storageNotDurableMessage(status: StorageStatus = storageStatus()): string {
+  return (
+    `No database is configured (${status.envVar} is not set), so every customer account and Stripe ledger entry is ` +
+    `a file that the next publish deletes. A paying customer would lose their login. ` +
+    `Set ${status.envVar} to a Postgres connection string before taking any payment.`
+  );
+}
 
 function refuse(status: number, code: string, message: string): CheckoutRefusal {
   return { ok: false, status, code, message };
@@ -284,7 +313,17 @@ export async function createCheckoutSession(
     return refuse(503, CHECKOUT_DISABLED_CODE, CHECKOUT_DISABLED_MESSAGE);
   }
 
-  // 2. The plan has to be one of ours — the client cannot name a price.
+  // 2. A DURABLE PLACE TO KEEP THE ACCOUNT. Without a database the customer's
+  //    login is a file on a disk that the next publish replaces (proven
+  //    2026-11-07), so a subscription sold today is an account lost tomorrow.
+  //    This blocks only the taking of money: signup, sign-in, comps and free
+  //    access all keep working on the file driver.
+  const storage = storageStatus(env);
+  if (!storage.durable) {
+    return refuse(503, STORAGE_NOT_DURABLE_CODE, storageNotDurableMessage(storage));
+  }
+
+  // 3. The plan has to be one of ours — the client cannot name a price.
   if (!isKnownPlan(input.plan)) {
     return refuse(
       400,
@@ -295,13 +334,13 @@ export async function createCheckoutSession(
   const plan = input.plan;
   const published = PUBLISHED_PLANS[plan];
 
-  // 3. The email comes from the session, and has to look like one.
+  // 4. The email comes from the session, and has to look like one.
   const email = (input.email || "").trim().toLowerCase();
   if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
     return refuse(400, "invalid_email", "A signed-in account email is required to start a checkout.");
   }
 
-  // 4. The return origin must be a plain http(s) URL — it cannot be `javascript:`
+  // 5. The return origin must be a plain http(s) URL — it cannot be `javascript:`
   //    or a relative path. WHICH http(s) origin is allowed is decided by the
   //    caller, because it depends on the hosts this build is served on: see
   //    src/server/return-origin.ts, which serve-static.ts uses to turn the
@@ -317,7 +356,7 @@ export async function createCheckoutSession(
     return refuse(400, "bad_origin", "Checkout needs a valid return address for the site.");
   }
 
-  // 5. The price id for that plan, from the environment only.
+  // 6. The price id for that plan, from the environment only.
   const priceId = priceIdForPlan(plan);
   if (!priceId) {
     return refuse(
@@ -328,7 +367,7 @@ export async function createCheckoutSession(
     );
   }
 
-  // 6. A secret key that can actually talk to Stripe.
+  // 7. A secret key that can actually talk to Stripe.
   const secretKey = (env.STRIPE_SECRET_KEY || "").trim();
   if (!secretKey) {
     return refuse(
@@ -346,11 +385,11 @@ export async function createCheckoutSession(
     );
   }
 
-  // 7–11. The Stripe price must be the recurring price the page advertises.
+  // 8–12. The Stripe price must be the recurring price the page advertises.
   const verdict = await verifyPrice(priceId, plan, fetchImpl, secretKey, nowMs);
   if (!verdict.ok) return refuse(400, verdict.code, verdict.message);
 
-  // 12. Create the session. mode is a literal: there is no code path that can
+  // 13. Create the session. mode is a literal: there is no code path that can
   //     send "payment", so a one-off charge cannot be created from here.
   const successUrl = `${origin}/subscribe/success?session_id={CHECKOUT_SESSION_ID}&plan=${plan}`;
   const cancelUrl = `${origin}/subscribe?checkout=cancelled&plan=${plan}`;
@@ -450,16 +489,15 @@ export interface BillingReadiness {
   /**
    * WHERE CUSTOMER RECORDS LIVE (2026-11-07).
    *
-   * Reported separately from `blockers` on purpose: it answers a different
-   * question. `canTakeSubscriptionPayments` is "can Stripe charge a card"; this
-   * is "would the account survive the next deploy". They were briefly the same
-   * question on 2026-11-07 — a test account created on the live site vanished at
-   * the next publish — and an owner reading this endpoint needs to see the
-   * second answer even while the first is still "no".
-   *
    * `durable: false` means every account, session and Stripe ledger entry is a
-   * file that the next publish replaces. Do not switch billing on while it is
-   * false.
+   * file that the next publish replaces — proven, not inferred: a test account
+   * created on the live site could not be found after the next publish.
+   *
+   * It is reported here AND folded into `blockers` (and therefore into
+   * `canTakeSubscriptionPayments`), because taking money for an account the next
+   * deploy deletes is not a caveat on selling — it is a reason not to sell. The
+   * full status stays on the object so the owner can see the backend and the
+   * instruction in one place.
    */
   storage: StorageStatus;
 }
@@ -481,8 +519,13 @@ export function billingReadiness(env: NodeJS.ProcessEnv = process.env): BillingR
     };
   });
 
+  const storage = storageStatus(env);
+
   const blockers: string[] = [];
   if (!enabled) blockers.push(`Billing is off. Set ${"CHECKOUT_ENABLED"}=on to switch it on.`);
+  // Where the account lives is part of "can we take money", not a separate note:
+  // without a database the paying customer's login is deleted by the next publish.
+  if (!storage.durable) blockers.push(storageNotDurableMessage(storage));
   if (!secretKeyConfigured) blockers.push("STRIPE_SECRET_KEY is missing or is not a secret/restricted key.");
   if (!webhookSecretConfigured) blockers.push("STRIPE_WEBHOOK_SECRET is missing, so no event can be verified.");
   for (const p of plans) {
@@ -500,6 +543,6 @@ export function billingReadiness(env: NodeJS.ProcessEnv = process.env): BillingR
     plans,
     canTakeSubscriptionPayments: blockers.length === 0,
     blockers,
-    storage: storageStatus(env),
+    storage,
   };
 }

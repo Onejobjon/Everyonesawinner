@@ -292,7 +292,9 @@ async function formFor(origin: string): Promise<URLSearchParams> {
   const stripe = stripeStub();
   const result = await createCheckoutSession(
     { email: "someone@example.com", plan: "pro", origin },
-    { fetchImpl: stripe.impl },
+    // A database is configured here because checkout refuses to take money
+    // without one (2026-11-07). Nothing connects: the gate only reads the env.
+    { fetchImpl: stripe.impl, env: { ...process.env, DATABASE_URL: "postgres://user:pw@host:5432/db" } },
   );
   if (!result.ok) throw new Error(`checkout refused: ${result.code}`);
   expect(stripe.forms.length).toBe(1);
