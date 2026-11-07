@@ -1,8 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { cwdRunFile, writeRunFile } from "./run-dir";
-import { dirname, join } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { ensureSchema, hasDatabase, query } from "./db-pg";
+import { cwdRunFile } from "./run-dir";
+import { store } from "./storage";
 import { issueSession } from "./sessions";
 import {
   compGrants,
@@ -20,10 +18,16 @@ import { compOf, liveComp } from "./comps";
  * "accounts were only held in the browser's localStorage" problem. Passwords are
  * scrypt-hashed with a per-user salt (never stored in plaintext).
  *
- * This is the platform-URL store (Bun `serve-static.ts`, durable disk). On the
- * Vercel domain the function filesystem is ephemeral, so production-grade auth
- * there needs a real Postgres `users` table (src/db.ts) once DATABASE_URL is
- * connected — same caveat documented on the leads store.
+ * WHERE ACCOUNTS LIVE (2026-11-07): behind the shared record store in
+ * src/server/storage/. With DATABASE_URL set they are rows in the `eaw_store`
+ * table and survive a redeploy. With it unset they are `.run/users.json`
+ * (gitignored) and are LOST on the next publish - the app logs that at startup
+ * and reports it on `GET /api/checkout`.
+ *
+ * Before this the file carried two full implementations - a JSON one and a
+ * Postgres one - selected by `if (hasDatabase())` at every call site. They were
+ * the two things most likely to drift apart, and the SQL one had never run
+ * against a real database.
  */
 
 /**
@@ -48,6 +52,12 @@ export interface StoredUser {
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   createdAt: string;
+  /**
+   * When this account last signed in (ISO 8601). Bookkeeping only - nothing
+   * decides access from it. Optional because every account created before
+   * 2026-11-07 has none.
+   */
+  lastLoginAt?: string | null;
   /**
    * A FREE-ACCESS GRANT — this person uses the site without paying (a trialist,
    * a reviewer, a friend). Written by the owner's grant panel (src/server/comps.ts)
@@ -83,20 +93,44 @@ export function usersFile(): string {
   return cwdRunFile(process.env.USERS_FILE, "users.json");
 }
 
-function loadUsers(): Record<string, StoredUser> {
-  const file = usersFile();
-  if (!existsSync(file)) return {};
-  try {
-    const parsed = JSON.parse(readFileSync(file, "utf8"));
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, StoredUser>) : {};
-  } catch {
-    return {};
-  }
+/**
+ * THE ACCOUNT STORE.
+ *
+ * Every read and write of an account goes through the shared record store
+ * (src/server/storage/): `users.json` — `{ "<email>": StoredUser }`, unchanged —
+ * on the file driver, or the `eaw_store` table when DATABASE_URL is set. This
+ * file no longer knows which, which is the whole point: before 2026-11-07 it
+ * carried two complete implementations (a JSON one and a Postgres one) and they
+ * were the two things most likely to drift apart.
+ *
+ * Keys are lower-cased email addresses — the same normalisation the forms apply,
+ * so "Jon@Example.com" and "jon@example.com" are one account.
+ */
+const usersStore = () => store<StoredUser>("users");
+
+/** One account, or null. */
+async function readUser(email: string): Promise<StoredUser | null> {
+  const clean = (email ?? "").trim().toLowerCase();
+  if (!clean) return null;
+  return usersStore().get(clean);
 }
 
-function saveUsers(users: Record<string, StoredUser>): void {
-  const file = usersFile();
-  writeRunFile(file, JSON.stringify(users, null, 2));
+/** Write one account. Throws on a failed write — never a quiet success. */
+async function writeUser(record: StoredUser): Promise<void> {
+  const clean = record.email.trim().toLowerCase();
+  await usersStore().put(clean, { ...record, email: clean });
+}
+
+/** Create an account only if the address is free. False ⇒ it already existed. */
+async function createUser(record: StoredUser): Promise<boolean> {
+  const clean = record.email.trim().toLowerCase();
+  return usersStore().create(clean, { ...record, email: clean });
+}
+
+/** Every account. Only used by the Stripe-id lookup. */
+async function allUsers(): Promise<StoredUser[]> {
+  const entries = await usersStore().list();
+  return entries.map((entry) => entry.value);
 }
 
 function hashPassword(password: string, salt: string): string {
@@ -193,34 +227,45 @@ function toPublic(record: StoredUser): PublicUser {
 }
 
 /** Create a new account. Throws on invalid input or duplicate email. */
-function registerUserJson(name: string, email: string, password: string): PublicUser {
+/**
+ * Create an account.
+ *
+ * `createUser` is insert-if-absent, so two simultaneous signups for the same
+ * address cannot both succeed — the second gets the same "already exists" error
+ * a sequential one does. (The old JSON path read the file, checked, then wrote;
+ * a race could produce two accounts.)
+ */
+async function registerAccount(name: string, email: string, password: string): Promise<PublicUser> {
   const cleanName = (name ?? "").trim();
   const cleanEmail = (email ?? "").trim().toLowerCase();
+  const pw = password ?? "";
   if (!cleanName || cleanName.length > 120) throw new Error("A name is required.");
-  if (cleanEmail.length > 254 || !EMAIL_RE.test(cleanEmail)) {
+  if (!cleanEmail || cleanEmail.length > 254 || !EMAIL_RE.test(cleanEmail)) {
     throw new Error("A valid email address is required.");
   }
-  if (!password || password.length < 6) throw new Error("Password must be at least 6 characters.");
+  // Six characters: this is the rule the live signup form has always enforced
+  // and the one every existing account was created under.
+  if (!pw || pw.length < 6) throw new Error("Password must be at least 6 characters.");
 
-  const users = loadUsers();
-  if (users[cleanEmail]) throw new Error("An account with that email already exists.");
-
-  const salt = randomBytes(16).toString("hex");
   const owner = isOwnerSeat(cleanEmail);
   // An allow-listed owner address can only be created by whoever holds the
   // server secret — otherwise /api/signup would be a second way to claim the
   // founder's comped Pro seat. Same generic message as a duplicate, so the form
   // reveals nothing about which addresses are owner seats.
-  if (owner && !ownerSecretMatches(password)) {
+  if (owner && !ownerSecretMatches(pw)) {
     throw new Error("An account with that email already exists.");
   }
-  const granted = liveComp(cleanEmail);
-  const pending: CompState | null = granted ? compOf(granted) : null;
+
+  const salt = randomBytes(16).toString("hex");
+  // A GRANT GIVEN BEFORE SIGNUP APPLIES NOW: the owner comps an address from the
+  // panel, the person registers with it, and the free access is on the account
+  // from its first second (src/server/comps.ts).
+  const granted = await liveComp(cleanEmail);
   const record: StoredUser = {
     name: cleanName,
     email: cleanEmail,
     salt,
-    passwordHash: hashPassword(password, salt),
+    passwordHash: hashPassword(pw, salt),
     // Owner seats are comped Pro: they are not customers and must never be
     // blocked behind a subscription that billing has not built yet. The comp is
     // expressed by stateOf() (ownerSeat), not by a stored boolean.
@@ -231,31 +276,30 @@ function registerUserJson(name: string, email: string, password: string): Public
     stripeCustomerId: null,
     stripeSubscriptionId: null,
     createdAt: new Date().toISOString(),
-    // A GRANT GIVEN BEFORE SIGNUP APPLIES NOW: the owner comps an address from
-    // the panel, the person registers with it, and the free access is on the
-    // account from its first second (src/server/comps.ts).
-    comp: pending,
+    comp: granted ? compOf(granted) : null,
   };
-  users[cleanEmail] = record;
-  saveUsers(users);
+  if (!(await createUser(record))) {
+    throw new Error("An account with that email already exists.");
+  }
   return toPublic(record);
 }
 
 /** Verify credentials and return the public user. Throws on failure. */
-function authenticateUserJson(email: string, password: string): PublicUser {
+async function authenticateAccount(email: string, password: string): Promise<PublicUser> {
   const cleanEmail = (email ?? "").trim().toLowerCase();
-  const users = loadUsers();
-  let record = users[cleanEmail];
+  const pw = password ?? "";
+  let record = await readUser(cleanEmail);
+
   // The owner seat is controlled by the SERVER-HELD secret and nothing else.
   //  - Secret set: only a password equal to OWNER_PASSWORD gets in, whatever is
   //    in the store; the record is then (re)written to match the secret, so a
-  //    stale or wrongly-provisioned row can neither lock the owner out nor let
+  //    stale or wrongly-provisioned record can neither lock the owner out nor let
   //    a stranger in.
-  //  - Secret not set: the seat fails CLOSED (401) even if a row exists.
+  //  - Secret not set: the seat fails CLOSED (401) even if a record exists.
   if (isOwnerSeat(cleanEmail)) {
-    if (!ownerSecretMatches(password)) {
+    if (!ownerSecretMatches(pw)) {
       // Equalise timing so this does not reveal which emails are owner seats.
-      hashPassword(password || "", dummySalt);
+      hashPassword(pw, dummySalt);
       throw new Error("Invalid email or password.");
     }
     const salt = randomBytes(16).toString("hex");
@@ -263,7 +307,7 @@ function authenticateUserJson(email: string, password: string): PublicUser {
       name: "Jon (owner)",
       email: cleanEmail,
       salt,
-      passwordHash: hashPassword(password, salt),
+      passwordHash: hashPassword(pw, salt),
       plan: "pro",
       subscriptionStatus: null,
       currentPeriodEnd: null,
@@ -272,195 +316,34 @@ function authenticateUserJson(email: string, password: string): PublicUser {
       stripeSubscriptionId: record?.stripeSubscriptionId ?? null,
       createdAt: record?.createdAt || new Date().toISOString(),
     };
-    users[cleanEmail] = record;
     try {
-      saveUsers(users);
+      await writeUser(record);
     } catch (e) {
       console.warn(`[users] could not persist owner seat for ${cleanEmail}: ${String(e)}`);
     }
     return toPublic(record);
   }
 
-
   // Always compute a hash even when the record is missing, to avoid a timing
   // side-channel that reveals which emails exist.
-  const candidate = hashPassword(password || "", record?.salt || dummySalt);
-  const expected = record?.passwordHash || "";
-  const candidateBuf = Buffer.from(candidate, "hex");
-  const expectedBuf = Buffer.from(expected, "hex");
-  const match =
-    record != null &&
-    expectedBuf.length === candidateBuf.length &&
-    timingSafeEqual(candidateBuf, expectedBuf);
-  if (!match) throw new Error("Invalid email or password.");
-  return toPublic(record!);
-}
-
-
-/* ------------------------------------------------------------------ *
- * Backend switch: DATABASE_URL present => Postgres, absent => JSON file.
- *
- * The JSON path above is kept exactly as it was (it is what runs on the
- * platform today). The Postgres path is the durable one: it survives a
- * redeploy. Neither path ever returns success after a failed write.
- * ------------------------------------------------------------------ */
-
-let warnedNonDurable = false;
-function warnNonDurableOnce(): void {
-  if (warnedNonDurable) return;
-  warnedNonDurable = true;
-  console.warn(
-    "[users] DATABASE_URL is not set — accounts are stored in a JSON file that does NOT survive a redeploy. Set DATABASE_URL to make accounts durable.",
-  );
-}
-
-interface UserRow {
-  email: string;
-  name: string;
-  password_hash: string;
-  salt: string;
-  plan: Plan | null;
-  subscription_status: string | null;
-  current_period_end: string | Date | null;
-  grace_ends_at: string | Date | null;
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
-  /** Free-access grant columns (migrations/004_free_access_grants.sql). */
-  comp_plan?: string | null;
-  comp_ends_at?: string | Date | null;
-  comp_permanent?: boolean | null;
-  comp_note?: string | null;
-  comp_granted_by?: string | null;
-  comp_granted_at?: string | Date | null;
-}
-
-/** Postgres timestamps arrive as Date or string depending on the driver. */
-function isoOrNull(v: string | Date | null | undefined): string | null {
-  if (v == null) return null;
-  if (v instanceof Date) return Number.isFinite(v.getTime()) ? v.toISOString() : null;
-  const t = Date.parse(v);
-  return Number.isFinite(t) ? new Date(t).toISOString() : null;
-}
-
-function rowToStored(row: UserRow): StoredUser {
-  const comp: CompState | null = isKnownPlan(row.comp_plan)
-    ? {
-        plan: row.comp_plan,
-        endsAt: isoOrNull(row.comp_ends_at),
-        permanent: row.comp_permanent === true,
-        note: row.comp_note ?? undefined,
-        grantedBy: row.comp_granted_by ?? undefined,
-        grantedAt: isoOrNull(row.comp_granted_at) ?? undefined,
-      }
-    : null;
-  return {
-    name: row.name,
-    email: row.email,
-    salt: row.salt,
-    passwordHash: row.password_hash,
-    plan: row.plan,
-    subscriptionStatus: row.subscription_status,
-    currentPeriodEnd: isoOrNull(row.current_period_end),
-    graceEndsAt: isoOrNull(row.grace_ends_at),
-    stripeCustomerId: row.stripe_customer_id,
-    stripeSubscriptionId: row.stripe_subscription_id,
-    createdAt: new Date().toISOString(),
-    comp,
-  };
-}
-
-/** The columns rowToStored() needs — keep in step with the SELECTs below. */
-const USER_COLUMNS =
-  "email, name, password_hash, salt, plan, subscription_status, current_period_end, grace_ends_at, stripe_customer_id, stripe_subscription_id, comp_plan, comp_ends_at, comp_permanent, comp_note, comp_granted_by, comp_granted_at";
-
-async function registerUserDb(name: string, email: string, password: string): Promise<PublicUser> {
-  await ensureSchema();
-  const cleanName = (name ?? "").trim();
-  const cleanEmail = (email ?? "").trim().toLowerCase();
-  const pw = password ?? "";
-  if (!cleanName || cleanName.length > 120) throw new Error("A name is required.");
-  if (!cleanEmail || cleanEmail.length > 254 || !EMAIL_RE.test(cleanEmail)) {
-    throw new Error("A valid email address is required.");
-  }
-  if (pw.length < 8) throw new Error("Password must be at least 8 characters.");
-  if (isOwnerSeat(cleanEmail) && !ownerSecretMatches(pw)) {
-    throw new Error("An account with that email already exists.");
-  }
-  const salt = randomBytes(16).toString("hex");
-  const rows = await query<UserRow>(
-    `INSERT INTO users (email, name, password_hash, salt, plan)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (lower(email)) DO NOTHING
-     RETURNING ${USER_COLUMNS}`,
-    [cleanEmail, cleanName, hashPassword(pw, salt), salt, isOwnerSeat(cleanEmail) ? "pro" : null],
-  );
-  if (rows.length === 0) throw new Error("An account with that email already exists.");
-  const stored = rowToStored(rows[0]!);
-  // A grant given before signup applies now — same rule as the JSON path.
-  const granted = liveComp(cleanEmail);
-  if (granted) {
-    const comp = compOf(granted);
-    await setComp(cleanEmail, comp);
-    stored.comp = comp;
-  }
-  return toPublic(stored);
-}
-
-async function authenticateUserDb(email: string, password: string): Promise<PublicUser> {
-  await ensureSchema();
-  const cleanEmail = (email ?? "").trim().toLowerCase();
-  const pw = password ?? "";
-  let rows = await query<UserRow>(
-    `SELECT ${USER_COLUMNS} FROM users WHERE lower(email) = $1`,
-    [cleanEmail],
-  );
-  // Owner seat: controlled by the server secret alone (same rule as the JSON
-  // store). Secret set + matching password => create/refresh the row as Pro.
-  // Secret missing or password different => ordinary 401, no row touched.
-  if (cleanEmail && isOwnerSeat(cleanEmail) && ownerSecretMatches(pw)) {
-    const salt = randomBytes(16).toString("hex");
-    rows = await query<UserRow>(
-      `INSERT INTO users (email, name, password_hash, salt, plan)
-       VALUES ($1, $2, $3, $4, 'pro')
-       ON CONFLICT (lower(email)) DO UPDATE
-         SET password_hash = EXCLUDED.password_hash,
-             salt = EXCLUDED.salt,
-             plan = 'pro',
-             subscription_status = COALESCE(users.subscription_status, 'active')
-       RETURNING ${USER_COLUMNS}`,
-      [cleanEmail, "Jon (owner)", hashPassword(pw, salt), salt],
-    );
-    console.log(`[users] owner seat refreshed in Postgres for ${cleanEmail}`);
-  } else if (cleanEmail && isOwnerSeat(cleanEmail)) {
-    // Fail closed: an owner address with no valid secret is never accepted,
-    // even if a row exists.
-    hashPassword(pw || "", dummySalt);
-    throw new Error("Invalid email or password.");
-  }
-  const record = rows[0];
   const candidate = Buffer.from(hashPassword(pw, record?.salt || dummySalt), "hex");
-  const expected = Buffer.from(record?.password_hash || "", "hex");
+  const expected = Buffer.from(record?.passwordHash || "", "hex");
   const match =
     record != null && expected.length === candidate.length && timingSafeEqual(candidate, expected);
   if (!match) throw new Error("Invalid email or password.");
-  await query(`UPDATE users SET last_login_at = now() WHERE lower(email) = $1`, [cleanEmail]);
-  return toPublic(rowToStored(record));
+  await updateLastLogin(cleanEmail);
+  return toPublic(record!);
 }
 
-/** Create an account. Postgres when DATABASE_URL is set, JSON file otherwise. */
+/** Create an account. Real, server-persisted session token (see sessions.ts). */
 export async function registerUser(name: string, email: string, password: string): Promise<PublicUser> {
-  const user = hasDatabase()
-    ? await registerUserDb(name, email, password)
-    : (warnNonDurableOnce(), registerUserJson(name, email, password));
-  // Real, server-persisted session token (see src/server/sessions.ts).
+  const user = await registerAccount(name, email, password);
   return { ...user, token: await issueSession(user.email) };
 }
 
-/** Verify credentials. Postgres when DATABASE_URL is set, JSON file otherwise. */
+/** Verify credentials and hand back a session token. */
 export async function authenticateUser(email: string, password: string): Promise<PublicUser> {
-  const user = hasDatabase()
-    ? await authenticateUserDb(email, password)
-    : (warnNonDurableOnce(), authenticateUserJson(email, password));
+  const user = await authenticateAccount(email, password);
   // A free-access grant given before signup — or one the record does not carry
   // yet — applies at sign-in too, not only at registration.
   let effective = user;
@@ -506,31 +389,7 @@ export async function updateSubscription(
   const cleanEmail = (email ?? "").trim().toLowerCase();
   if (!cleanEmail) return false;
 
-  if (hasDatabase()) {
-    await ensureSchema();
-    const sets: string[] = [];
-    const params: unknown[] = [cleanEmail];
-    const put = (column: string, value: unknown) => {
-      params.push(value);
-      sets.push(`${column} = $${params.length}`);
-    };
-    if (patch.plan !== undefined) put("plan", patch.plan);
-    if (patch.status !== undefined) put("subscription_status", patch.status);
-    if (patch.currentPeriodEnd !== undefined) put("current_period_end", patch.currentPeriodEnd);
-    if (patch.graceEndsAt !== undefined) put("grace_ends_at", patch.graceEndsAt);
-    if (patch.customerId !== undefined) put("stripe_customer_id", patch.customerId);
-    if (patch.subscriptionId !== undefined) put("stripe_subscription_id", patch.subscriptionId);
-    if (sets.length === 0) return true; // nothing to write
-    const rows = await query<{ email: string }>(
-      `UPDATE users SET ${sets.join(", ")} WHERE lower(email) = $1 RETURNING email`,
-      params,
-    );
-    return rows.length > 0;
-  }
-
-  warnNonDurableOnce();
-  const users = loadUsers();
-  const record = users[cleanEmail];
+  const record = await readUser(cleanEmail);
   if (!record) return false;
   if (patch.plan !== undefined) record.plan = patch.plan;
   if (patch.status !== undefined) record.subscriptionStatus = patch.status;
@@ -538,10 +397,10 @@ export async function updateSubscription(
   if (patch.graceEndsAt !== undefined) record.graceEndsAt = patch.graceEndsAt;
   if (patch.customerId !== undefined) record.stripeCustomerId = patch.customerId;
   if (patch.subscriptionId !== undefined) record.stripeSubscriptionId = patch.subscriptionId;
-  users[cleanEmail] = record;
-  saveUsers(users); // throws on a failed write — the caller must hear about it
+  await writeUser(record); // throws on a failed write - the caller must hear about it
   return true;
 }
+
 
 /**
  * Write (or clear, with `null`) the free-access grant on one account.
@@ -558,36 +417,13 @@ export async function setComp(email: string, comp: CompState | null): Promise<bo
   const cleanEmail = (email ?? "").trim().toLowerCase();
   if (!cleanEmail) return false;
 
-  if (hasDatabase()) {
-    await ensureSchema();
-    const rows = await query<{ email: string }>(
-      `UPDATE users
-          SET comp_plan = $2, comp_ends_at = $3, comp_permanent = $4,
-              comp_note = $5, comp_granted_by = $6, comp_granted_at = $7
-        WHERE lower(email) = $1
-        RETURNING email`,
-      [
-        cleanEmail,
-        comp?.plan ?? null,
-        comp?.endsAt ?? null,
-        comp?.permanent === true,
-        comp?.note ?? null,
-        comp?.grantedBy ?? null,
-        comp?.grantedAt ?? null,
-      ],
-    );
-    return rows.length > 0;
-  }
-
-  warnNonDurableOnce();
-  const users = loadUsers();
-  const record = users[cleanEmail];
+  const record = await readUser(cleanEmail);
   if (!record) return false;
   record.comp = comp;
-  users[cleanEmail] = record;
-  saveUsers(users); // throws on a failed write — the caller must hear about it
+  await writeUser(record); // throws on a failed write - the caller must hear about it
   return true;
 }
+
 
 /**
  * Copy a grant from the owner's ledger onto the account record when the record
@@ -600,7 +436,7 @@ export async function setComp(email: string, comp: CompState | null): Promise<bo
  * grant; it never removes one, so a revoke is never undone by a stale ledger.
  */
 async function withLedgerComp(record: StoredUser): Promise<StoredUser> {
-  const granted = liveComp(record.email);
+  const granted = await liveComp(record.email);
   if (!granted) return record;
   if (record.comp && record.comp.grantedAt === granted.grantedAt) return record;
   const comp = compOf(granted);
@@ -630,25 +466,16 @@ export async function findEmailByStripeIds(ids: {
   const subscriptionId = ids.subscriptionId || null;
   if (!customerId && !subscriptionId) return null;
 
-  if (hasDatabase()) {
-    await ensureSchema();
-    const rows = await query<{ email: string }>(
-      `SELECT email FROM users
-        WHERE ($1::text IS NOT NULL AND stripe_customer_id = $1)
-           OR ($2::text IS NOT NULL AND stripe_subscription_id = $2)
-        LIMIT 1`,
-      [customerId, subscriptionId],
-    );
-    return rows[0]?.email ?? null;
-  }
-
-  const users = loadUsers();
-  for (const record of Object.values(users)) {
+  // A scan of every account: the store has no secondary index and this runs only
+  // on a Stripe event, which is rare. Deliberately NOT cached - a stale cache
+  // here would apply a subscription to the wrong person.
+  for (const record of await allUsers()) {
     if (customerId && record.stripeCustomerId === customerId) return record.email;
     if (subscriptionId && record.stripeSubscriptionId === subscriptionId) return record.email;
   }
   return null;
 }
+
 
 /** A manual comp with no end date given lasts this long. */
 const MANUAL_COMP_DAYS = 30;
@@ -698,25 +525,22 @@ export async function setPlan(
 
 /** Mark a login timestamp (Postgres only; the JSON store keeps createdAt). */
 export async function updateLastLogin(email: string): Promise<void> {
-  if (!hasDatabase()) return;
-  await ensureSchema();
-  await query(`UPDATE users SET last_login_at = now() WHERE lower(email) = $1`, [
-    (email ?? "").trim().toLowerCase(),
-  ]);
+  const cleanEmail = (email ?? "").trim().toLowerCase();
+  if (!cleanEmail) return;
+  try {
+    const record = await readUser(cleanEmail);
+    if (!record) return;
+    await writeUser({ ...record, lastLoginAt: new Date().toISOString() });
+  } catch (e) {
+    // Bookkeeping only - a login must never fail because of it.
+    console.warn(`[users] could not record the last login for ${cleanEmail}: ${String(e)}`);
+  }
 }
+
 
 /** Look up a user without a password (Stripe webhooks, admin checks). */
 export async function findByEmail(email: string): Promise<PublicUser | null> {
-  const cleanEmail = (email ?? "").trim().toLowerCase();
-  if (hasDatabase()) {
-    await ensureSchema();
-    const rows = await query<UserRow>(
-      `SELECT ${USER_COLUMNS} FROM users WHERE lower(email) = $1`,
-      [cleanEmail],
-    );
-    return rows[0] ? toPublic(await withLedgerComp(rowToStored(rows[0]))) : null;
-  }
-  const users = loadUsers();
-  const record = users[cleanEmail];
+  const record = await readUser(email);
   return record ? toPublic(await withLedgerComp(record)) : null;
 }
+

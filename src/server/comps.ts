@@ -23,9 +23,8 @@
  * (`permanent: true`); `compGrants()` in entitlement.ts decides. Nothing in this
  * file can grant access by being absent, blank or unparseable.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { cwdRunFile, writeRunFile } from "./run-dir";
-import { dirname, join } from "node:path";
+import { cwdRunFile } from "./run-dir";
+import { store } from "./storage";
 import { compGrants, isKnownPlan, type CompState, type Plan } from "./entitlement";
 
 /** A ledger entry: the comp, plus the address it belongs to. */
@@ -45,58 +44,39 @@ export function compsFile(): string {
   return cwdRunFile(process.env.COMPS_FILE, "comps.json");
 }
 
-function loadComps(): Record<string, CompGrant> {
-  const file = compsFile();
-  if (!existsSync(file)) return {};
-  try {
-    const parsed = JSON.parse(readFileSync(file, "utf8"));
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, CompGrant>) : {};
-  } catch {
-    // A corrupt ledger must not grant anything. The account records still hold
-    // their own comps, so access survives; the list is just empty.
-    return {};
-  }
-}
-
-function saveComps(comps: Record<string, CompGrant>): void {
-  const file = compsFile();
-  writeRunFile(file, JSON.stringify(comps, null, 2));
-}
+const compsStore = () => store<CompGrant>("comps");
 
 /** The grant on file for this address, live or not. */
-export function readComp(email: string): CompGrant | null {
+export async function readComp(email: string): Promise<CompGrant | null> {
   const clean = (email ?? "").trim().toLowerCase();
   if (!clean) return null;
-  return loadComps()[clean] ?? null;
+  return (await compsStore().get(clean)) ?? null;
 }
 
 /** The grant for this address ONLY if it grants access right now. */
-export function liveComp(email: string, nowMs: number = Date.now()): CompGrant | null {
-  const comp = readComp(email);
+export async function liveComp(email: string, nowMs: number = Date.now()): Promise<CompGrant | null> {
+  const comp = await readComp(email);
   return comp && compGrants(comp, nowMs) ? comp : null;
 }
 
 /** Every grant on file, newest first — the panel's list. */
-export function listComps(): CompGrant[] {
-  return Object.values(loadComps()).sort((a, b) =>
-    (b.grantedAt ?? "").localeCompare(a.grantedAt ?? ""),
-  );
+export async function listComps(): Promise<CompGrant[]> {
+  const entries = await compsStore().list();
+  return entries
+    .map((entry) => entry.value)
+    .sort((a, b) => (b.grantedAt ?? "").localeCompare(a.grantedAt ?? ""));
 }
 
-export function putComp(grant: CompGrant): void {
-  const comps = loadComps();
-  comps[grant.email.trim().toLowerCase()] = { ...grant, email: grant.email.trim().toLowerCase() };
-  saveComps(comps);
+export async function putComp(grant: CompGrant): Promise<void> {
+  const email = grant.email.trim().toLowerCase();
+  await compsStore().put(email, { ...grant, email });
 }
 
 /** Remove the ledger entry. Returns true when there was one. */
-export function removeComp(email: string): boolean {
+export async function removeComp(email: string): Promise<boolean> {
   const clean = (email ?? "").trim().toLowerCase();
-  const comps = loadComps();
-  if (!comps[clean]) return false;
-  delete comps[clean];
-  saveComps(comps);
-  return true;
+  if (!clean) return false;
+  return compsStore().delete(clean);
 }
 
 /** The plan/end-date/note part of a grant, without the address. */

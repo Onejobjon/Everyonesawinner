@@ -269,7 +269,7 @@ describe("A. billing is off unless the owner switches it on", () => {
     expect(user?.plan).toBeNull();
     expect(user?.subscriptionStatus).toBeNull();
     // And nothing was recorded as processed: the switch refuses before the ledger.
-    expect(processedEventIds()).not.toContain(event.id);
+    expect(await processedEventIds()).not.toContain(event.id);
   });
 
   test("flag OFF: the webhook cannot revoke either — the switch is master control", async () => {
@@ -560,7 +560,7 @@ describe("C. the lifecycle: signed events only, applied once", () => {
     const user = await findByEmail(email);
     expect(user?.subscriptionStatus).toBe("canceled");
     // And the ledger holds the id exactly once.
-    expect(processedEventIds().filter((id) => id === event.id).length).toBe(1);
+    expect((await processedEventIds()).filter((id) => id === event.id).length).toBe(1);
   });
 
   test("subscription deleted: access runs to the period end already paid for, then stops", async () => {

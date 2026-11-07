@@ -23,6 +23,7 @@ import { RETURN_ORIGIN_HEADER, resolveReturnOrigin } from "./src/server/return-o
 import { resolveSportParam, REJECTED_SPORT_MESSAGE } from "./src/lib/sport-params";
 import { brandBySlug, taggedDestination } from "./src/lib/affiliates";
 import { logAffiliateClick, referringPath } from "./src/server/click-log";
+import { announceStorageOnce } from "./src/server/storage";
 
 // Port is configurable: the platform now runs its own dev server on 3000, so
 // the alert host runs alongside it on PORT (default 3000 for the VPS recipe).
@@ -803,7 +804,7 @@ const server = Bun.serve({
           headers: { location: "/free-bets", "cache-control": "no-store", "x-robots-tag": "noindex" },
         });
       }
-      const record = logAffiliateClick({ slug: brand.slug, from: referringPath(req.headers.get("referer")) });
+      const record = await logAffiliateClick({ slug: brand.slug, from: referringPath(req.headers.get("referer")) });
       console.log(`[go] ${record.slug} from ${record.from || "(unknown page)"}`);
       return new Response(null, {
         status: 302,
@@ -833,6 +834,10 @@ const server = Bun.serve({
 });
 
 console.log(`Serving dist/ on http://${HOST}:${PORT}`);
+// WHERE CUSTOMER RECORDS GO — said out loud on every boot, because the failure
+// it warns about is silent: everything looks fine until the next publish, and
+// then every account is gone (verified 2026-11-07).
+announceStorageOnce();
 logOddsKeyState("serve-static boot");
 
 /**

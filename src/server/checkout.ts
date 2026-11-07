@@ -48,6 +48,7 @@ import {
   priceIdForPlan,
 } from "./price-catalogue";
 import { isKnownPlan, type Plan } from "./entitlement";
+import { storageStatus, type StorageStatus } from "./storage";
 
 export const STRIPE_API_BASE = "https://api.stripe.com/v1";
 
@@ -446,6 +447,21 @@ export interface BillingReadiness {
   /** True only when every refusal in the ladder above is satisfied. */
   canTakeSubscriptionPayments: boolean;
   blockers: string[];
+  /**
+   * WHERE CUSTOMER RECORDS LIVE (2026-11-07).
+   *
+   * Reported separately from `blockers` on purpose: it answers a different
+   * question. `canTakeSubscriptionPayments` is "can Stripe charge a card"; this
+   * is "would the account survive the next deploy". They were briefly the same
+   * question on 2026-11-07 — a test account created on the live site vanished at
+   * the next publish — and an owner reading this endpoint needs to see the
+   * second answer even while the first is still "no".
+   *
+   * `durable: false` means every account, session and Stripe ledger entry is a
+   * file that the next publish replaces. Do not switch billing on while it is
+   * false.
+   */
+  storage: StorageStatus;
 }
 
 export function billingReadiness(env: NodeJS.ProcessEnv = process.env): BillingReadiness {
@@ -484,5 +500,6 @@ export function billingReadiness(env: NodeJS.ProcessEnv = process.env): BillingR
     plans,
     canTakeSubscriptionPayments: blockers.length === 0,
     blockers,
+    storage: storageStatus(env),
   };
 }

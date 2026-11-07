@@ -48,7 +48,7 @@ export async function handleCompsApi(req: Request, url: URL): Promise<Response> 
   // to "does this grant access right now", so the panel never has to guess.
   if (url.pathname === "/api/comps" && req.method === "GET") {
     const now = Date.now();
-    const grants = listComps().map((g) => ({ ...g, live: compGrants(g, now) }));
+    const grants = (await listComps()).map((g) => ({ ...g, live: compGrants(g, now) }));
     return Response.json({ ok: true, grants }, { headers: NO_STORE });
   }
 
@@ -59,7 +59,7 @@ export async function handleCompsApi(req: Request, url: URL): Promise<Response> 
   if (url.pathname === "/api/comps" && req.method === "POST") {
     const parsed = parseGrantInput(await readJson(req), gate.email);
     if (!parsed.ok) return badRequest(parsed.error);
-    putComp(parsed.grant);
+    await putComp(parsed.grant);
     let appliedToAccount = false;
     try {
       appliedToAccount = await setComp(parsed.grant.email, compOf(parsed.grant));
@@ -80,7 +80,7 @@ export async function handleCompsApi(req: Request, url: URL): Promise<Response> 
     const body = (await readJson(req)) as { email?: unknown } | null;
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!email) return badRequest("Which email address should lose its free access?");
-    const hadLedgerEntry = removeComp(email);
+    const hadLedgerEntry = await removeComp(email);
     let clearedAccount = false;
     try {
       clearedAccount = await setComp(email, null);

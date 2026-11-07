@@ -13,9 +13,8 @@
  * store uses. A logging failure must never stop a redirect: `logAffiliateClick`
  * swallows its own errors and returns the record either way.
  */
-import { appendFileSync, mkdirSync } from "node:fs";
-import { cwdRunFile, appendRunFile } from "./run-dir";
-import { dirname, join } from "node:path";
+import { cwdRunFile } from "./run-dir";
+import { store } from "./storage";
 
 export interface ClickRecord {
   /** Brand slug the visitor clicked (`/go/<slug>`). */
@@ -59,22 +58,31 @@ export function referringPath(referer: string | null | undefined): string {
 /**
  * Append one click record. Never throws: a broken log must not cost a visitor
  * the link they clicked.
+ *
+ * Storage is the shared record store (src/server/storage/): the append-only
+ * JSONL file `.run/affiliate-clicks.jsonl` on the file driver, or the
+ * `eaw_store` table when DATABASE_URL is set. Async because a database write is
+ * async; the redirect never waits on it.
  */
-export function logAffiliateClick(input: {
+export async function logAffiliateClick(input: {
   slug: string;
   at?: string;
   from?: string;
-}): ClickRecord {
+}): Promise<ClickRecord> {
   const record: ClickRecord = {
     slug: input.slug,
     at: input.at ?? new Date().toISOString(),
     from: input.from ?? "",
   };
   try {
-    const file = clicksFile();
-    appendRunFile(file, `${JSON.stringify(record)}\n`);
+    await store<ClickRecord>("affiliate-clicks").put(clickKey(record), record);
   } catch (e) {
     console.warn(`[go] click not logged (${record.slug}): ${String(e)}`);
   }
   return record;
+}
+
+/** The key a click is stored under. Matches the layout in the storage registry. */
+function clickKey(record: ClickRecord): string {
+  return `${record.at}|${record.slug}|${record.from}`;
 }

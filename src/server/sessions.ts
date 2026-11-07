@@ -1,21 +1,18 @@
 /**
- * Server-issued session tokens.
+ * SERVER-SIDE SESSION TOKENS.
  *
- * Before this, `toPublic()` minted a fresh random token on every response and
- * never stored it, so nothing on the server could tell a real login from a
- * hand-written localStorage object containing `token: "deadbeef"`. Now a token
- * is issued at login/signup, PERSISTED server-side, and every paywall decision
- * comes from resolving it (`GET /api/me`) — never from the browser's copy.
+ * A token is only accepted if it is stored here and has not expired. The paywall
+ * asks the server (`GET /api/me`) with the token, so a hand-written localStorage
+ * session with an invented token resolves to nothing and gets the subscribe
+ * screen instead of the Pro tools.
  *
- * Storage follows the same switch as the account store: Postgres when
- * DATABASE_URL is set, a JSON file otherwise (which does not survive a
- * redeploy — sessions then expire early rather than grant access wrongly).
+ * Storage is the shared record store (src/server/storage/): `sessions.json` on
+ * the file driver — `{ "<token>": { token, email, expiresAt } }`, unchanged —
+ * or the `eaw_store` table when DATABASE_URL is set. Nothing here knows which.
  */
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { cwdRunFile, writeRunFile } from "./run-dir";
-import { dirname, join } from "node:path";
-import { ensureSchema, hasDatabase, query } from "./db-pg";
+import { cwdRunFile } from "./run-dir";
+import { store } from "./storage";
 
 /** 30 days. Long enough to be usable, short enough that a leaked token dies. */
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -30,21 +27,7 @@ interface SessionRecord {
   expiresAt: string;
 }
 
-function loadSessions(): Record<string, SessionRecord> {
-  const file = sessionsFile();
-  if (!existsSync(file)) return {};
-  try {
-    const parsed = JSON.parse(readFileSync(file, "utf8"));
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, SessionRecord>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveSessions(sessions: Record<string, SessionRecord>): void {
-  const file = sessionsFile();
-  writeRunFile(file, JSON.stringify(sessions, null, 2));
-}
+const sessions = () => store<SessionRecord>("sessions");
 
 /** Mint and persist a token for an account. Throws if it cannot be persisted —
  *  a session we cannot verify later must not be handed out. */
@@ -53,18 +36,7 @@ export async function issueSession(email: string): Promise<string> {
   if (!cleanEmail) throw new Error("Cannot issue a session without an account.");
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + TTL_MS).toISOString();
-  if (hasDatabase()) {
-    await ensureSchema();
-    await query(`INSERT INTO sessions (token, email, expires_at) VALUES ($1, $2, $3)`, [
-      token,
-      cleanEmail,
-      expiresAt,
-    ]);
-    return token;
-  }
-  const sessions = loadSessions();
-  sessions[token] = { token, email: cleanEmail, expiresAt };
-  saveSessions(sessions);
+  await sessions().put(token, { token, email: cleanEmail, expiresAt });
   return token;
 }
 
@@ -72,21 +44,11 @@ export async function issueSession(email: string): Promise<string> {
 export async function resolveSession(token: string): Promise<{ email: string } | null> {
   const clean = (token ?? "").trim();
   if (!clean || clean.length < 32) return null;
-  if (hasDatabase()) {
-    await ensureSchema();
-    const rows = await query<{ email: string }>(
-      `SELECT email FROM sessions WHERE token = $1 AND expires_at > now()`,
-      [clean],
-    );
-    return rows[0] ? { email: rows[0].email } : null;
-  }
-  const sessions = loadSessions();
-  const record = sessions[clean];
+  const record = await sessions().get(clean);
   if (!record) return null;
   if (new Date(record.expiresAt).getTime() <= Date.now()) {
-    delete sessions[clean];
     try {
-      saveSessions(sessions);
+      await sessions().delete(clean);
     } catch {
       /* best effort */
     }
@@ -100,16 +62,7 @@ export async function revokeSession(token: string): Promise<void> {
   const clean = (token ?? "").trim();
   if (!clean) return;
   try {
-    if (hasDatabase()) {
-      await ensureSchema();
-      await query(`DELETE FROM sessions WHERE token = $1`, [clean]);
-      return;
-    }
-    const sessions = loadSessions();
-    if (sessions[clean]) {
-      delete sessions[clean];
-      saveSessions(sessions);
-    }
+    await sessions().delete(clean);
   } catch (e) {
     console.warn(`[sessions] revoke failed: ${String(e)}`);
   }

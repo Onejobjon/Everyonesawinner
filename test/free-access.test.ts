@@ -137,9 +137,9 @@ describe("comped in / expired out / revoked out", () => {
     });
     // Move the clock: the grant ended yesterday, in the owner's list and on the
     // account alike (that is what "time passed" does to both).
-    const granted = readComp(email)!;
+    const granted = (await readComp(email))!;
     const expired = { ...granted, endsAt: iso(-1 * DAY) };
-    putComp(expired);
+    await putComp(expired);
     await setComp(email, expired);
 
     const user = await findByEmail(email);
@@ -168,8 +168,8 @@ describe("comped in / expired out / revoked out", () => {
     expect(revoked.body.ok).toBe(true);
 
     expect((await findByEmail(email))?.entitled).toBe(false);
-    expect(readComp(email)).toBeNull();
-    expect(listComps().some((g) => g.email === email)).toBe(false);
+    expect(await readComp(email)).toBeNull();
+    expect((await listComps()).some((g) => g.email === email)).toBe(false);
   });
 
   test("a grant given BEFORE signup applies at registration", async () => {
@@ -182,7 +182,7 @@ describe("comped in / expired out / revoked out", () => {
     expect(granted.status).toBe(200);
     // No account yet: the grant waits in the owner's list.
     expect(granted.body.appliedToAccount).toBe(false);
-    expect(readComp(email)?.plan).toBe("pro");
+    expect((await readComp(email))?.plan).toBe("pro");
 
     const created = await registerUser("Newcomer", email, PASSWORD);
     expect(created.entitled).toBe(true);
@@ -203,7 +203,7 @@ describe("owner only — everyone else gets a bare 404", () => {
       body: { email: "stranger@example.com", plan: "pro", days: 30 },
     });
     expect(write.status).toBe(404);
-    expect(readComp("stranger@example.com")).toBeNull();
+    expect(await readComp("stranger@example.com")).toBeNull();
   });
 
   test("a signed-in CUSTOMER cannot grant or revoke", async () => {
@@ -217,7 +217,7 @@ describe("owner only — everyone else gets a bare 404", () => {
       body: { email: "friend2@example.com", plan: "pro", days: 30 },
     });
     expect(grant.status).toBe(404);
-    expect(readComp("friend2@example.com")).toBeNull();
+    expect(await readComp("friend2@example.com")).toBeNull();
 
     const revoke = await callApi("/api/comps/revoke", {
       token,
