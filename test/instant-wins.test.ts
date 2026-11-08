@@ -17,6 +17,7 @@ import {
   resolveDayKeys,
 } from "../src/lib/london-day";
 import { calcLay } from "../src/lib/odds";
+import { STALL_ALARM_MIN } from "../src/lib/cadence";
 import type { Match, MatchOutcome } from "../src/lib/odds-api";
 
 /**
@@ -345,6 +346,51 @@ describe("ITEM 1 — freshness and the 'no scan yet' state", () => {
     const { dir, file } = tempCache(JSON.stringify({ ts, data: [] }));
     try {
       expect(readInstantWins({ file, now: NOW }).stale).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // THE OWNER'S OWN COMPLAINT (2026-11-08): "I seem to get a message shortly
+  // after mentioning them to you and then nothing else." A dead worker and a
+  // quiet market looked identical on the page. `stale` cannot carry this,
+  // because it is about PRICES: a sport can be hours old while the loop is
+  // healthy, and a dead loop leaves a snapshot that is only minutes old.
+  test("a scan older than the stall threshold means the SCANNER has stopped", () => {
+    const age = STALL_ALARM_MIN + 10;
+    const ts = NOW.getTime() - age * 60_000;
+    const { dir, file } = tempCache(JSON.stringify({ ts, data: [TODAY_LATER] }));
+    try {
+      const p = readInstantWins({ file, now: NOW });
+      expect(p.status).toBe("ok");
+      expect(p.ageMinutes).toBe(age);
+      expect(p.scannerStale).toBe(true);
+      expect(p.scannerStaleAfterMin).toBe(STALL_ALARM_MIN);
+      // The same threshold the owner's Telegram stall alarm uses, so the page and
+      // the message cannot disagree about whether the scanner is alive.
+      expect(p.scannerStaleAfterMin).toBe(STALL_ALARM_MIN);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a healthy scan is never reported as a stopped scanner", () => {
+    const ts = NOW.getTime() - 5 * 60_000;
+    const { dir, file } = tempCache(JSON.stringify({ ts, data: [TODAY_LATER] }));
+    try {
+      const p = readInstantWins({ file, now: NOW });
+      expect(p.scannerStale).toBe(false);
+      expect(p.scannerStaleAfterMin).toBe(STALL_ALARM_MIN);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("exactly at the stall threshold the scanner is not yet called dead", () => {
+    const ts = NOW.getTime() - STALL_ALARM_MIN * 60_000;
+    const { dir, file } = tempCache(JSON.stringify({ ts, data: [] }));
+    try {
+      expect(readInstantWins({ file, now: NOW }).scannerStale).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

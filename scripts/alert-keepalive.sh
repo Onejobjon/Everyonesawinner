@@ -25,6 +25,17 @@ ALERT_PORT="${ALERT_PORT:-3100}"
 # shellcheck disable=SC1091
 . "$HERE/pidfile.sh"
 
+# WHO SCANS. This supervisor restarts the scan loop, the status host, the stall
+# alarm and the daily heartbeat — all of which are now the VPS's job. On a host
+# that is not the named scanner it must do NOTHING, loudly, so a machine wake or
+# a publish cannot quietly start a second scanner beside the VPS.
+# shellcheck disable=SC1091
+. "$HERE/alert-role.sh"
+if ! eaw_is_primary_scanner; then
+  eaw_not_scanner_message "alert-keepalive"
+  exit 0
+fi
+
 # Single instance. A PID file alone is not enough (numbers get reused across a
 # machine replacement), so the check also matches the process's own command line.
 KLOCK=".run/alert-keepalive.pid"

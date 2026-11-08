@@ -45,6 +45,19 @@ mkdir -p .run
 # shellcheck disable=SC1091
 . "$HERE/pidfile.sh"
 
+# WHO SCANS. Exactly one host may run this loop: two would double-alert the
+# owner's Telegram group and double-spend odds credits. The answer is
+# deploy/vps/primary.conf, read through scripts/alert-role.sh, and it is checked
+# BEFORE the lock so a stood-down host writes no pidfile and looks like what it
+# is — deliberately idle, not crashed. Since 2026-11-08 the scanner is the VPS
+# (systemd eaw-alerts) and this platform host stands down here.
+# shellcheck disable=SC1091
+. "$HERE/alert-role.sh"
+if ! eaw_is_primary_scanner; then
+  eaw_not_scanner_message "alert-loop"
+  exit 0
+fi
+
 # Single instance. A PID number alone is not an identity: after a machine
 # replacement the kernel hands the same numbers to unrelated processes, and the
 # old check ("kill -0 says alive") then blocked every restart for four and a half

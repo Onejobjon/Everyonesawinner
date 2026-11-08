@@ -15,6 +15,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Match } from "../lib/odds-api";
+import { STALL_ALARM_MIN } from "../lib/cadence";
 import { STALE_AFTER_MIN, selectWindowMatches } from "../lib/instant-wins";
 import { windowPhrase } from "../lib/scan-window";
 import { readGreenHistory, type GreenHistorySummary } from "./green-history";
@@ -42,6 +43,19 @@ export interface InstantWinsPayload {
   /** True when the scan is older than STALE_AFTER_MIN — the prices may have moved. */
   stale: boolean;
   staleAfterMin: number;
+  /**
+   * True when the LAST SCAN itself is older than STALL_ALARM_MIN — the scanner
+   * has stopped, not merely gone quiet.
+   *
+   * This is deliberately separate from `stale`, which is about prices: prices can
+   * be old while the loop is perfectly healthy (each sport rotates), and the loop
+   * can be dead while the last snapshot is only minutes old. A reader must be
+   * able to tell "no green trades right now" from "nobody is looking for green
+   * trades at all", so this flag drives a sentence that says exactly that.
+   */
+  scannerStale: boolean;
+  /** The age at which `scannerStale` turns true (minutes). */
+  scannerStaleAfterMin: number;
   /** Fixtures the scan looked at (before the window filter). */
   fixturesScanned: number;
   /** Distinct sports among those fixtures — the "M sports" of the coverage line. */
@@ -135,6 +149,10 @@ function noScan(
     priceAgeMinutes: null,
     stale: false,
     staleAfterMin: STALE_AFTER_MIN,
+    // No scan at all: there is no age to report, and the page already says "no
+    // prices to show yet" rather than pretending the scanner is healthy.
+    scannerStale: false,
+    scannerStaleAfterMin: STALL_ALARM_MIN,
     fixturesScanned: 0,
     sportsScanned: 0,
     fixturesInWindow: 0,
@@ -323,6 +341,11 @@ export function readInstantWins(options: ReadInstantWinsOptions = {}): InstantWi
     // fetched two hours ago is stale even if the scan ran a minute ago.
     stale: priceAgeMinutes > STALE_AFTER_MIN,
     staleAfterMin: STALE_AFTER_MIN,
+    // THE SCANNER'S OWN CLOCK. 75 minutes (2.5 sweeps at a 30-minute cadence) is
+    // the same threshold the stall alarm uses, so the page and the owner's
+    // Telegram cannot disagree about whether the scanner is alive.
+    scannerStale: ageMinutes > STALL_ALARM_MIN,
+    scannerStaleAfterMin: STALL_ALARM_MIN,
     fixturesScanned: matches.length,
     sportsScanned: sportsOf(matches),
     fixturesInWindow: inWindow.length,

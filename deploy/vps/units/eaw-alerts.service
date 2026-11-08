@@ -18,6 +18,11 @@ EnvironmentFile=-@EAW_ROOT@/secrets/telegram.env
 EnvironmentFile=-@EAW_ROOT@/secrets/push.env
 
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# WHICH HOST SCANS. Exactly one host may run this loop: two would double-alert
+# the owner's Telegram group and double-spend odds credits. This is the VPS's
+# half of the answer — src/lib/alert-role.ts and deploy/vps/primary.conf hold the
+# other half, and test/alert-role.test.ts fails if they disagree.
+Environment=EAW_ALERT_ROLE=vps
 Environment=ODDS_ENV_FILE=@EAW_ROOT@/secrets/odds.env
 Environment=EAW_SECRETS_FILE=@EAW_ROOT@/secrets/telegram.env
 Environment=ALERTS_RUN_DIR=@EAW_ROOT@/site/.run

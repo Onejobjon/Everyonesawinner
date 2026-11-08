@@ -33,6 +33,23 @@ eaw_init "$HERE"
 
 STRICT=0
 [ "${1:-}" = "--no-start-if-uncertain" ] && STRICT=1
+
+# STEP 0 — TELL THE PLATFORM IT MAY SCAN AGAIN.
+# Since the cutover of 2026-11-08 the platform host stands down whenever
+# deploy/vps/primary.conf names another scanner (scripts/alert-role.sh), so a
+# rollback that only stopped the VPS would leave the owner with NO scanner at
+# all — the exact silence this move exists to remove. Both halves of the answer
+# are flipped here, and test/alert-role.test.ts fails if they ever disagree.
+eaw_head "0/4 the platform becomes the scanner again"
+for f in "$EAW_REPO_ROOT/deploy/vps/primary.conf" "$EAW_REPO_ROOT/src/lib/alert-role.ts"; do
+  [ -f "$f" ] || { eaw_warn "missing $f — cannot flip the scanner flag"; continue; }
+  sed -i -e 's/^PRIMARY_SCANNER=vps$/PRIMARY_SCANNER=platform/' \
+         -e 's/^PRIMARY_SCANNER=platform$/PRIMARY_SCANNER=platform/' \
+         -e 's/^export const PRIMARY_SCANNER: AlertHost = "vps";$/export const PRIMARY_SCANNER: AlertHost = "platform";/' "$f"
+done
+grep -h "^PRIMARY_SCANNER=" "$EAW_REPO_ROOT/deploy/vps/primary.conf" || eaw_die "could not flip deploy/vps/primary.conf"
+grep -h 'export const PRIMARY_SCANNER' "$EAW_REPO_ROOT/src/lib/alert-role.ts" || eaw_die "could not flip src/lib/alert-role.ts"
+eaw_log "both files now name platform as the scanner"
 VERIFY_SEC="${ROLLBACK_VERIFY_SEC:-300}"
 UNCERTAIN_MARKER="$EAW_REPO_ROOT/.run/vps-rollback-uncertain"
 RECORD="$EAW_REPO_ROOT/.run/vps-cutover.json"

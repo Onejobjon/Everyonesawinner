@@ -225,3 +225,48 @@ real distro, that `EnvironmentFile` is read as root and never appears in
 `systemctl show`, and that ssh key-only auth works against the owner's server. All
 of that is checked for the first time on the real box.
 
+
+---
+
+# CUTOVER DONE — 2026-11-08 (VPS is the scanner)
+
+The 30-minute opportunity scan now runs on the owner's IONOS VPS
+(`root@85.215.41.215`, hostname `ubuntu`), as systemd unit **`eaw-alerts`**:
+`Restart=always`, enabled at boot, 30-minute cadence from `scripts/alert-loop.sh`.
+`eaw-alarms.timer` runs the stall alarm + daily heartbeat on the same host.
+
+## One scanner, ever
+
+`deploy/vps/primary.conf` holds `PRIMARY_SCANNER=vps`. Every entry point checks it:
+
+| entry point | how |
+| --- | --- |
+| `scripts/alert-loop.sh` | sources `scripts/alert-role.sh`, exits 0 with a log line |
+| `scripts/alert-keepalive.sh` | same guard, before its pidfile |
+| `vite.config.ts` boot hook | `isPrimaryScanner()` from `src/lib/alert-role.ts` |
+| VPS systemd unit | `Environment=EAW_ALERT_ROLE=vps` |
+
+A host with no `EAW_ALERT_ROLE` reads as `platform`. So a machine that wakes, or a
+publish that restarts the dev server, logs
+`[alert-keepalive …] standing down: this host is "platform" and the scanner is "vps"`
+and does **nothing** — no odds credits, no Telegram, no second scanner.
+`test/alert-role.test.ts` fails if these four ever disagree.
+
+## ROLLBACK — back to this computer's worker, in one command
+
+    bash deploy/vps/rollback.sh
+
+It (1) flips `deploy/vps/primary.conf` **and** `src/lib/alert-role.ts` to
+`platform`, (2) `systemctl disable --now eaw-alerts eaw-alarms.timer` on the VPS,
+(3) starts `scripts/alert-keepalive.sh` here. To go the other way again, run
+`deploy/vps/cutover.sh` (or set both back to `vps`, stop the local keepalive, and
+`systemctl enable --now eaw-alerts eaw-alarms.timer` on the VPS).
+
+## First proof from the VPS (2026-11-08)
+
+    [alert-loop 22:55:15Z] starting (interval 1800s, telegram=configured, odds_key=env)
+    [alerts 22:55:42Z] sweep: 14 sports refreshed (14 credits), 41 fixtures held
+    [alerts 22:55:44Z] snapshot push: delivered 41 fixtures — …ctonew.app/api/scan-snapshot 200; …cto.site/api/scan-snapshot 200
+    [alert-loop 22:55:44Z] scan ok in 29s — next in 1800s
+
+Telegram from the new host: `{"ok":true,"message_id":46}`.

@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { spawn } from "node:child_process";
+import { PRIMARY_SCANNER, isPrimaryScanner, thisHost } from "./src/lib/alert-role";
 
 /**
  * Boot hook for the opportunity-alert worker.
@@ -57,6 +58,19 @@ function alertWorkerBoot(): Plugin {
     name: "eaw-alert-worker-boot",
     apply: "serve",
     configureServer() {
+      // ONE SCANNER, EVER. Since the cutover of 2026-11-08 the owner's VPS is the
+      // scanner (systemd eaw-alerts) and this machine stands down. Without this
+      // check every publish and every machine wake would start a second scanner
+      // beside the VPS: two sweeps, two sets of Telegram alerts for the same
+      // green trade, and two lots of odds credits paid for. The supervisor and the
+      // loop check the same flag themselves, so this is the third belt, not the
+      // only one — and it is the one that stops a 60-second spawn loop churning.
+      if (!isPrimaryScanner()) {
+        console.log(
+          `[eaw] alert worker boot hook: standing down — this host is "${thisHost()}", the scanner is "${PRIMARY_SCANNER}" (deploy/vps/primary.conf)`,
+        );
+        return;
+      }
       if (spawnLoop()) console.log("[eaw] alert worker boot hook fired (scripts/alert-keepalive.sh)");
       spawnGapAlarm();
       // Self-healing: every 60s make sure the supervisor is alive. Because it

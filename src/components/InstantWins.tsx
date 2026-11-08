@@ -50,6 +50,9 @@ interface Payload {
   priceAgeMinutes?: number | null;
   stale?: boolean;
   staleAfterMin?: number;
+  /** True when the last scan itself is older than the stall threshold — the worker has stopped. */
+  scannerStale?: boolean;
+  scannerStaleAfterMin?: number;
   fixturesScanned?: number;
   sportsScanned?: number;
   fixturesInWindow?: number;
@@ -187,6 +190,13 @@ export default function InstantWins() {
       : null;
   const stale = Boolean(payload?.stale);
   const staleAfterMin = payload?.staleAfterMin ?? STALE_AFTER_MIN;
+  // THE SCANNER'S OWN CLOCK, separate from the prices. A quiet list means one of
+  // two very different things, and the page must never let a reader confuse them:
+  // "we looked and found nothing" versus "nobody has looked for hours".
+  const scannerStale = Boolean(payload?.scannerStale);
+  const scannerStaleAfterMin = payload?.scannerStaleAfterMin ?? 75;
+  const scanAgeMinutes = typeof payload?.ageMinutes === "number" ? payload.ageMinutes : null;
+  const scanAtLabel = payload?.scannedAt ? londonTimeLabel(payload.scannedAt) : null;
   const coverage = coverageLine(built);
 
   return (
@@ -227,6 +237,31 @@ export default function InstantWins() {
       {/* Freshness — always visible, and loud once the scan is old. */}
       {phase === "ready" && payload?.status === "ok" && (
         <div className="mt-4">
+          {/* THE SCANNER ITSELF. An empty or quiet list has two completely
+              different causes, and before this banner existed they looked the
+              same: "we looked and there is nothing green" and "the worker died
+              hours ago and nobody is looking". The owner hit the second one for
+              four days (2026-11-04 → 2026-11-06) and got no message at all. */}
+          {scannerStale && (
+            <p
+              className="mb-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-medium text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+              role="alert"
+            >
+              ⚠️ <strong>Our scanner has stopped.</strong>{" "}
+              {scanAgeMinutes != null ? (
+                <>
+                  The last full scan was <strong>{ageWords(scanAgeMinutes)} ago</strong>
+                  {scanAtLabel ? ` (${scanAtLabel})` : ""}.{" "}
+                </>
+              ) : (
+                <>We cannot see a recent scan. </>
+              )}
+              It normally runs every 30 minutes, and this page gives up on it after{" "}
+              {scannerStaleAfterMin} minutes. Nothing below has been checked since that scan, so a
+              quiet list here means <strong>nobody is looking</strong> — not that there are no green
+              trades. Treat every price below as out of date.
+            </p>
+          )}
           {payload?.refreshing && (
             <p
               className="mb-2 rounded-lg border border-purple-200 bg-purple-50 p-3 text-sm font-medium text-purple-900 dark:border-purple-900 dark:bg-purple-950/40 dark:text-purple-200"
@@ -261,6 +296,13 @@ export default function InstantWins() {
             ) : (
               <>We did not record a time for these prices.</>
             )}
+          </p>
+          {/* The scan's own age, always shown — a healthy list and a dead worker
+              must not be distinguishable only by inference. */}
+          <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+            Last full scan{" "}
+            {scanAgeMinutes != null ? `${ageWords(scanAgeMinutes)} ago` : "at an unknown time"}
+            {scanAtLabel ? ` (${scanAtLabel})` : ""} — we scan every 30 minutes.
           </p>
           {stale && (
             <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
