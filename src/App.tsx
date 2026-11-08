@@ -17,6 +17,7 @@ import Dashboard from "./pages/Dashboard";
 import Subscribe from "./pages/Subscribe";
 import SubscribeSuccess from "./pages/SubscribeSuccess";
 import OwnerComps from "./pages/OwnerComps";
+import Account from "./pages/Account";
 import BudgetChooser from "./components/BudgetChooser";
 
 export default function App() {
@@ -46,6 +47,9 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/logout" element={<Logout />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        {/* Your own plan, and the one place a customer can stop it renewing.
+            Server-gated: /api/subscription acts only on the signed-in account. */}
+        <Route path="/account" element={<Account />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/subscribe/success" element={<SubscribeSuccess />} />
         {/* Owner only: give a named person free use of the site. The page hides

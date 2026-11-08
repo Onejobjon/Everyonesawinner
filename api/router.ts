@@ -51,6 +51,9 @@
 //   /api/comps/revoke         → handleCompsRevoke  api/comps/revoke.ts
 //   /api/stripe-webhook       → handleStripeWebhook api/stripe-webhook.ts
 //   /api/checkout             → handleCheckout     (NEW — proxies to the platform)
+//   /api/subscription         → handleSubscription       (NEW — proxies to the platform)
+//   /api/subscription/cancel  → handleSubscriptionCancel (NEW — proxies to the platform)
+//   /api/subscription/resume  → handleSubscriptionResume (NEW — proxies to the platform)
 //   /go/<slug> + /api/go      → handleGo           api/go.ts
 //
 // Each handler keeps its own status codes, headers, JSON shapes and error
@@ -1452,6 +1455,94 @@ const checkoutUnreachableMessage =
   "We couldn't reach our checkout service, so nothing was created and no payment has been taken. Try again in a moment.";
 
 /* ================================================================== *
+ * /api/subscription — the customer's own plan, and stopping it renewing
+ * (2026-11-08)
+ *
+ * WHY THIS IS A PROXY. The account page lives on the custom domain, but the
+ * account store and the Stripe secret live on the platform host, exactly like
+ * /api/checkout. So these three routes forward there and pass the answer back
+ * unchanged.
+ *
+ *   GET  /api/subscription        → { ok, subscription }  (plan, price, renews?,
+ *                                    the date access ends, any free-access grant)
+ *   POST /api/subscription/cancel → stop renewing at the end of the paid period
+ *   POST /api/subscription/resume → undo that, before the period ends
+ *
+ * SECURITY. The ONLY thing forwarded is the caller's own Authorization header:
+ * the platform resolves the session from it and acts on THAT account. The request
+ * body is deliberately NOT forwarded — cancelling takes no input, so there is no
+ * field a caller could use to name somebody else's subscription. A request with
+ * no Authorization header is refused here (401) without any network call.
+ *
+ * FAILURE MODE (fail closed): if the platform cannot be reached, or answers with
+ * nothing readable, the caller gets 502 and a sentence saying nothing was changed
+ * — never a fabricated success and never a "cancelled" we cannot stand behind.
+ * ================================================================== */
+
+const subscriptionUnreachableMessage =
+  "We couldn't reach the service that holds your account, so nothing was changed. Try again in a moment.";
+
+async function forwardSubscription(
+  req: any,
+  res: any,
+  target: string,
+  allowedMethods: string[],
+): Promise<void> {
+  const method = String(req.method || "GET").toUpperCase();
+  if (!allowedMethods.includes(method)) {
+    send(res, 405, JSON.stringify({ ok: false, error: "Method not allowed" }));
+    return;
+  }
+  const authHeader = typeof req.headers?.authorization === "string" ? req.headers.authorization : "";
+  if (!authHeader.trim()) {
+    send(
+      res,
+      401,
+      JSON.stringify({
+        ok: false,
+        error: "not_signed_in",
+        message: "Sign in to see your account and manage your subscription.",
+      }),
+    );
+    return;
+  }
+  try {
+    const upstream = await fetch(`${platformApiUrl()}${target}`, {
+      method,
+      headers: { authorization: authHeader, accept: "application/json" },
+      // No body: see the note above. Cancelling a subscription takes no input.
+      cache: "no-store",
+      redirect: "manual",
+    });
+    const text = await upstream.text();
+    send(
+      res,
+      upstream.status,
+      text || JSON.stringify({ ok: false, error: "no_response", message: subscriptionUnreachableMessage }),
+    );
+  } catch (e) {
+    console.error(`[api-subscription] platform unreachable: ${String(e)}`);
+    send(
+      res,
+      502,
+      JSON.stringify({ ok: false, error: "account_unavailable", message: subscriptionUnreachableMessage }),
+    );
+  }
+}
+
+export async function handleSubscription(req: any, res: any): Promise<void> {
+  await forwardSubscription(req, res, "/api/subscription", ["GET"]);
+}
+
+export async function handleSubscriptionCancel(req: any, res: any): Promise<void> {
+  await forwardSubscription(req, res, "/api/subscription/cancel", ["POST"]);
+}
+
+export async function handleSubscriptionResume(req: any, res: any): Promise<void> {
+  await forwardSubscription(req, res, "/api/subscription/resume", ["POST"]);
+}
+
+/* ================================================================== *
  * /go/<slug> + /api/go — the outbound operator redirect.
  * (moved verbatim from api/go.ts)
  *
@@ -1513,6 +1604,9 @@ export const ROUTES: Readonly<Record<string, RouteHandler>> = {
   "comps/revoke": handleCompsRevoke,
   "stripe-webhook": handleStripeWebhook,
   checkout: handleCheckout,
+  subscription: handleSubscription,
+  "subscription/cancel": handleSubscriptionCancel,
+  "subscription/resume": handleSubscriptionResume,
   go: handleGo,
 };
 

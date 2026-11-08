@@ -11,6 +11,7 @@ import { runEventFetch, parseMarkets, isCatalogueSport } from "./src/server/same
 import { storeLead } from "./src/server/leads";
 import { registerUser, authenticateUser, findByEmail, ownerEmails } from "./src/server/users";
 import { handleCompsApi } from "./src/server/comps-api";
+import { handleSubscriptionApi } from "./src/server/subscription-api";
 import { resolveSession, revokeSession } from "./src/server/sessions";
 import { requireProSession, requirePaidSession, requireOwnerSession } from "./src/server/pro-gate";
 import { readInstantWins, feedDiagnostics, candidateCacheFiles } from "./src/server/instant-wins";
@@ -114,6 +115,19 @@ const server = Bun.serve({
     // src/server/comps-api.ts and reuses requireOwnerSession().
     if (url.pathname.startsWith("/api/comps")) {
       return handleCompsApi(req, url);
+    }
+
+    // THE CUSTOMER'S OWN SUBSCRIPTION (2026-11-08). The account page reads it,
+    // and the customer stops or restarts the renewal from there — the terms
+    // promise "cancel at any time" and keeping access to the end of the paid
+    // period, and this is the only thing that delivers it.
+    //   GET  /api/subscription        → plan, price, renews?, when access ends
+    //   POST /api/subscription/cancel → stop renewing at the period end
+    //   POST /api/subscription/resume → undo that before the period ends
+    // The account is the SESSION's, never one named in the body: see
+    // src/server/subscription-api.ts and requireAccountSession().
+    if (url.pathname.startsWith("/api/subscription")) {
+      return handleSubscriptionApi(req, url);
     }
 
     // Odds proxy — fetches live odds server-side so the API key never ships
@@ -712,6 +726,10 @@ const server = Bun.serve({
             // A free-access grant, so a comped account can be told when its free
             // access ends instead of being shown a price.
             comp: found.comp ?? null,
+            // When the customer asked us to stop renewing, if they did. The
+            // decision itself is in subscriptionStatus ("canceled_at_period_end");
+            // this is only the date, so the account page can say "cancelled on…".
+            canceledAt: found.canceledAt ?? null,
             // Is this the owner's own seat? Used only to show the owner his own
             // admin link — it grants nothing by itself (every admin endpoint
             // re-checks the seat server-side).

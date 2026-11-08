@@ -65,6 +65,68 @@ export function bearerToken(req: Request): string {
 }
 
 /**
+ * Verify that this request comes from a signed-in account — ANY account.
+ *
+ * WHY THIS EXISTS (2026-11-08). `/api/subscription` and its cancel/resume actions
+ * are the customer's own billing record. They must not be behind the paid gate:
+ * somebody whose plan has ended, whose card failed, or who never subscribed at all
+ * has the strongest claim to see their account and to stop a renewal. They must,
+ * however, be behind the SAME kind of server-side check as every other data
+ * endpoint — a real session in the server-side session store, resolved here, with
+ * the email taken from that session and never from the request body.
+ *
+ * That is the whole security property of cancellation: the only identifier the
+ * caller supplies is their token, so one customer cannot act on another's
+ * subscription even if they name them in the body (the body is ignored).
+ *
+ * Fails CLOSED: no token or an unverifiable session is a 401, and an unreachable
+ * account store is a 503. Nothing is read, written or cancelled on a guess.
+ */
+export async function requireAccountSession(
+  req: Request,
+  what = "your account",
+): Promise<ProGate> {
+  const token = bearerToken(req);
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      error: "not_signed_in",
+      message: `Sign in to see ${what}.`,
+    };
+  }
+  try {
+    const session = await resolveSession(token);
+    if (!session) {
+      return {
+        ok: false,
+        status: 401,
+        error: "session_expired",
+        message: `Your session has expired — sign in again to see ${what}.`,
+      };
+    }
+    const user = await findByEmail(session.email);
+    if (!user) {
+      return {
+        ok: false,
+        status: 401,
+        error: "account_not_found",
+        message: `We could not find the account behind that session. Sign in again to see ${what}. Nothing was changed.`,
+      };
+    }
+    return { ok: true, email: user.email };
+  } catch (e) {
+    console.error(`[account-gate] account store unavailable: ${String(e)}`);
+    return {
+      ok: false,
+      status: 503,
+      error: "account_unavailable",
+      message: "We could not check your account, so nothing was shown or changed.",
+    };
+  }
+}
+
+/**
  * Verify that this request comes from a signed-in Pro account.
  *
  * `what` is used in the message ("this search") so the page can say exactly

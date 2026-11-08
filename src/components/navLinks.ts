@@ -47,6 +47,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Account",
     items: [
+      { to: "/account", label: "Your account" },
       { to: "/signup", label: "Sign up" },
       { to: "/login", label: "Sign in" },
       { to: "/logout", label: "Sign out" },

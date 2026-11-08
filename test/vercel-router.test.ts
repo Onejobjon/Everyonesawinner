@@ -165,7 +165,7 @@ async function hit(pathSegments: string[], over: Record<string, unknown> = {}) {
  * ================================================================== */
 
 describe("A. the router maps every previously-existing path to its handler", () => {
-  test("the table holds exactly the twelve old routes plus /api/checkout", () => {
+  test("the table holds exactly the twelve old routes plus checkout and the subscription routes", () => {
     expect(Object.keys(ROUTES).sort()).toEqual(
       [
         "checkout",
@@ -181,6 +181,10 @@ describe("A. the router maps every previously-existing path to its handler", () 
         "same-match",
         "signup",
         "stripe-webhook",
+        // 2026-11-08: the account page's own endpoints (cancel / resume).
+        "subscription",
+        "subscription/cancel",
+        "subscription/resume",
       ].sort(),
     );
   });

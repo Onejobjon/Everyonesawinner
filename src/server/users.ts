@@ -51,6 +51,16 @@ export interface StoredUser {
   graceEndsAt: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  /**
+   * When the CUSTOMER asked us to stop renewing (ISO 8601), if they did.
+   *
+   * The decision itself lives in `subscriptionStatus`: "canceled_at_period_end"
+   * means "stop billing at currentPeriodEnd, keep access until then" (see
+   * CANCELED_STATUSES in entitlement.ts). This field only records WHEN they said
+   * it, so the account page can say "cancelled on 8 November" — it never decides
+   * anything. Absent/null means no cancellation was requested.
+   */
+  canceledAt?: string | null;
   createdAt: string;
   /**
    * When this account last signed in (ISO 8601). Bookkeeping only - nothing
@@ -86,6 +96,16 @@ export interface PublicUser {
   /** The free-access grant behind this session, if any — so the page can say
    *  "free access until <date>" instead of showing a price. */
   comp: CompState | null;
+  /** When the customer asked to stop renewing, if they did (ISO 8601). */
+  canceledAt?: string | null;
+  /**
+   * The Stripe subscription behind this account, if there is one. Not a secret —
+   * it is the customer's own reference — and the account page needs it to say
+   * whether a real payment provider is involved in a cancellation.
+   */
+  stripeSubscriptionId?: string | null;
+  /** Is this the owner's own seat (never billed, never cancelled)? */
+  owner?: boolean;
   token: string;
 }
 
@@ -222,6 +242,9 @@ function toPublic(record: StoredUser): PublicUser {
     currentPeriodEnd: state.currentPeriodEnd,
     graceEndsAt: state.graceEndsAt,
     comp: state.comp ?? null,
+    canceledAt: record.canceledAt ?? null,
+    stripeSubscriptionId: record.stripeSubscriptionId ?? null,
+    owner: isOwnerSeat(record.email),
     token: newToken(),
   };
 }
@@ -371,6 +394,8 @@ export interface SubscriptionPatch {
   graceEndsAt?: string | null;
   customerId?: string | null;
   subscriptionId?: string | null;
+  /** When the customer asked to stop renewing (null clears it, e.g. on resume). */
+  canceledAt?: string | null;
 }
 
 /**
@@ -397,6 +422,7 @@ export async function updateSubscription(
   if (patch.graceEndsAt !== undefined) record.graceEndsAt = patch.graceEndsAt;
   if (patch.customerId !== undefined) record.stripeCustomerId = patch.customerId;
   if (patch.subscriptionId !== undefined) record.stripeSubscriptionId = patch.subscriptionId;
+  if (patch.canceledAt !== undefined) record.canceledAt = patch.canceledAt;
   await writeUser(record); // throws on a failed write - the caller must hear about it
   return true;
 }
