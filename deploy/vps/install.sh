@@ -95,7 +95,11 @@ push_secret() {
   # chmod runs BEFORE the move, so the file is never briefly readable by others.
   local stage="$REMOTE_TMP/eaw-secret.$name.${BASHPID}"
   eaw_ssh_stdin "umask 077; cat > '$stage'" < "$src" || eaw_die "could not upload $name"
-  eaw_root "chmod 0600 '$stage' && chown $EAW_USER:$EAW_USER '$stage' && mv -f '$stage' '$dst'" \
+  # The chown is best-effort: on a FIRST install the eaw account does not exist
+  # yet (install-remote.sh creates it in a later step), and a fatal chown here
+  # aborted the whole install on a clean box. The file still lands 0600 and
+  # install-remote.sh re-chowns it to eaw once the account exists.
+  eaw_root "mkdir -p '$REMOTE_SECRETS' && chmod 0700 '$REMOTE_SECRETS' && chmod 0600 '$stage' && { chown $EAW_USER:$EAW_USER '$stage' 2>/dev/null || true; } && mv -f '$stage' '$dst'" \
     || eaw_die "could not install $dst"
   eaw_log "secret $name: installed at $dst (0600 $EAW_USER)"
 }
