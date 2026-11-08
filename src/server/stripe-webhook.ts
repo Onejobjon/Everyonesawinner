@@ -35,7 +35,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { findEmailByStripeIds, findByEmail, updateSubscription, type SubscriptionPatch } from "./users";
 import { GRACE_STATUS, graceEndFrom, isFutureDate, isKnownPlan } from "./entitlement";
 import { notifyOwner } from "./notify-owner";
-import { planFromPriceId, configuredPriceEnvs } from "./price-catalogue";
+import { planFromPriceId, configuredPlans } from "./price-catalogue";
 import { isCheckoutEnabled, CHECKOUT_DISABLED_CODE, CHECKOUT_DISABLED_MESSAGE } from "./billing-switch";
 import { withEventIdempotency } from "./processed-events";
 
@@ -203,11 +203,13 @@ async function applyPatch(email: string, patch: SubscriptionPatch, context: stri
 
 /** Alert text for a price we cannot name. Never a guessed tier. */
 async function alertUnknownPrice(priceId: string | null, context: string): Promise<void> {
-  const configured = configuredPriceEnvs();
+  // The catalogue is the truth here, not the environment: each plan's id is the
+  // env var when set and the live price id otherwise (price-catalogue.ts).
+  const sellable = configuredPlans();
   await notifyOwner(
     `${context}: unrecognised price id ${priceId ?? "(none)"} — NOTHING was granted. ` +
-      `Configured price variables: ${configured.length ? configured.join(", ") : "none"}. ` +
-      `Set STRIPE_PRICE_STARTER / STRIPE_PRICE_PRO / STRIPE_PRICE_ANNUAL to the price ids you sell.`,
+      `Plans we can name: ${sellable.length ? sellable.join(", ") : "none"}. ` +
+      `Set STRIPE_PRICE_STARTER / STRIPE_PRICE_PRO / STRIPE_PRICE_ANNUAL to sell different prices.`,
   );
 }
 

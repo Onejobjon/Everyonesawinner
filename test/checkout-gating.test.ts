@@ -412,7 +412,9 @@ describe("B. with billing on, checkout still refuses what it must", () => {
   });
 
   test("a plan with no configured price id is refused, and Stripe is not called", async () => {
-    delete process.env.STRIPE_PRICE_PRO;
+    // An UNSET variable means "use the live catalogue"; an explicitly blank one
+    // means "this plan is not for sale", which is what this test is about.
+    process.env.STRIPE_PRICE_PRO = "";
     try {
       const email = await account("noprice@example.com");
       const stub = stripeStub({ price: { body: goodProPrice }, session: { body: goodSession } });

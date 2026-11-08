@@ -54,7 +54,7 @@ import { isCheckoutEnabled, CHECKOUT_DISABLED_CODE, CHECKOUT_DISABLED_MESSAGE } 
 import {
   PLAN_ORDER,
   PUBLISHED_PLANS,
-  configuredPriceEnvs,
+  configuredPlans,
   formatPence,
   priceIdForPlan,
 } from "./price-catalogue";
@@ -531,7 +531,7 @@ export function billingReadiness(env: NodeJS.ProcessEnv = process.env): BillingR
   for (const p of plans) {
     if (!p.priceConfigured) blockers.push(`${p.env} is not set (${p.label}, ${p.price} / ${p.interval}).`);
   }
-  if (configuredPriceEnvs().length === 0) {
+  if (configuredPlans().length === 0) {
     blockers.push("No Stripe price ids are configured at all, so no plan could be sold.");
   }
 
