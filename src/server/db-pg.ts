@@ -24,13 +24,42 @@ export function hasDatabase(): boolean {
 let client: SQL | null = null;
 let schemaReady: Promise<void> | null = null;
 
+/**
+ * Connection options for a DATABASE_URL.
+ *
+ * Managed Postgres (Neon, Supabase, RDS, Vercel Postgres) refuses unencrypted
+ * connections, and Bun refuses to downgrade — it throws "connection is
+ * insecure (try using `sslmode=require`)". Requiring TLS whenever the URL does
+ * not say otherwise means a connection string that arrives WITHOUT a query
+ * string still works, which matters because a secret field can be short and a
+ * full Neon URL with `?channel_binding=require&sslmode=require` is long.
+ * A local Postgres is left alone so a developer's `postgres://.../localhost`
+ * keeps working without a certificate.
+ */
+export function connectionOptions(url: string): {
+  max: number;
+  idleTimeout: number;
+  tls?: boolean;
+} {
+  const opts: { max: number; idleTimeout: number; tls?: boolean } = {
+    max: 5,
+    idleTimeout: 20,
+  };
+  const hasSslMode = /[?&]sslmode=/i.test(url);
+  const isLocal = /@(localhost|127\.0\.0\.1|\[::1\])(:\d+)?\//i.test(url);
+  if (!hasSslMode && !isLocal) {
+    opts.tls = true;
+  }
+  return opts;
+}
+
 function db(): SQL {
   const url = databaseUrl();
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }
   if (!client) {
-    client = new SQL(url, { max: 5, idleTimeout: 20 });
+    client = new SQL(url, connectionOptions(url));
   }
   return client;
 }
