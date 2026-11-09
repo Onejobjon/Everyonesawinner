@@ -1,0 +1,266 @@
+[
+  {
+    "id": "8b3289c2c6ddd9b85f95e1d569aea292",
+    "sport_key": "soccer_fa_cup",
+    "sport_title": "FA Cup",
+    "commence_time": "2026-11-09T19:30:00Z",
+    "home_team": "Plymouth Parkway FC",
+    "away_team": "Berkhamsted FC",
+    "bookmakers": [
+      {
+        "key": "boylesports",
+        "title": "BoyleSports",
+        "last_update": "2026-11-09T19:01:24Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:01:24Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 4.2
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.57
+              },
+              {
+                "name": "Draw",
+                "price": 4.2
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "smarkets",
+        "title": "Smarkets",
+        "last_update": "2026-11-09T19:01:37Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:01:37Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 5.4
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.6
+              },
+              {
+                "name": "Draw",
+                "price": 4.9
+              }
+            ]
+          },
+          {
+            "key": "h2h_lay",
+            "last_update": "2026-11-09T19:01:37Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 5.6
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.62
+              },
+              {
+                "name": "Draw",
+                "price": 5.1
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "betfred_uk",
+        "title": "Betfred (UK)",
+        "last_update": "2026-11-09T19:01:37Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:01:37Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 4.6
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.6
+              },
+              {
+                "name": "Draw",
+                "price": 4.0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "williamhill",
+        "title": "William Hill",
+        "last_update": "2026-11-09T19:00:28Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:00:28Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 4.4
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.57
+              },
+              {
+                "name": "Draw",
+                "price": 4.0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "paddypower",
+        "title": "Paddy Power",
+        "last_update": "2026-11-09T19:00:49Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:00:49Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 4.5
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.53
+              },
+              {
+                "name": "Draw",
+                "price": 4.33
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "betfair_ex_uk",
+        "title": "Betfair",
+        "last_update": "2026-11-09T19:01:38Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:01:38Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 5.1
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.66
+              },
+              {
+                "name": "Draw",
+                "price": 4.8
+              }
+            ]
+          },
+          {
+            "key": "h2h_lay",
+            "last_update": "2026-11-09T19:01:38Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 5.2
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.67
+              },
+              {
+                "name": "Draw",
+                "price": 4.9
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "casumo",
+        "title": "Casumo",
+        "last_update": "2026-11-09T19:01:00Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:01:00Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 4.6
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.67
+              },
+              {
+                "name": "Draw",
+                "price": 3.95
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "matchbook",
+        "title": "Matchbook",
+        "last_update": "2026-11-09T19:01:37Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:01:37Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 5.4
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.6
+              },
+              {
+                "name": "Draw",
+                "price": 4.9
+              }
+            ]
+          },
+          {
+            "key": "h2h_lay",
+            "last_update": "2026-11-09T19:01:37Z",
+            "outcomes": [
+              {
+                "name": "Berkhamsted FC",
+                "price": 5.6
+              },
+              {
+                "name": "Plymouth Parkway FC",
+                "price": 1.66
+              },
+              {
+                "name": "Draw",
+                "price": 5.1
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

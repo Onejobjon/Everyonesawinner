@@ -23,6 +23,7 @@ import TwoUpNoteTag from "../components/TwoUpNoteTag";
 import TwoUpGuideSection from "../components/TwoUpGuideSection";
 import { twoUpNoteForOutcome } from "../lib/two-up";
 import { getIcon, money } from "../lib/laybets-common";
+import { SETTLEMENT_NOTE } from "../lib/settlement";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "../components/CommissionControl";
 import { kickoffFallsOn, londonDayKey, londonDayLabel, parseDayKey, resolveDayKeys, type DayMode } from "../lib/london-day";
 
@@ -400,6 +401,12 @@ export default function LayBets() {
               ? "Nothing will be fetched — pick at least one competition above."
               : `${selected.length} competition${selected.length === 1 ? "" : "s"} · one fresh price read each. Nothing is fetched until you press Search.`}
           </p>
+          {/* WHY A FIXTURE IS MISSING — the settlement rule (owner defect 2026-11-09):
+              a cup tie's bookmaker price is 90 minutes and the exchange's can settle
+              after extra time, so no lay price is published for one at all. */}
+          <p className="mt-2 text-center text-[11px] text-gray-500 dark:text-gray-400">
+            {SETTLEMENT_NOTE}
+          </p>
         </section>
 
         {/* The rules of the search — a short visible line, the detail on demand. */}
@@ -411,9 +418,9 @@ export default function LayBets() {
             <p>
               Singles show every outcome with a lay gap under 0.20 (negative gap = better than
               break-even), on your £{stakeVal} cash back stake, including {commLabel} exchange
-              commission (adjustable above — set it to what your exchange actually charges). Ice
-              hockey is excluded — bookmaker back odds are regulation-time but exchange lays include
-              overtime, so they never match.
+              commission (adjustable above — set it to what your exchange actually charges). Cup
+              ties and ice hockey are excluded — a bookmaker's 90-minute price and the exchange's
+              price can settle on different results, so the two legs cannot be proven to match.
             </p>
             <p>
               <strong>Nothing is fetched until you press Search.</strong> This page never searches on

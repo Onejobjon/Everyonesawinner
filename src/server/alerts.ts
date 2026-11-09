@@ -45,6 +45,7 @@ import {
   round2,
 } from "../lib/odds";
 import { checkBackLayPair, isSameBookmakerKey } from "../lib/odds-sanity";
+import { settlementProofFor } from "../lib/settlement";
 import { readGreenHistory, recordGreens } from "./green-history";
 import { pushSnapshot } from "./scan-bridge";
 import { tryStartScan } from "./scan-lock";
@@ -779,6 +780,12 @@ export function findOpportunities(
   skippedTooSoon: number;
   /** Rows withheld because the back and the lay came from the same exchange. */
   skippedSameSource: number;
+  /**
+   * Fixtures withheld because the bookmaker price and the exchange price cannot
+   * be proven to settle on the same result — knockout football (extra time,
+   * penalties) and ice hockey. See src/lib/settlement.ts.
+   */
+  skippedSettlement: number;
 } {
   const opps: Opportunity[] = [];
   let skippedSuspects = 0;
@@ -786,8 +793,18 @@ export function findOpportunities(
   let skippedStarted = 0;
   let skippedTooSoon = 0;
   let skippedSameSource = 0;
+  let skippedSettlement = 0;
   const now = Date.now();
   for (const m of matches) {
+    // SETTLEMENT RULE, defence-in-depth. The transform already withholds these
+    // lay prices, but this worker's on-disk cache can still hold matches
+    // transformed by an older build (up to the 26-hour window), so a cup tie's
+    // 90-minute price must not be paired with an exchange price that can settle
+    // after extra time. No proof of identical settlement ⇒ silence.
+    if (!settlementProofFor(m.sportKey ?? "", m.league).proven) {
+      skippedSettlement++;
+      continue;
+    }
     // Defense-in-depth on top of the transform guard (which drops started
     // matches at fetch): the worker's on-disk cache can still hold a match for
     // between sweeps after it kicks off, so re-check commence_time here.
@@ -890,7 +907,15 @@ export function findOpportunities(
     }
     return (b as FreebetOpportunity).freeBetProfit - (a as FreebetOpportunity).freeBetProfit;
   });
-  return { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon, skippedSameSource };
+  return {
+    opps,
+    skippedSuspects,
+    skippedInsane,
+    skippedStarted,
+    skippedTooSoon,
+    skippedSameSource,
+    skippedSettlement,
+  };
 }
 
 // ── Dedup (persisted) ──────────────────────────────────────────────────────
@@ -1294,6 +1319,8 @@ export interface AlertCheckResult {
   skippedStarted: number;
   skippedTooSoon: number;
   skippedSameSource: number;
+  /** Fixtures skipped because their two legs cannot be proven to settle alike. */
+  skippedSettlement: number;
   /** True when another scan was already running: nothing fetched, nothing sent. */
   skipped?: boolean;
   /** The exact skip line (contains "skipped: scan already in flight"). */
@@ -1309,6 +1336,7 @@ const SKIPPED_RESULT = {
   skippedStarted: 0,
   skippedTooSoon: 0,
   skippedSameSource: 0,
+  skippedSettlement: 0,
 } as const;
 
 /**
@@ -1365,8 +1393,15 @@ export async function runAlertCheckBody(): Promise<AlertCheckResult> {
   const matches = await getMatches();
   // Exactly one credits line per scan — hit or miss.
   if (lastScanCredits) recordCredits(lastScanCredits);
-  const { opps, skippedSuspects, skippedInsane, skippedStarted, skippedTooSoon, skippedSameSource } =
-    findOpportunities(matches);
+  const {
+    opps,
+    skippedSuspects,
+    skippedInsane,
+    skippedStarted,
+    skippedTooSoon,
+    skippedSameSource,
+    skippedSettlement,
+  } = findOpportunities(matches);
   const seen = loadSeen();
 
   let alerted = 0;
@@ -1442,7 +1477,7 @@ export async function runAlertCheckBody(): Promise<AlertCheckResult> {
   const cash = opps.filter((o) => o.type === "cash").length;
   const freebet = opps.length - cash;
   log(
-    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} stale rows skipped, ${skippedInsane} insane back/lay rows skipped, ${skippedSameSource} rows with the same exchange on both sides skipped, skipped started: ${skippedStarted}, too-soon: ${skippedTooSoon}`
+    `check done: ${cash} green-cash + ${freebet} freebet, ${alerted} newly alerted, ${skippedSuspects} stale rows skipped, ${skippedInsane} insane back/lay rows skipped, ${skippedSameSource} rows with the same exchange on both sides skipped, ${skippedSettlement} fixtures skipped (two legs cannot be proven to settle alike), skipped started: ${skippedStarted}, too-soon: ${skippedTooSoon}`
   );
   // A scan COMPLETED — move the marker the gap alarm watches. Written after the
   // log line so "check done" and the marker always agree.
@@ -1460,6 +1495,7 @@ export async function runAlertCheckBody(): Promise<AlertCheckResult> {
     skippedStarted,
     skippedTooSoon,
     skippedSameSource,
+    skippedSettlement,
   };
 }
 export function hasAlertChannel(): boolean {

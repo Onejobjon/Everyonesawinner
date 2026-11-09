@@ -10,6 +10,7 @@ import {
   excludeLaySource,
   isPlausiblePrice,
 } from "./odds-sanity";
+import { layMarketCoversBackMarket, settlementProofFor } from "./settlement";
 
 // The Odds API key is held server-side only (src/server/odds-key.ts) and is
 // never shipped in the client bundle. The client fetches through our own
@@ -156,6 +157,14 @@ export interface Match {
   outcomesWithheld?: number;
   /** How many outcome rows had a lay price withheld by the sanity check. */
   laysWithheld?: number;
+  /**
+   * Why this fixture's lay prices were withheld by the settlement rule
+   * (src/lib/settlement.ts) — knockout football, ice hockey, or an exchange
+   * market that is not the 90-minute match-odds market. Absent when lay prices
+   * were published normally. Nulled lay prices are the enforcement; this is the
+   * explanation the site prints instead of leaving a silent gap.
+   */
+  layWithheldReason?: string;
   /**
    * How many outcomes were dropped because the ONLY back price quoted for them
    * came from the exchange that supplies the lay price. Backing and laying the
@@ -471,6 +480,8 @@ function findLayOdds(
   laySource: string;
   layBookmakerKey: string;
   layLastUpdate: string | null;
+  /** Every outcome name on that exchange's lay market — the market's shape. */
+  marketOutcomeNames: string[];
 } | null {
   for (const key of LAY_SOURCES) {
     const bm = bookmakers.find((b) => b.key === key);
@@ -486,6 +497,7 @@ function findLayOdds(
         laySource: bm.title,
         layBookmakerKey: bm.key,
         layLastUpdate: market.last_update || bm.last_update || null,
+        marketOutcomeNames: market.outcomes.map((o) => o.name),
       };
     }
   }
@@ -542,11 +554,18 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
     if (new Date(apiMatch.commence_time).getTime() <= now) continue;
     if (!apiMatch.bookmakers || apiMatch.bookmakers.length === 0) continue;
 
-    // Ice hockey is excluded from lay data entirely: bookmaker back odds are
-    // regulation-time while exchange lay odds are overtime-inclusive, so the
-    // two never settle on the same result. Nulling layOdds makes BOTH the
-    // Lay Bet Finder and the alert worker skip it automatically.
-    const isIceHockeyMatch = apiMatch.sport_key.startsWith("icehockey");
+    // SETTLEMENT RULE (src/lib/settlement.ts) — the owner-reported defect of
+    // 2026-11-09: a cup tie's bookmaker price was 90 minutes while the exchange
+    // price could settle after extra time, so the "green" was false. Where the
+    // two legs cannot be PROVEN to settle on the same result (knockout football,
+    // ice hockey), no lay price is published at all. Nulling layOdds makes the
+    // alert worker, Instant Wins and the Lay Bet Finder skip it automatically,
+    // and nothing downstream can resurrect the pair.
+    const settlement = settlementProofFor(apiMatch.sport_key, apiMatch.sport_title);
+    // Football only, and independent of the competition list: a lay market with
+    // no Draw is a "to qualify" market, not the 90-minute match-odds market.
+    const isFootball = apiMatch.sport_key.startsWith("soccer");
+    let shapeWithheld = false;
 
     // Count of rows on this match whose lay price was withheld by the sanity check.
     let laysWithheld = 0;
@@ -583,7 +602,23 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
     const excludeBackFor = new Map<string, string>();
     for (const o of allOutcomes) {
       const key = o.name.toLowerCase();
-      const lay = isIceHockeyMatch ? null : findLayOdds(o.name, apiMatch.bookmakers);
+      const found = settlement.proven ? findLayOdds(o.name, apiMatch.bookmakers) : null;
+      // Second proof, football only: the exchange market must carry a Draw.
+      // A two-way lay market on a football match is a "to qualify" bet, which
+      // settles on a different result — never pair it with a 90-minute price.
+      if (
+        found &&
+        isFootball &&
+        !layMarketCoversBackMarket(
+          allOutcomes.map((b) => b.name),
+          found.marketOutcomeNames,
+        )
+      ) {
+        shapeWithheld = true;
+        layByOutcome.set(key, null);
+        continue;
+      }
+      const lay = found;
       layByOutcome.set(key, lay);
       if (lay) excludeBackFor.set(key, lay.layBookmakerKey);
     }
@@ -694,6 +729,14 @@ export function transformMatches(data: ApiMatch[], sportKey?: string): Match[] {
       ...(hasWarning ? { warning: "Bookmaker availability limited — some outcomes may share the same bookmaker" } : {}),
       ...(outcomesWithheld > 0 ? { outcomesWithheld } : {}),
       ...(laysWithheld > 0 ? { laysWithheld } : {}),
+      ...(settlement.proven
+        ? shapeWithheld
+          ? {
+              layWithheldReason:
+                "the exchange's market lists fewer outcomes than the bookmaker's (no Draw), so it is not the 90-minute match-odds market",
+            }
+          : {}
+        : { layWithheldReason: settlement.reason ?? undefined }),
       ...(droppedAsLaySource.length > 0
         ? { backWithheldAsLaySource: droppedAsLaySource.length }
         : {}),

@@ -37,6 +37,7 @@ import {
 import { londonDayKey, londonDayLabel, londonTimeLabel } from "../lib/london-day";
 import { SCAN_WINDOW_HOURS, windowPhrase } from "../lib/scan-window";
 import { money } from "../lib/laybets-common";
+import { SETTLEMENT_NOTE } from "../lib/settlement";
 import { CommissionControl, CommissionNote, useExchangeCommission } from "./CommissionControl";
 import GreensPanel, { type GreensSummary } from "./GreensPanel";
 
@@ -526,6 +527,8 @@ export default function InstantWins() {
           The finder is the manual search: you pick competitions and a date, and it reads fresh
           prices when you press Search. This panel is the already-loaded list.
         </span>
+        {/* WHY A FIXTURE IS MISSING — settlement rule (owner defect 2026-11-09). */}
+        <span className="w-full text-[11px] text-gray-500 dark:text-gray-400">{SETTLEMENT_NOTE}</span>
       </div>
     </section>
   );

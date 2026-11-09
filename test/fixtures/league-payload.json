@@ -1,0 +1,198 @@
+[
+  {
+    "id": "6ef39b0fd8839f6e93a3de32523e9807",
+    "sport_key": "soccer_epl",
+    "sport_title": "EPL",
+    "commence_time": "2026-11-21T12:30:00Z",
+    "home_team": "Manchester City",
+    "away_team": "Fulham",
+    "bookmakers": [
+      {
+        "key": "betfred_uk",
+        "title": "Betfred (UK)",
+        "last_update": "2026-11-09T19:02:59Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:02:59Z",
+            "outcomes": [
+              {
+                "name": "Fulham",
+                "price": 7.0
+              },
+              {
+                "name": "Manchester City",
+                "price": 1.44
+              },
+              {
+                "name": "Draw",
+                "price": 4.6
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "smarkets",
+        "title": "Smarkets",
+        "last_update": "2026-11-09T19:03:00Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:02:59Z",
+            "outcomes": [
+              {
+                "name": "Fulham",
+                "price": 7.0
+              },
+              {
+                "name": "Manchester City",
+                "price": 1.44
+              },
+              {
+                "name": "Draw",
+                "price": 5.2
+              }
+            ]
+          },
+          {
+            "key": "h2h_lay",
+            "last_update": "2026-11-09T19:02:59Z",
+            "outcomes": [
+              {
+                "name": "Fulham",
+                "price": 7.8
+              },
+              {
+                "name": "Manchester City",
+                "price": 1.47
+              },
+              {
+                "name": "Draw",
+                "price": 5.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "williamhill",
+        "title": "William Hill",
+        "last_update": "2026-11-09T19:02:59Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:02:59Z",
+            "outcomes": [
+              {
+                "name": "Fulham",
+                "price": 6.0
+              },
+              {
+                "name": "Manchester City",
+                "price": 1.44
+              },
+              {
+                "name": "Draw",
+                "price": 4.75
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "boylesports",
+        "title": "BoyleSports",
+        "last_update": "2026-11-09T19:02:25Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:02:25Z",
+            "outcomes": [
+              {
+                "name": "Fulham",
+                "price": 6.0
+              },
+              {
+                "name": "Manchester City",
+                "price": 1.4
+              },
+              {
+                "name": "Draw",
+                "price": 4.75
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "paddypower",
+        "title": "Paddy Power",
+        "last_update": "2026-11-09T19:01:15Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:01:15Z",
+            "outcomes": [
+              {
+                "name": "Fulham",
+                "price": 6.0
+              },
+              {
+                "name": "Manchester City",
+                "price": 1.44
+              },
+              {
+                "name": "Draw",
+                "price": 4.75
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "betfair_ex_uk",
+        "title": "Betfair",
+        "last_update": "2026-11-09T19:02:59Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-11-09T19:02:59Z",
+            "outcomes": [
+              {
+                "name": "Fulham",
+                "price": 7.4
+              },
+              {
+                "name": "Manchester City",
+                "price": 1.46
+              },
+              {
+                "name": "Draw",
+                "price": 5.3
+              }
+            ]
+          },
+          {
+            "key": "h2h_lay",
+            "last_update": "2026-11-09T19:02:59Z",
+            "outcomes": [
+              {
+                "name": "Fulham",
+                "price": 7.8
+              },
+              {
+                "name": "Manchester City",
+                "price": 1.47
+              },
+              {
+                "name": "Draw",
+                "price": 5.5
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
