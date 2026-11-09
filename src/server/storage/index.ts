@@ -15,6 +15,7 @@
  *   leads.json              [ LeadRecord, … ]
  *   stripe-events.json      { "events": [ {id, at, note}, … ] }
  *   affiliate-clicks.jsonl  one {slug, at, from} per line
+ *   customer-emails.jsonl   one CustomerEmailRecord per line (see customer-email.ts)
  */
 import { dirname, join } from "node:path";
 import { cwdRunFile } from "../run-dir";
@@ -32,7 +33,8 @@ export type StoreName =
   | "leads"
   | "comps"
   | "stripe-events"
-  | "affiliate-clicks";
+  | "affiliate-clicks"
+  | "customer-emails";
 
 export const STORE_NAMES: StoreName[] = [
   "users",
@@ -41,6 +43,7 @@ export const STORE_NAMES: StoreName[] = [
   "comps",
   "stripe-events",
   "affiliate-clicks",
+  "customer-emails",
 ];
 
 interface FileDef {
@@ -85,6 +88,14 @@ const FILE_DEFS: Record<StoreName, FileDef> = {
       kind: "jsonl",
       keyOf: (v: any) => `${v?.at ?? ""}|${v?.slug ?? ""}|${v?.from ?? ""}`,
     },
+  },
+  // The customer-email log (receipts and failed-card notices): append-only, one
+  // JSON document per line, because every record is a new event and nothing is
+  // ever rewritten. The id is written into the record itself, so a re-read
+  // rebuilds the same keys.
+  "customer-emails": {
+    file: () => cwdRunFile(process.env.CUSTOMER_EMAILS_FILE, "customer-emails.jsonl"),
+    layout: { kind: "jsonl", keyOf: (v: any) => String(v?.id ?? "") },
   },
 };
 

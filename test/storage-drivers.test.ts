@@ -55,7 +55,7 @@ afterAll(() => {
 // ── The behaviour every driver must have ───────────────────────────────────
 
 /**
- * Everything the six stores actually rely on. If a driver passes this, the
+ * Everything the stores actually rely on. If a driver passes this, the
  * store built on it behaves the same whichever database is behind it.
  */
 async function exerciseStore(make: () => Store<{ n: number; label: string }>) {
@@ -328,9 +328,17 @@ describe("no database configured", () => {
     expect(storageStatus({ DATABASE_URL: "   " } as NodeJS.ProcessEnv).durable).toBe(false);
   });
 
-  test("the six stores are the ones the app actually has", () => {
+  test("the stores are the ones the app actually has", () => {
     expect(storageStatus({} as NodeJS.ProcessEnv).stores.sort()).toEqual(
-      ["affiliate-clicks", "comps", "leads", "sessions", "stripe-events", "users"].sort(),
+      [
+        "affiliate-clicks",
+        "comps",
+        "customer-emails",
+        "leads",
+        "sessions",
+        "stripe-events",
+        "users",
+      ].sort(),
     );
   });
 

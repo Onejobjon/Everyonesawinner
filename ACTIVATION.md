@@ -94,7 +94,41 @@ payloads are rejected with 400 and change nothing.
 
 `STRIPE_GRACE_DAYS` (1–30, default 7) sets how long a failed card keeps access.
 
-## 4. Verify
+## 4. Customer email (receipts and failed-card notices)
+
+Two emails are promised by /terms and are sent by the webhook itself:
+a **receipt** after `invoice.paid` (the first payment and every renewal) and a
+**failed-card notice** after the first `invoice.payment_failed`, quoting the
+grace end date stored on the account. Code: `src/server/customer-email.ts`
+(the words) over `src/server/email-transport.ts` (the wire).
+
+**With nothing configured, nothing is sent and nothing breaks.** The email is
+composed, recorded as `unsent` in the `customer-emails` store, and the Stripe
+event still answers 200 with the billing state written. That is the state today,
+with billing on hold — and it is why a paying customer currently gets no receipt.
+
+To turn sending on, save ONE secret in Settings → Secrets:
+
+| Secret | Value |
+| --- | --- |
+| `EAW_EMAIL_API_KEY` | a **Resend** API key (`re_…`). A key alone implies Resend. |
+
+Optional: `EAW_EMAIL_TRANSPORT` (`resend` \| `postmark` \| `none` — `none` turns
+sending off without deleting the key) and `EAW_EMAIL_FROM` (defaults to
+`Everyone's A Winner <support@everyonesawinner.uk>`). `RESEND_API_KEY` and
+`POSTMARK_SERVER_TOKEN` are accepted as the key too.
+
+**DNS is required once, in Resend, not here:** add `everyonesawinner.uk` (or the
+`send.` subdomain Resend offers) as a sending domain and publish the SPF and DKIM
+records Resend shows you in the domain's DNS. Until that verifies, Resend refuses
+the message — the refusal is recorded as `failed` with the provider's reason, and
+the owner is alerted, so the failure is visible rather than silent.
+
+Reading back what happened: `recentCustomerEmails()` returns the log newest-last
+(`sent` / `failed` / `unsent`, with the reason and the provider's message id).
+A `failed` row also raises an owner alert naming the customer.
+
+## 5. Verify
 
 ```bash
 bun scripts/owner-seat-proof.ts      # owner seat cannot be claimed by a stranger

@@ -8,7 +8,7 @@
  * the first paying customer would lose their login at the next deploy.
  *
  * The fix is deliberately NOT a general database API. It is the smallest shape
- * these six stores actually need: read one record, write one record, insert one
+ * these stores actually need: read one record, write one record, insert one
  * record ONLY IF IT IS ABSENT, delete one record, list records by key prefix.
  * Anything more (queries, joins, transactions, indexes) would be a promise the
  * file driver cannot keep, and a promise the file driver cannot keep is how a

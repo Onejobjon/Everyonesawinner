@@ -17,6 +17,18 @@
  *     lock-out — so `invoice.payment_failed` sets a grace end date and does NOT
  *     revoke anything. The date is stored so the email can quote it.
  *
+ * THE EMAILS (2026-11-09): this handler used to stop at "EMAIL DUE" in the
+ * owner's Telegram. It now also SENDS the two emails the terms promise, through
+ * src/server/customer-email.ts → src/server/email-transport.ts:
+ *   • a receipt after `invoice.paid` (which covers a completed checkout too — a
+ *     subscription checkout always produces a paid invoice, and sending from
+ *     both events would post two receipts for one payment);
+ *   • a grace notice after `invoice.payment_failed`, quoting the stored date.
+ * Sending can never fail the event: with no transport configured nothing is
+ * sent and the email is recorded as unsent; a provider error is recorded, the
+ * owner is alerted, and this handler still answers 200. A customer's billing
+ * state must not depend on a mail provider.
+ *
  * WHAT WAS WRONG BEFORE (fixed 2026-11-02):
  *   • every `customer.subscription.*` event required `metadata.email`, which
  *     Stripe does not put on subscription objects, so every one was ignored;
@@ -33,7 +45,8 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { findEmailByStripeIds, findByEmail, updateSubscription, type SubscriptionPatch } from "./users";
-import { GRACE_STATUS, graceEndFrom, isFutureDate, isKnownPlan } from "./entitlement";
+import { GRACE_STATUS, graceEndFrom, isFutureDate, isKnownPlan, type Plan } from "./entitlement";
+import { composeGraceNotice, composeReceipt, deliverCustomerEmail } from "./customer-email";
 import { notifyOwner } from "./notify-owner";
 import { planFromPriceId, configuredPlans } from "./price-catalogue";
 import { isCheckoutEnabled, CHECKOUT_DISABLED_CODE, CHECKOUT_DISABLED_MESSAGE } from "./billing-switch";
@@ -213,6 +226,70 @@ async function alertUnknownPrice(priceId: string | null, context: string): Promi
   );
 }
 
+// ── The customer emails ─────────────────────────────────────────────────────
+
+/**
+ * Send the receipt for a paid invoice and describe the outcome in one phrase.
+ *
+ * THE AMOUNT COMES FROM THE INVOICE, never from the price list: a proration, a
+ * discount or a currency change would make the catalogue figure a lie on a
+ * document the customer keeps. When the event carries no amount, the receipt
+ * says so rather than printing a number we invented.
+ */
+async function sendReceipt(
+  email: string,
+  invoice: AnyObject,
+  plan: Plan | null,
+  periodEnd: string | null,
+  eventId: string | null,
+): Promise<string> {
+  try {
+    const amount =
+      typeof invoice?.amount_paid === "number"
+        ? invoice.amount_paid
+        : typeof invoice?.total === "number"
+          ? invoice.total
+          : null;
+    const paidAt =
+      secondsToIso(invoice?.status_transitions?.paid_at) ??
+      secondsToIso(invoice?.created) ??
+      new Date().toISOString();
+    const message = composeReceipt({
+      to: email,
+      plan,
+      amountPence: amount,
+      currency: typeof invoice?.currency === "string" ? invoice.currency : "gbp",
+      paidAt,
+      periodEnd,
+      invoiceId: idOf(invoice?.number) ?? idOf(invoice?.id),
+    });
+    const record = await deliverCustomerEmail("receipt", message, { to: email, eventId });
+    return record.status === "sent" ? "receipt sent" : `receipt ${record.status}`;
+  } catch (e) {
+    // Compose/record failure: the billing state is already written, so this must
+    // not undo it — but a customer without a receipt is the owner's problem.
+    console.error(`[stripe-webhook] receipt for ${email} could not be prepared: ${String(e)}`);
+    return "receipt could not be prepared";
+  }
+}
+
+/** Send the failed-card notice, quoting the grace date the account now holds. */
+async function sendGraceNotice(
+  email: string,
+  plan: Plan | null,
+  graceEndsAt: string,
+  eventId: string | null,
+): Promise<string> {
+  try {
+    const message = composeGraceNotice({ to: email, plan, graceEndsAt });
+    const record = await deliverCustomerEmail("grace", message, { to: email, eventId });
+    return record.status === "sent" ? "grace notice sent" : `grace notice ${record.status}`;
+  } catch (e) {
+    console.error(`[stripe-webhook] grace notice for ${email} could not be prepared: ${String(e)}`);
+    return "grace notice could not be prepared";
+  }
+}
+
 // ── Events ──────────────────────────────────────────────────────────────────
 
 /** Apply one verified Stripe event. Returns a short description for the log. */
@@ -256,6 +333,10 @@ export async function handleStripeEvent(event: StripeEvent): Promise<string> {
       }
 
       await applyPatch(email, patch, "checkout.session.completed");
+      // No receipt here, on purpose: this event carries no invoice, no amount
+      // paid and no period end. The paid invoice that always accompanies it
+      // (`invoice.paid`) carries all three, and it sends the receipt — see the
+      // invoice.paid case. One payment, one receipt.
       return `checkout.session.completed: ${email} linked (customer ${customerId}, subscription ${subscriptionId})`;
     }
 
@@ -359,7 +440,12 @@ export async function handleStripeEvent(event: StripeEvent): Promise<string> {
           `invoice.paid: no period end on invoice ${idOf(obj.id) ?? "unknown"} for ${email} — the paid period was not extended.`,
         );
       }
-      return `invoice.paid: ${email} renewed${periodEnd ? ` to ${periodEnd}` : ""}`;
+      // THE RECEIPT (terms §7). This is the event a receipt comes from, and it
+      // covers the FIRST payment too: a subscription checkout always produces a
+      // paid invoice, so sending from checkout.session.completed as well would
+      // post two receipts for one payment.
+      const receiptNote = await sendReceipt(email, obj, plan, periodEnd, event.id ?? null);
+      return `invoice.paid: ${email} renewed${periodEnd ? ` to ${periodEnd}` : ""} (${receiptNote})`;
     }
 
     // A renewal failed. NOT a revocation: the customer keeps access until the
@@ -391,15 +477,24 @@ export async function handleStripeEvent(event: StripeEvent): Promise<string> {
         "invoice.payment_failed",
       );
 
+      // THE GRACE NOTICE (terms §9). Only on the FIRST failure: Stripe retries a
+      // failed card several times and the customer must not get a fresh "your
+      // card failed" email on every retry — the date does not move, so neither
+      // does the message.
+      const graceNote = alreadyInGrace
+        ? "no new email due"
+        : await sendGraceNotice(email, planFromPriceId(priceIdOf(obj)), graceEndsAt, event.id ?? null);
+
       if (!alreadyInGrace) {
         await notifyOwner(
           `EMAIL DUE — card failed for ${email}: access continues on grace until ${graceEndsAt}. ` +
-            `The customer has to be emailed a message quoting that date (terms §9).`,
+            `The customer has to be emailed a message quoting that date (terms §9). ` +
+            `Email transport: ${graceNote}.`,
         );
       }
       return alreadyInGrace
         ? `invoice.payment_failed: ${email} still in grace until ${graceEndsAt} (date unchanged, no new email due)`
-        : `invoice.payment_failed: ${email} in grace until ${graceEndsAt} (email due)`;
+        : `invoice.payment_failed: ${email} in grace until ${graceEndsAt} (email due; ${graceNote})`;
     }
 
     // A FULL REFUND REVOKES ACCESS NOW.
